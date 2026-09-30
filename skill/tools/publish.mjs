@@ -23,6 +23,7 @@ import { fileURLToPath } from "node:url";
 import { glance } from "./glance.mjs";
 import { rivalFacts } from "./rival-facts.mjs";
 import { demandForCloud } from "./demand-facts.mjs";
+import { forCloud as rivalDemandForCloud } from "./rival-demand.mjs";
 import { netError } from "./hints.mjs";
 import { readSources } from "./sources-file.mjs";
 
@@ -67,6 +68,10 @@ try { const R = rivalFacts(pm); if (Object.keys(R).length) send.push({ key: "pm/
 catch (e) { console.error(`(rival facts skipped: ${e.message})`); }
 try { const D = demandForCloud(pm); if (D) send.push({ key: "pm/state/demand.json", text: JSON.stringify(D) }); } // no quotes, no decision or request titles
 catch (e) { console.error(`(demand skipped: ${e.message})`); }
+// Rival demand is public tracker data about your rivals, only if you ran `nosy rival-demand`. Never your customers' words.
+const rdFile = path.join(pm, "state", "rival-demand.json");
+try { if (fs.existsSync(rdFile)) { const RD = rivalDemandForCloud(readJson(rdFile)); if (RD.repos.length) send.push({ key: "pm/state/rival-demand.json", text: JSON.stringify(RD) }); } }
+catch (e) { console.error(`(rival demand skipped: ${e.message})`); }
 
 // "Never your data": the outgoing text is written to a temp folder and scanned there. A secret or personal data (an
 // e-mail, a phone number, an IBAN, a card number, an ID number, a name from private.json or the people who wrote your
@@ -87,7 +92,9 @@ for (const x of send) console.log(`  ${x.key} (${kb(files[x.key])}): ${PayloadKe
 const missing = Files.filter(f => !send.some(x => x.key === `pm/${f}`));
 // (glance.json, rival-facts.json and demand.json aren't in Files: they're always computed, so they're never "missing".)
 if (missing.length) console.log(`  not found, will be cleared on the dashboard: ${missing.map(f => `pm/${f}`).join(", ")}`);
-console.log("Counts and structure only: no commit subjects, author names, PR titles, issue titles or customer quotes. Nothing else in pm/ leaves.");
+console.log(send.some(x => x.key === "pm/state/rival-demand.json")
+  ? "Counts and structure only, apart from pm/state/rival-demand.json: titles and links of public issues on your rivals' trackers (their public data). No commit subjects, author names, PR titles, your own issue titles or customer quotes. Nothing else in pm/ leaves."
+  : "Counts and structure only: no commit subjects, author names, PR titles, issue titles or customer quotes. Nothing else in pm/ leaves.");
 if (full) for (const x of send) console.log(`\n--- ${x.key} ---\n${x.text}`);
 if (dry) { if (!base) console.log("No target yet: set cloud.url in pm/sources.json, or NOSY_CLOUD_URL, or pass --url. A real run stops until you do."); process.exit(0); }
 

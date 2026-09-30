@@ -12,7 +12,7 @@ Nosy is a plugin and a skill for your coding agent: plain Node scripts in `skill
 
 - **Reads.** Nosy reads your code, git history, GitHub issues and PRs including their text (titles, bodies, comments and author logins, through your own `gh`), your decision and roadmap docs, and public web pages.
 - **Writes.** Nosy writes to your `pm/` folder, plus a few named files: temporary files, a first-run marker, the skill folders `nosy install` copies and files you name with a flag. The optional weekly GitHub Action commits and pushes `pm/state/` and the decision page only if you set `commit: "true"`.
-- **Sends.** Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed, and GitHub through your own `gh`, including a read-only lookup of the `#N` issues your agent's answer cites (`NOSY_CITE_GH=0` turns that off). `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes). Both stop on a secret or personal data unless you pass `--allow-sensitive`.
+- **Sends.** Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed, and GitHub through your own `gh`, including a read-only lookup of the `#N` issues your agent's answer cites (`NOSY_CITE_GH=0` turns that off), and, when you run `nosy rival-demand`, the public issues and Discussions of the open-source rivals you name. `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes). Both stop on a secret or personal data unless you pass `--allow-sensitive`.
 - **Hooks.** Four small Node hooks in `hooks/`: session summary, after-commit note, never-rule check, reference check. They read local files and run `git`; the reference check also runs the read-only `gh api` lookup above. They never stop or undo a shell command. Two can hand the agent a note after the fact, and the reference check can send the agent back once to fix or drop a reference; that is text for the agent, not a block on your shell. The reference check gets the agent's last answer from Claude Code as a hook input field. It reads no transcript or chat history file. Each has an off switch ([docs/INSTALL.md](docs/INSTALL.md#f-turning-off-the-hooks)).
 - **Your agent's tools.** Nosy asks the agent to use its own connectors (GitHub, Linear, Slack…) only after you say yes. Those run under your agent's permissions, not Nosy's.
 
@@ -20,7 +20,7 @@ Customer quotes are masked before Nosy prints or writes them, a secret in a line
 
 ## Pin a release
 
-`npx github:nosy-hq/nosy` runs whatever is on the default branch. Pin a release tag instead, for example `npx github:nosy-hq/nosy#v0.15.1 install`, and read the release notes before you move to a newer one. Do the same for a marketplace install in a shared or CI setup.
+`npx github:nosy-hq/nosy` runs whatever is on the default branch. Pin a release tag instead, for example `npx github:nosy-hq/nosy#v0.16.0 install`, and read the release notes before you move to a newer one. Do the same for a marketplace install in a shared or CI setup.
 
 ## Supported versions
 

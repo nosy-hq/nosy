@@ -2,6 +2,13 @@
 
 Versions match `package.json` and `.claude-plugin/plugin.json`. Dates are when the version was committed. Versions before 0.10.0 were pre-release and aren't listed.
 
+## 0.16.0 (2026-09-30)
+- New `nosy rival-demand`: what the users of your open-source rivals ask for most. It reads the public issues and Discussions of the rival repos you name (`--repos`, `rivalRepos` in `sources.json`, or the GitHub links in `pm/rivals/*.md`) and lists titles, vote counts and links. Never bodies, never people.
+- It links an ask to a row of your matrix by words, lists asks that look alike at several rivals, and lists acronyms (MCP, SSO) that come up at several. These are hints made of words: open an ask before you quote it. An open ask is not proof a rival lacks the feature.
+- It leaves out bug reports, release notes, announcements and thank-you threads, and says how many. Discussion categories are shown next to each ask.
+- `nosy publish` includes `pm/state/rival-demand.json` only if you ran the command: titles and links of your rivals' public issues, nothing of yours. `docs/DATA.md` lists the new GitHub reads.
+- Tuned on three public runs (Chatwoot, Relaticle, Parchi): opposite wishes and bug reports no longer merge into one ask, plural forms match, and a matrix row that lists alternatives ("WhatsApp, Telegram, Line and SMS channels") matches on one of them.
+
 ## 0.15.1 (2026-09-30)
 - The reference check reads the agent's last answer from the hook input; it no longer opens the transcript file.
 - Without that input (an older Claude Code) the hook does nothing. It never falls back to the transcript.

@@ -84,7 +84,7 @@ Nosy is one skill folder (`skill/`, the open Agent Skills format) plus small dep
 | **Slack / Discord** | The Action, or `nosy notify`, posts the weekly "Psst…" to a webhook. |
 | **Terminal, no agent** | `npx github:nosy-hq/nosy weekly` |
 
-`npx github:…` runs code straight from a repo. To know which code, pin a release tag: `npx github:nosy-hq/nosy#v0.15.1 install`. Every path in detail: [docs/INSTALL.md](docs/INSTALL.md).
+`npx github:…` runs code straight from a repo. To know which code, pin a release tag: `npx github:nosy-hq/nosy#v0.16.0 install`. Every path in detail: [docs/INSTALL.md](docs/INSTALL.md).
 
 </details>
 
@@ -113,11 +113,11 @@ Nosy is one skill folder (`skill/`, the open Agent Skills format) plus small dep
 | `/nosy:bet · /nosy:score` | Optional: record a bet, settle it against git later. |
 | `/nosy:doctor` | Renames old files and keys in a `pm/` written by an older Nosy (`--fix`). |
 
-Most commands have a terminal twin that runs with no model, for example `npx github:nosy-hq/nosy peek` (see [docs/CLI-CONTRACT.md](docs/CLI-CONTRACT.md) for which, and for the ones that are agent only).
+Most commands have a terminal twin that runs with no model, for example `npx github:nosy-hq/nosy peek` (see [docs/CLI-CONTRACT.md](docs/CLI-CONTRACT.md) for which, and for the ones that are agent only). `npx github:nosy-hq/nosy rival-demand` has no slash command: it lists what the users of your open-source rivals ask for most, from their public issues and Discussions.
 
 </details>
 
-**1 skill · 17 commands · 80 scripts · 4 hooks · 16 named rules.** Plain, dependency-free Node: the counting runs in your terminal, in CI or as an MCP server, with no model and no API key. Your agent adds the judgment. Everything Nosy remembers lives in a `pm/` folder in your repo.
+**1 skill · 17 commands · 81 scripts · 4 hooks · 16 named rules.** Plain, dependency-free Node: the counting runs in your terminal, in CI or as an MCP server, with no model and no API key. Your agent adds the judgment. Everything Nosy remembers lives in a `pm/` folder in your repo.
 
 ## If it broke
 
@@ -129,7 +129,7 @@ Most commands have a terminal twin that runs with no model, for example `npx git
 
 - **Reads.** Nosy reads your code, git history, GitHub issues and PRs including their text (titles, bodies, comments and author logins, through your own `gh`), your decision and roadmap docs, and public web pages.
 - **Writes.** Nosy writes to your `pm/` folder, plus a few named files: temporary files, a first-run marker, the skill folders `nosy install` copies and files you name with a flag. The optional weekly GitHub Action commits and pushes `pm/state/` and the decision page only if you set `commit: "true"`.
-- **Sends.** Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed, and GitHub through your own `gh`, including a read-only lookup of the `#N` issues your agent's answer cites (`NOSY_CITE_GH=0` turns that off). `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes). Both stop on a secret or personal data unless you pass `--allow-sensitive`. The model call is your agent's.
+- **Sends.** Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed, and GitHub through your own `gh`, including a read-only lookup of the `#N` issues your agent's answer cites (`NOSY_CITE_GH=0` turns that off), and, when you run `nosy rival-demand`, the public issues and Discussions of the open-source rivals you name. `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes). Both stop on a secret or personal data unless you pass `--allow-sensitive`. The model call is your agent's.
 - **No telemetry.** No analytics, usage pings, crash reports or update checks.
 
 The exact list, and what masking does not cover: [docs/DATA.md](docs/DATA.md).

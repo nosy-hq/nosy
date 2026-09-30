@@ -103,5 +103,6 @@ export const PayloadKeys = {
   "pm/state/watch.json": "rival names and the public page URLs you listed, with their change state",
   "pm/state/glance.json": "computed: next decision (title, size, checks), four numbers, where we stand, roadmap lanes, shipped (counts and references)",
   "pm/state/rival-facts.json": "computed: each rival's price line, from your rival files",
+  "pm/state/rival-demand.json": "computed, only if you ran `nosy rival-demand`: titles, vote counts and links of open issues and Discussions on your open-source rivals' own public trackers (their public data, not yours), and which rivals share an ask",
   "pm/state/demand.json": "computed: counts per goal from your matrix and psst items, sources by format, hidden counts; no quotes, no customer names",
 };

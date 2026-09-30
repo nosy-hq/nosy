@@ -92,3 +92,24 @@ test("needs pm/matrix.json and a valid project name", async () => {
   assert.match((await run([empty, "--dry-run"])).error, /matrix\.json is missing/);
   assert.match((await run([pm, "--dry-run", "--project", "../x"])).error, /isn't a valid project name/);
 });
+
+test("rival demand goes up only if you ran it, cut to public tracker facts, and the promise line says so", async () => {
+  const before = await run([pm, "--url", url, "--dry-run", "--full"]);
+  assert.ok(!before.output.includes("rival-demand.json"), "no rival-demand file, nothing sent");
+  assert.match(before.output, /^Counts and structure only: no commit subjects/m);
+  fs.writeFileSync(path.join(pm, "state", "rival-demand.json"), JSON.stringify({ generated: "2026-09-30T00:00:00Z", note: "internal", source: "--repos",
+    repos: [{ repo: "acme/rival", ok: true, stars: 5, asks: [{ kind: "issue", number: 7, title: "Export as CSV", votes: 31, comments: 2, openDays: 400, quietDays: 3, url: "https://github.com/acme/rival/issues/7", possibleArea: { no: "2", feature: "Data export", words: ["export"], share: 1 } }] },
+      { repo: "acme/gone", ok: false, why: "Not Found" }],
+    alsoAtSeveralRivals: [] }));
+  const after = await run([pm, "--url", url, "--dry-run", "--full"]);
+  assert.equal(after.code, 0, after.error);
+  assert.match(after.output, /pm\/state\/rival-demand\.json/);
+  assert.match(after.output, /apart from pm\/state\/rival-demand\.json: titles and links of public issues on your rivals' trackers/);
+  const sent = JSON.parse(after.output.split("--- pm/state/rival-demand.json ---\n")[1].split("\n---")[0].trim());
+  assert.deepEqual(sent.repos.map(r => r.repo), ["acme/rival"], "a rival that could not be read is not sent");
+  assert.equal(sent.repos[0].asks[0].title, "Export as CSV");
+  assert.equal("quietDays" in sent.repos[0].asks[0], false);
+  assert.deepEqual(Object.keys(sent.repos[0].asks[0].possibleArea), ["no", "feature"]);
+  assert.equal("note" in sent || "source" in sent, false);
+  fs.rmSync(path.join(pm, "state", "rival-demand.json"));
+});

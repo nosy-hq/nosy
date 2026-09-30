@@ -26,6 +26,7 @@ Most of the 17 agent commands have a terminal twin that runs with no model: `npx
 | `score` | `nosy score` |
 | `move-in` | `nosy setup` (proposes `pm/sources.json`; the rest of move-in is the agent) |
 | `neighbors` | `nosy watch` (which rivals' public pages changed; the research is the agent) |
+| none | `nosy rival-demand` (what the users of your open-source rivals ask for most, from their public issues and Discussions; no slash command) |
 | `tea` | `nosy page` |
 | `stakeout` | `nosy weekly` |
 | `overheard` | none: agent only |

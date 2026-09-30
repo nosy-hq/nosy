@@ -4,14 +4,14 @@
 
 That line needs a list you can check. This is the list.
 
-It was checked against version 0.15.1 (30 Sep 2026): every script, hook, agent, command file and the GitHub Action read, and the scripts run with their network, process and file activity logged. If Nosy does something that isn't written here, that is a bug in this file or in Nosy. Please report it.
+It was checked against version 0.15.1 (30 Sep 2026): every script, hook, agent, command file and the GitHub Action read, and the scripts run with their network, process and file activity logged. Version 0.16.0 adds `rival-demand`, read and logged the same way: it starts `gh` and nothing else. If Nosy does something that isn't written here, that is a bug in this file or in Nosy. Please report it.
 
 ## The short version
 
 - **No telemetry.** No analytics, usage pings, crash reports, update checks or install IDs. Nosy has no dependencies (`package.json` lists none), so no third-party code runs inside it either.
 - **Reads.** Nosy reads your code, git history, GitHub issues and PRs including their text (titles, bodies, comments and author logins, through your own `gh`), your decision and roadmap docs, and public web pages. Bodies and comments are cut at 4,000 characters and saved in `pm/state/facts/github.json`. Support and interview exports are read only if you drop them into `pm/signal/`, with personal data masked.
 - **Writes.** Nosy writes to your `pm/` folder, plus a few named files: temporary files, a first-run marker, the skill folders `nosy install` copies and files you name with a flag. The optional weekly GitHub Action commits and pushes `pm/state/` and the decision page only if you set `commit: "true"`. The full list is under "What Nosy writes".
-- **Sends.** Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed, and GitHub through your own `gh`, including a read-only lookup of the `#N` issues your agent's answer cites (`NOSY_CITE_GH=0` turns that off). `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes). `publish` and `notify` stop on a secret or personal data unless you pass `--allow-sensitive`. Every path is in the table under "What leaves your machine".
+- **Sends.** Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed, and GitHub through your own `gh`, including a read-only lookup of the `#N` issues your agent's answer cites (`NOSY_CITE_GH=0` turns that off), and, when you run `nosy rival-demand`, the public issues and Discussions of the open-source rivals you name. `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes). `publish` and `notify` stop on a secret or personal data unless you pass `--allow-sensitive`. Every path is in the table under "What leaves your machine".
 - **Nosy reads your code through git.** It reads committed files, not your disk. Files git doesn't track, such as an ignored `.env`, are not opened.
 - **The model call is your agent's.** Whatever Nosy prints to your agent, your agent's model sees.
 
@@ -78,6 +78,7 @@ By the plugin's own code:
 |---|---|---|---|
 | `nosy watch`, `nosy sweep`, and `nosy weekly` (which includes watch when `pm/rivals/` exists) | The public rival URLs you listed | A plain GET with a `Nosy … (public pages only)` user agent. No cookies, no body, nothing from your repo. The site sees your IP address. | When you run them. `NOSY_OFFLINE=1` skips the watch step of `weekly`. |
 | GitHub reads | GitHub, through your `gh` | Read-only calls: `pr list`, `pr view`, `pr diff`, `issue list`, `repo view`, `auth status`, `api` reads and GraphQL queries. What goes out is the repo name, PR and issue numbers, and search terms such as a bet id. No code. | Commands that read issues or PRs, for example `shipped`, `facts`, `psst`, `signals`, `recent`, `score`, `peek`, `weekly`. `--no-gh` on `facts`; no `gh` installed also works. |
+| `nosy rival-demand` | GitHub, through your `gh`. Without `gh` it calls `api.github.com` directly, with `GH_TOKEN` or `GITHUB_TOKEN` if you set one. | Read-only issue searches and GraphQL Discussion queries on the public repos of the rivals you name (`--repos`, `rivalRepos` in `sources.json`, or the GitHub links in `pm/rivals/*.md`). What goes out is those repo names and a search phrase. No code, nothing from your repo. What comes back (titles, vote counts, links) is written to `pm/state/rival-demand.json`. | Only when you run it. |
 | Reference check (hook) | GitHub, through your `gh` | `gh api repos/<issue.repo>/issues/<N>` for each `#N` in your agent's answer or file. | Automatic, when `sources.json` has `issue.repo`. Off: `NOSY_CITE_GH=0`, or turn the hook off. |
 | `overheard --diff --fetch` | Your own git remote | `git fetch origin pull/<N>/head`. | Only with both flags. |
 | `nosy notify` | The Slack or Discord webhook you give it | One text message (`{"text": …}`): commit and PR counts, up to five merged PR titles, three close-to-merge PR titles, bet names, three cheap-win titles, five announceable titles, and your page URL if `NOSY_PAGE_URL` is set. Run `nosy notify --dry-run` to see it first. | Only when you pass a webhook. |
@@ -103,6 +104,7 @@ Up to these files, with your token. Each local file that holds words from your g
 | `pm/state/watch.json` | Rival names and the public page addresses you listed, with their change state. |
 | `pm/state/glance.json` (computed) | The next decision (title, size, checks), four numbers, where we stand by step, roadmap lanes, and shipped as counts and references. |
 | `pm/state/rival-facts.json` (computed) | Each rival's price line from your rival files. |
+| `pm/state/rival-demand.json` (computed) | Only if you ran `nosy rival-demand`: titles, vote counts and links of open issues and Discussions on your open-source rivals' own public trackers (their public data, not yours), and which rivals share an ask. |
 | `pm/state/demand.json` (computed) | Counts per goal for goals matched to a matrix row or a psst item, sources by format, and counts for the rest; no quotes, no customer names, no unmatched themes. |
 
 Nothing else in `pm/` leaves: not the decision log, not `pm/signal/`, not the rival files, not `pm/state/facts/`.
@@ -150,7 +152,7 @@ grep -rnE "await fetch\(|node:(https?|net|tls|dns|dgram|http2)['\"]" skill/tools
 grep -rnoE "(execFileSync|spawnSync|spawn)\(\"[a-z]+\"" skill/tools hooks | sed -E 's/.*\("//; s/"//' | sort | uniq -c
 ```
 
-The first prints four lines: `watch-rivals.mjs`, `rival-sweep.mjs`, `news.mjs`, `publish.mjs`. The second shows the programs Nosy starts: `git`, `gh` and `node` (itself), nothing else.
+The first prints five files: `watch-rivals.mjs`, `rival-sweep.mjs`, `rival-demand.mjs`, `news.mjs`, `publish.mjs`. The second shows the programs Nosy starts: `git`, `gh` and `node` (itself), nothing else.
 
 **2. Run it with the network off.** macOS:
 
@@ -184,8 +186,8 @@ Child `node` processes inherit `NODE_OPTIONS`, so the scripts Nosy starts are tr
 
 ## Where to check
 
-- Network calls: `skill/tools/watch-rivals.mjs`, `skill/tools/rival-sweep.mjs`, `skill/tools/news.mjs`, `skill/tools/publish.mjs`
-- `gh` reads: `skill/tools/facts.mjs`, `skill/tools/shipped-record.mjs`, `skill/tools/recent.mjs`, `skill/tools/collect-status.mjs`, `skill/tools/collect-signals.mjs`, `skill/tools/preread.mjs`, `skill/tools/cite-check.mjs`
+- Network calls: `skill/tools/watch-rivals.mjs`, `skill/tools/rival-sweep.mjs`, `skill/tools/rival-demand.mjs`, `skill/tools/news.mjs`, `skill/tools/publish.mjs`
+- `gh` reads: `skill/tools/rival-demand.mjs`, `skill/tools/facts.mjs`, `skill/tools/shipped-record.mjs`, `skill/tools/recent.mjs`, `skill/tools/collect-status.mjs`, `skill/tools/collect-signals.mjs`, `skill/tools/preread.mjs`, `skill/tools/cite-check.mjs`
 - `git fetch`: `skill/tools/preread.mjs`, `skill/commands/peek.md`
 - What `publish` sends: `skill/tools/publish.mjs` (the `Files` list), `skill/tools/publish-safe.mjs` (what is cut from each file), `skill/tools/glance.mjs`, `skill/tools/rival-facts.mjs`, `skill/tools/demand-facts.mjs`
 - Privacy scan, masking, redaction: `skill/tools/privacy-scan.mjs`, `skill/tools/mask.mjs`, `skill/tools/pii.mjs`, `skill/tools/secret-rules.mjs`, `skill/tools/redact.mjs` (used by `facts.mjs find`, `canwe.mjs`, `pending-backend.mjs`)

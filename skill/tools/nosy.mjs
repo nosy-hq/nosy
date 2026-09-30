@@ -3,7 +3,7 @@
 // from every agent, from CI (GitHub Action), and from the MCP server; the judgment call still belongs to the agent.
 // Counting happens in the script, judgment in the agent, memory in pm/.
 // Usage: node nosy.mjs <command> [--pm <pm folder>] [...]      (via npx: `npx nosy <command>`)
-// Commands: next (the default), facts, find, sweep, cite-check, team-next, fields, receipts, refute, decision, nudge, install, update, uninstall, doctor, setup, check, explain, shipped, peek, inventory, gates, metrics, frontyard, signals, watch, psst, bet, score, canwe, notes, page, weekly, notify, publish, mcp, help.
+// Commands: next (the default), facts, find, sweep, cite-check, team-next, fields, receipts, refute, decision, nudge, install, update, uninstall, doctor, setup, check, explain, shipped, peek, inventory, gates, metrics, frontyard, signals, watch, rival-demand, psst, bet, score, canwe, notes, page, weekly, notify, publish, mcp, help.
 // No dependencies; uses git and (if present) gh. The commands that write outward are `notify` (only to the given webhook) and `publish` (opt-in: counts and structure only, to a Nosy Cloud you configured, after the privacy scan); `watch` only reads public rival pages (plain GET).
 import fs from "node:fs";
 import path from "node:path";
@@ -135,6 +135,9 @@ const Commands = {
   // Rival watch (matrix step 3): public rival pages vs the last snapshot in pm/history/watch/;
   // the only command besides notify that goes to the network, and it only reads public pages.
   watch: () => fs.existsSync(path.join(pm, "rivals")) ? script("watch-rivals.mjs", [pm, ...args, "--json", path.join(pm, "state", "watch.json")]) : (console.log(`Psst… no ${path.join(pm, "rivals")}/ yet: run neighbors first.`), { code: 0 }),
+  // Rival demand: what the users of open-source rivals ask for (open issues and Discussions, by votes), from their public trackers.
+  // Repos: --repos, sources.json rivalRepos, or GitHub links in pm/rivals/*.md. Discussions need gh or GH_TOKEN. No model.
+  "rival-demand": () => script("rival-demand.mjs", [pm, ...args, "--json", path.join(pm, "state", "rival-demand.json")]),
   // psst silently refreshes the plan-gate, metrics, waiting-screen and demand scans first (signals 7, 8, 9 and the demand column read these files).
   psst: () => {
     if (!sourceRequired()) return;
@@ -323,6 +326,7 @@ Model-free counts (judgment stays with the agent; these just gather evidence):
   nosy recent [--since d|date] [--days N] [--branch b]   merged since the last run + close to merging
   nosy page [output.html]  the decision page (default pm/page.html); --scoreboard: the bets/shipped scoreboard (default pm/scoreboard.html)
   nosy watch               which rivals' public pages changed since the last run
+  nosy rival-demand [--repos o/r,…]   what your open-source rivals' users ask for, by votes (issues + Discussions) → pm/state/rival-demand.json
   nosy bet place "<what>" --why "…" --estimate S|M|L   place a bet; prints the id to put in the commit/PR (Bet: nb-…)
   nosy score               settle bets from git (landed, reverted, patched, partial) → pm/state/score.json
   nosy shipped [7d]        decisions that shipped (explicit links) + work that landed by reference, + recent (merged / close)
