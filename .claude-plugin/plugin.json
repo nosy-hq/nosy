@@ -1,5 +1,6 @@
 {
   "name": "nosy",
+  "displayName": "Nosy",
   "version": "0.15.0",
   "description": "Nosy about your product. Never your data. The nosy product manager that lives inside your coding agent: looks at the backend, git and roadmap first, then rivals; doesn't do code review, makes product decisions.",
   "author": {

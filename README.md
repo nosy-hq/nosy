@@ -22,16 +22,24 @@ The plugin is free and MIT. Nosy Cloud (cloud.nosy.sh) is live and free for now:
 
 ## Install
 
-In Claude Code:
+**Claude Code** (terminal or desktop app):
 
 ```
 /plugin marketplace add nosy-hq/nosy
 /plugin install nosy@nosy
 ```
 
-Send the two commands one at a time. `claude plugin list` should show `nosy@nosy` enabled. Then type `/nosy` in your repo. Needs git and Node 18.17 or newer. Not Claude Code? See [Other agents](#other-agents).
+Send the two commands one at a time. In the desktop app the second one opens the plugin page: click **Install plugin**. `claude plugin list` should show `nosy@nosy` enabled. Then type `/nosy` in your repo.
 
-Run `/nosy:move-in` once: it reads your README, docs, decision files, git history and, through `gh` if you have it, issues and PRs. The counting runs on your machine with no model.
+**Codex, Cursor, Gemini CLI, Copilot, OpenCode, Kiro** don't know `/plugin`. In your project, run:
+
+```
+npx github:nosy-hq/nosy install
+```
+
+Or tell your agent: *"Read https://github.com/nosy-hq/nosy/blob/main/llms.txt and install Nosy in this repo."* Then type `/nosy` (Codex: `$nosy`). If your agent asks you to trust Nosy's hooks, there are four small ones, each with an off switch ([docs/INSTALL.md](docs/INSTALL.md)).
+
+Needs git and Node 18.17 or newer. Run `/nosy:move-in` once: it reads your README, docs, decision files, git history and, through `gh` if you have it, issues and PRs. The counting runs on your machine with no model.
 
 ## Try these first
 
@@ -62,7 +70,7 @@ Precision in run 4: 16 of 16 items held for Nosy, 18 of 28 for plain. The fixes 
 ## Other agents
 
 <details>
-<summary>Codex, Cursor, Gemini CLI, Copilot, OpenCode, Kiro, any MCP client, CI, terminal</summary>
+<summary>More ways: MCP, GitHub Actions, Slack, terminal, Windsurf, Roo, Junie</summary>
 
 Nosy is one skill folder (`skill/`, the open Agent Skills format) plus small dependency-free Node scripts.
 
