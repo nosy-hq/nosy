@@ -29,7 +29,7 @@ The plugin is free and MIT. Nosy Cloud (cloud.nosy.sh) is live and free for now:
 /plugin install nosy@nosy
 ```
 
-Send the two commands one at a time. In the desktop app the second one opens the plugin page: click **Install plugin**. `claude plugin list` should show `nosy@nosy` enabled. Then type `/nosy` in your repo.
+Send the two commands one at a time. In the desktop app the second one opens the plugin page: click **Install plugin**. `claude plugin list` should show `nosy@nosy` enabled. Start a new session (or run `/reload-plugins`), then type `/nosy` in your repo.
 
 **Codex, Cursor, Gemini CLI, Copilot, OpenCode, Kiro** don't know `/plugin`. In your project, run:
 
