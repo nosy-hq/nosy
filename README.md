@@ -12,11 +12,13 @@
 
 A product manager inside your coding agent. It goes through your backend, git history and roadmap first, then checks what your rivals shipped, and tells you what to build next: **sized, placed on the roadmap, with a receipt for every claim.**
 
+Your agent reads today's code. Nosy keeps what a session can't: the record of what merged and why, demand counted from your issues, and last week's answers.
+
+The plugin is free and MIT. Nosy Cloud (cloud.nosy.sh) is live and free for now: a shared record for your team. It never changes what the plugin does. [See a sample report](https://cloud.nosy.sh/demo) (made-up data).
+
 <p align="center"><img src="docs/assets/canwe.png" alt="A real run of nosy canwe on chatwoot/chatwoot: the code lines that already retry agent-bot webhooks, and a size of S from git history" width="860"></p>
 
 <p align="center"><sub>A real run on <a href="https://github.com/chatwoot/chatwoot">chatwoot/chatwoot</a>, lines removed. Nosy hands your agent the evidence; the verdict is your agent's. <a href="docs/EXAMPLE.md">Full run, and what it got wrong</a>.</sub></p>
-
-The plugin is free and MIT. Nosy Cloud (cloud.nosy.sh) is live and free for now: a shared record for your team. It never changes what the plugin does. [See a sample report](https://cloud.nosy.sh/demo) (made-up data).
 
 ## Install
 
@@ -107,7 +109,7 @@ Every command also runs from the terminal with no model: `npx github:nosy-hq/nos
 
 </details>
 
-**1 skill · 17 commands · 80 scripts · 4 hooks · 16 named rules.** The counting is plain, dependency-free Node: it runs in your terminal, in CI or as an MCP server, with no model and no API key. Your agent adds the judgment. Everything Nosy remembers lives in a `pm/` folder in your repo. `nosy explain` lists the rules and says which a script checks and which are instructions.
+**1 skill · 17 commands · 80 scripts · 4 hooks · 16 named rules.** Plain, dependency-free Node: the counting runs in your terminal, in CI or as an MCP server, with no model and no API key. Your agent adds the judgment. Everything Nosy remembers lives in a `pm/` folder in your repo.
 
 ## If it broke
 
