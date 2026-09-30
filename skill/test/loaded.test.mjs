@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { run, temporary, clean, Tool } from "./helpers.mjs";
-import { status, render, HOOKS, hookOff, claimFirstRun, versionOf } from "../tools/loaded.mjs";
+import { status, render, invoke, HOOKS, hookOff, claimFirstRun, versionOf } from "../tools/loaded.mjs";
 
 const HOOK = path.join(Tool, "..", "..", "hooks", "psst-summary.mjs"), NEXT = path.join(Tool, "next.mjs"), NOSY = path.join(Tool, "nosy.mjs");
 const REPO = path.join(Tool, "..", "..");
@@ -38,6 +38,15 @@ test("status: a skill copied without the plugin has no hooks, and says so", () =
   assert.equal(L.commands, 3);
   assert.equal(L.hooksInstalled, false);
   assert.match(render(L, { prefix: "/nosy " }), /Hooks: none, this is the skill without the plugin \(the plugin adds them: \/plugin install nosy@nosy\)\./);
+});
+
+test("a plugin has no bare /nosy: the top-level skill is /nosy:nosy there, /nosy in a skill-only install", () => {
+  assert.equal(invoke({ CLAUDE_PLUGIN_ROOT: "/x/nosy" }), "/nosy:nosy");
+  assert.equal(invoke({}), "/nosy");
+  const L = status({ cwd: withPm(), env: {} });
+  assert.match(render(L, { prefix: "/nosy:" }), /\(\/nosy:nosy lists them\)/);
+  assert.doesNotMatch(render(L, { prefix: "/nosy:" }), /\/nosy lists them/);
+  assert.match(render(L, { prefix: "/nosy " }), /\(\/nosy lists them\)/);
 });
 
 test("hook switches: either one turns a hook off (an option left at \"false\" never shadows the env var); every switch is the one its hook file reads", () => {

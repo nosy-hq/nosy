@@ -154,34 +154,47 @@ test("CLI: exit 2 with the problems listed; 0 when all hold; 1 when the answer c
 // The hook: the check runs for the agent (Stop / SubagentStop on its last answer, PostToolUse on a written .md).
 const HOOK = path.join(Tool, "..", "..", "hooks", "cite-check.mjs");
 const hook = (input, env = {}) => run(HOOK, [], { input: JSON.stringify(input), env: { ...process.env, NOSY_CITE_GH: "0", ...env } });
-function transcript(dir, text) {
-  const f = path.join(dir, "t.jsonl");
-  fs.writeFileSync(f, [
-    { type: "user", message: { role: "user", content: "can we?" } },
-    { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", name: "Bash", input: {} }] } },
-    { type: "assistant", message: { role: "assistant", content: [{ type: "text", text }] } },
-  ].map(x => JSON.stringify(x)).join("\n") + "\n");
-  return f;
-}
-
 test("hook, Stop: a made-up quote in the last answer sends the agent back once; a clean answer or a second stop goes through", () => {
   const r = repo();
-  const bad = transcript(r.root, 'Deadlines: PRODUCT.md:3 "süre asla çıkarım değildir".');
-  const out = hook({ hook_event_name: "Stop", cwd: r.root, transcript_path: bad });
+  const bad = 'Deadlines: PRODUCT.md:3 "süre asla çıkarım değildir".';
+  const out = hook({ hook_event_name: "Stop", cwd: r.root, last_assistant_message: bad });
   assert.equal(out.code, 0, out.error);
   const j = JSON.parse(out.output);
   assert.equal(j.decision, "block");
   assert.match(j.reason, /1 reference in your answer doesn't hold up[\s\S]*Fix or drop those lines/);
-  assert.equal(hook({ hook_event_name: "Stop", cwd: r.root, transcript_path: bad, stop_hook_active: true }).output, "", "never loops");
-  const good = transcript(r.root, "Rows cap at 500 (review.go:20).");
-  assert.equal(hook({ hook_event_name: "SubagentStop", cwd: r.root, transcript_path: good }).output, "");
-  assert.equal(hook({ hook_event_name: "Stop", cwd: r.root, transcript_path: bad }, { NOSY_NO_CITE_CHECK: "1" }).output, "", "off switch");
+  assert.equal(hook({ hook_event_name: "Stop", cwd: r.root, last_assistant_message: bad, stop_hook_active: true }).output, "", "never loops");
+  const good = "Rows cap at 500 (review.go:20).";
+  assert.equal(hook({ hook_event_name: "SubagentStop", cwd: r.root, last_assistant_message: good }).output, "");
+  assert.equal(hook({ hook_event_name: "Stop", cwd: r.root, last_assistant_message: bad }, { NOSY_NO_CITE_CHECK: "1" }).output, "", "off switch");
   // An option Claude Code exports as "false" must not shadow the env switch, and must not switch the check off.
   // (A fresh answer each time: the check asks once per answer, so an answer it already flagged stays quiet either way.)
   const optionFalse = { CLAUDE_PLUGIN_OPTION_DISABLE_CITE_CHECK: "false" }, r2 = repo();
-  const bad2 = transcript(r2.root, 'Deadlines: PRODUCT.md:3 "süre asla çıkarım değildir".');
-  assert.equal(hook({ hook_event_name: "Stop", cwd: r2.root, transcript_path: bad2 }, { ...optionFalse, NOSY_NO_CITE_CHECK: "1" }).output, "", "option \"false\" + NOSY_NO_CITE_CHECK=1: still off");
-  assert.equal(JSON.parse(hook({ hook_event_name: "Stop", cwd: r2.root, transcript_path: bad2 }, optionFalse).output).decision, "block", "option \"false\" alone: it still checks (the off run did not use up the answer)");
+  const bad2 = 'Deadlines: PRODUCT.md:3 "süre asla çıkarım değildir".';
+  assert.equal(hook({ hook_event_name: "Stop", cwd: r2.root, last_assistant_message: bad2 }, { ...optionFalse, NOSY_NO_CITE_CHECK: "1" }).output, "", "option \"false\" + NOSY_NO_CITE_CHECK=1: still off");
+  assert.equal(JSON.parse(hook({ hook_event_name: "Stop", cwd: r2.root, last_assistant_message: bad2 }, optionFalse).output).decision, "block", "option \"false\" alone: it still checks (the off run did not use up the answer)");
+});
+
+test("hook, Stop: it reads the answer from last_assistant_message and never opens a transcript; without the field it is silent", () => {
+  const r = repo(), bad = 'Deadlines: PRODUCT.md:3 "süre asla çıkarım değildir".';
+  // A transcript that would flag a problem if it were read, a directory (reading it throws) and a file that
+  // could be a hidden transcript: none of them may be opened.
+  const canary = path.join(r.root, "canary.jsonl");
+  fs.writeFileSync(canary, [{ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: bad }] } }].map(x => JSON.stringify(x)).join("\n") + "\n");
+  const dir = path.join(r.root, "transcript-dir"); fs.mkdirSync(dir);
+  const before = fs.statSync(canary).atimeMs;
+  const paths = { transcript_path: canary, agent_transcript_path: dir };
+  assert.equal(hook({ hook_event_name: "Stop", cwd: r.root, ...paths }).output, "", "no last_assistant_message: silent, no fallback to the transcript");
+  assert.equal(hook({ hook_event_name: "SubagentStop", cwd: r.root, ...paths }).output, "");
+  assert.equal(hook({ hook_event_name: "Stop", cwd: r.root, ...paths, last_assistant_message: 42 }).output, "", "not a string: silent");
+  assert.equal(hook({ hook_event_name: "Stop", cwd: r.root, ...paths, last_assistant_message: "Rows cap at 500 (review.go:20)." }).output, "", "a clean answer, with paths present");
+  const flagged = hook({ hook_event_name: "SubagentStop", cwd: r.root, ...paths, last_assistant_message: bad });
+  assert.equal(flagged.code, 0, flagged.error);
+  assert.equal(JSON.parse(flagged.output).decision, "block", "the answer comes from the field, not from the canary file");
+  assert.equal(fs.statSync(canary).atimeMs, before, "the canary transcript was not read");
+  // Stronger than atime: the hook source has no transcript file access at all.
+  const src = fs.readFileSync(HOOK, "utf8");
+  assert.doesNotMatch(src, /(?:readFileSync|createReadStream|readFile|openSync)\([^)]*transcript/i);
+  assert.doesNotMatch(src, /\binput\.(?:agent_)?transcript_path\b/);
 });
 
 test("hook, PostToolUse: a written .md with a wrong reference is flagged; code files, no pm/, nothing to check: silent", () => {

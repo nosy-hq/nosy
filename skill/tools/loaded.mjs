@@ -3,12 +3,13 @@
 // command to run next when it doesn't). Read-only, no network, never throws.
 //
 // Two callers, both existing surfaces (nothing new speaks on its own):
-//   - `/nosy` with no command (next.mjs) prints the lines above its picks, every time: the owner asked.
+//   - the top-level skill with no command (next.mjs) prints the lines above its picks, every time: the owner asked.
+//     Claude Code plugin: `/nosy:nosy` (every plugin skill is namespaced). Skill-only install: `/nosy`. Codex: `$nosy`.
 //   - the SessionStart hook (hooks/psst-summary.mjs) says them ONCE per install, in the first session, so a fresh user
 //     sees that the plugin loaded even in a folder with no pm/. After that it is back to its old quiet self.
 //     "Once" is a marker file (claimFirstRun); if the marker can't be written the hook stays silent, never nags.
 // Off switches: the same ones the hooks have (docs/INSTALL.md, f). NOSY_NO_PSST silences the hook, so the first-run
-// lines too; `/nosy` still prints them, and shows the opening summary as off.
+// lines too; the skill with no command still prints them, and shows the opening summary as off.
 import fs from "node:fs"; import os from "node:os"; import path from "node:path"; import { fileURLToPath } from "node:url";
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -52,6 +53,10 @@ export function status({ cwd = process.cwd(), env = process.env, skill = SKILL }
   return { version: versionOf(skill), commands, hooksInstalled, hooks, pm: { path: pm, state } };
 }
 
+// How the owner runs the top-level skill here: a plugin namespaces it (`/nosy:nosy`); a skill-only install is `/nosy`.
+// The plugin is what sets CLAUDE_PLUGIN_ROOT (hooks and plugin commands run with it).
+export const invoke = (env = process.env) => (env.CLAUDE_PLUGIN_ROOT ? "/nosy:nosy" : "/nosy");
+
 // prefix: how commands are typed here ("/nosy:" in the plugin, "/nosy " as a skill, "nosy " on the command line).
 // nextStep: say the command to run when there is no pm/ (off where the picks right below already say it).
 // moveIn: what to type to set up (`nosy setup .` on the command line, where move-in has no script half).
@@ -65,7 +70,7 @@ export function render(L, { prefix = "/nosy:", nextStep = true, moveIn = `${pref
     empty: nextStep ? `pm/ has no sources.json yet: run ${moveIn}.` : "pm/ has no sources.json yet.",
     older: `pm/ is from an older Nosy: run ${prefix}doctor.`,
     broken: "pm/sources.json can't be read (not valid JSON): `nosy doctor --check` says where; fix it or redo it with " + `${moveIn}.` }[L.pm.state];
-  return [`Nosy ${L.version} is loaded: ${L.commands} commands (${prefix.trim().replace(/:$/, "")} lists them).`, hooks, at].join("\n");
+  return [`Nosy ${L.version} is loaded: ${L.commands} commands (${/:$/.test(prefix) ? "/nosy:nosy" : prefix.trim()} lists them).`, hooks, at].join("\n");
 }
 
 // Once per install. The marker lives where Claude Code keeps the plugin's own data (CLAUDE_PLUGIN_DATA, removed with

@@ -26,7 +26,7 @@ const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(SKILL
 // Where each agent reads project skills, and what in a project says the agent is used there. `global` is the
 // user-level folder, only for agents whose docs name one.
 export const PROVIDERS = {
-  claude:   { name: "Claude Code",    dir: ".claude/skills",   signs: [".claude", "CLAUDE.md"], global: ".claude/skills", invoke: "/nosy (or install the plugin for /nosy:<command> and the hooks)" },
+  claude:   { name: "Claude Code",    dir: ".claude/skills",   signs: [".claude", "CLAUDE.md"], global: ".claude/skills", invoke: "/nosy (or install the plugin: then /nosy:nosy, /nosy:<command> and the hooks)" },
   codex:    { name: "Codex",          dir: ".agents/skills",   signs: [".codex", ".agents", "AGENTS.md"], global: ".agents/skills", invoke: "$nosy" },
   cursor:   { name: "Cursor",         dir: ".cursor/skills",   signs: [".cursor", ".cursorrules"], invoke: "/nosy" },
   gemini:   { name: "Gemini CLI",     dir: ".gemini/skills",   signs: [".gemini", "GEMINI.md"], invoke: "/nosy" },

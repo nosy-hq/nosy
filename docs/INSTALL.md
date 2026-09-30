@@ -13,7 +13,7 @@ In a Claude Code session, one command at a time:
 
 From the shell instead: `claude plugin marketplace add nosy-hq/nosy`, then `claude plugin install nosy@nosy`.
 
-**Check it worked.** `claude plugin list` shows `nosy@nosy` enabled (or `/plugin` → the **Installed** tab). Typing `/` lists `/nosy:peek`, `/nosy:psst` and the rest. Then open your repo and type `/nosy`. Commands are always `/nosy:<command>`; Claude Code puts every plugin command under the plugin's name.
+**Check it worked.** `claude plugin list` shows `nosy@nosy` enabled (or `/plugin` → the **Installed** tab). Typing `/` lists `/nosy:peek`, `/nosy:psst` and the rest. Then open your repo and run `/nosy:nosy`: it prints which version is loaded, then suggests what to run (in a repo with no `pm/`, `move-in` comes first). Commands are always `/nosy:<command>` and the top-level skill is `/nosy:nosy`: Claude Code puts every plugin skill and command under the plugin's name, so a bare `/nosy` does not exist in the plugin.
 
 **If it broke.** `npx github:nosy-hq/nosy doctor --check` checks Node, git, gh, the skill files, the hooks and `pm/sources.json`. It reads local files only, writes nothing, and prints the fix next to every failing line. It exits 2 on a hard failure. Plain `nosy doctor` is a different job: with `--fix` it renames old file names and keys in a `pm/` written by an older Nosy.
 
@@ -39,7 +39,7 @@ Other ways: [b) disable](#b-disable-or-remove) · [c) cloud sessions](#c-claude-
 
 A cloud session (claude.ai/code, routines, the mobile app, `claude --cloud`) does not load plugins installed on your machine, according to Claude Code's plugin docs. There, `/nosy:<command>`, the four hooks and the three agents (`nosy-neighbor`, `nosy-auditor`, `nosy-refuter`) do not exist. Nosy still works through the skill's fallbacks (`skill/SKILL.md`, "Works in every agent"): the agent researches rivals and runs the refuter pass itself.
 
-A skill committed to the repo at `.claude/skills/nosy/` does load there, and the command becomes `/nosy peek`, `/nosy psst` (a space, not a colon). The simplest way to get it is `nosy install` ([g](#g-other-coding-agents)); commit the folder it creates.
+A skill committed to the repo at `.claude/skills/nosy/` does load there, and the command becomes `/nosy peek`, `/nosy psst` (a space, not a colon; bare `/nosy` works there too, because it is a skill, not a plugin). The simplest way to get it is `nosy install` ([g](#g-other-coding-agents)); commit the folder it creates.
 
 ## d) Scheduled weekly runs
 
@@ -63,7 +63,7 @@ Each of the four hooks has a plugin option (`/plugin configure nosy@nosy`) and a
 | Opening summary | One "Psst…" line at session start. | "Turn off the opening summary" | `NOSY_NO_PSST=1` |
 | After-commit nudge | After `git commit`, `merge` or `pull` (and a `gh pr merge` once it reaches your checkout): which matrix gap the commit may close, the next product decision, the next command. Silent when nothing is new. | "Turn off the after-commit nudge" | `NOSY_NO_NUDGE=1` |
 | Never-rule check | After `git commit` or `gh pr create`: matches the added lines, and the command itself, against `preread.never` in `pm/sources.json`. On a match it tells the agent which rule and where, before anything is pushed. It never blocks or undoes. | "Turn off the never-rule check" | `NOSY_NO_NEVER_CHECK=1` |
-| Reference check | When the agent finishes an answer, or writes a markdown file, in a repo with `pm/sources.json`: checks every `file:line`, quote, commit and `#N` against the repo and GitHub. If one doesn't hold up, the agent is sent back once to fix or drop it. | "Turn off the reference check" | `NOSY_NO_CITE_CHECK=1` (whole hook), `NOSY_CITE_GH=0` (keep local checks, skip GitHub) |
+| Reference check | When the agent finishes an answer (Claude Code hands the hook that answer as an input field; no transcript or chat history file is read), or writes a markdown file, in a repo with `pm/sources.json`: checks every `file:line`, quote, commit and `#N` against the repo and GitHub. If one doesn't hold up, the agent is sent back once to fix or drop it. | "Turn off the reference check" | `NOSY_NO_CITE_CHECK=1` (whole hook), `NOSY_CITE_GH=0` (keep local checks, skip GitHub) |
 
 After one `git commit`, two hooks may speak, in this order: the never-rule check (only on a match), then the nudge.
 
@@ -88,7 +88,7 @@ It looks for the agents the project uses (a `.claude/`, `.cursor/`, `.gemini/`, 
 `npx github:…` runs a repo's code on your machine. Pin a release tag to say which code (replace with the latest release tag); without `#<tag>` you get the default branch as it is right now:
 
 ```
-npx github:nosy-hq/nosy#v0.15.0 install
+npx github:nosy-hq/nosy#v0.15.1 install
 ```
 
 - `--providers claude,codex,cursor,gemini,copilot,opencode,kiro` chooses; `--dry-run` shows first; `--global` uses your user folder (Claude Code `~/.claude/skills`, Codex `~/.agents/skills`).
@@ -100,7 +100,7 @@ npx github:nosy-hq/nosy#v0.15.0 install
 
 ## h) Terminal, no agent
 
-The counting needs no model, so this works with no agent and in CI. `--pm <folder>` or `NOSY_PM` picks the pm folder (default `./pm`).
+The counting needs no model, so this works with no agent and in CI. Most commands have a terminal twin (some under another name, and five are agent only): the table is in [CLI-CONTRACT.md](CLI-CONTRACT.md). `--pm <folder>` or `NOSY_PM` picks the pm folder (default `./pm`).
 
 ```
 npx github:nosy-hq/nosy help        # or: node skill/tools/nosy.mjs help

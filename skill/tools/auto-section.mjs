@@ -37,7 +37,7 @@ export function section(pm) {
 </style>`;
   let h = "";
   if (D) h += `<div class="pmo-b"><h3>Next product decision</h3><p><b>${esc(D.title)}</b>${D.size ? ` <span class="pmo-t">${esc(D.size)}</span>` : ""}${D.why ? ` — ${esc(D.why)}` : ""}</p>
-<p class="pmo-m">${D.checked ? "Checked against the code by psst's refuter." : "Not checked yet: run psst's check step before committing to it."} The after-commit nudge and <code>/nosy</code> say the same one. Source: ${esc(D.source)}.</p></div>`;
+<p class="pmo-m">${D.checked ? "Checked against the code by psst's refuter." : "Not checked yet: run psst's check step before committing to it."} The after-commit nudge and <code>/nosy:nosy</code> (plugin) or <code>/nosy</code> (skill install) say the same one. Source: ${esc(D.source)}.</p></div>`;
   if (checkedFresh && (F.items?.length || F.dropped?.length)) h += `<div class="pmo-b"><h3>Checked this week</h3><p class="pmo-m">${esc(F.stats?.stands ?? 0)} stand · ${esc(F.stats?.weakened ?? 0)} corrected · ${esc(F.stats?.refuted ?? 0)} dropped after checking${F.stats?.fromReading ? ` · ${esc(F.stats.fromReading)} from reading the code` : ""} · generated ${hour(F.generated)}</p>
 <ul>${(F.items || []).map(i => `<li><b>${esc(i.title)}</b> <span class="pmo-t">${esc(i.verdict === "weakened" ? `corrected: ${String(i.fix).slice(0, 90)}` : i.size || "")}</span></li>`).join("")}${(F.dropped || []).map(x => `<li><s>${esc(x.title)}</s> <span class="pmo-t">dropped: ${esc(String(x.why).slice(0, 90))}</span></li>`).join("")}</ul></div>`;
   if (heldList.length) h += `<div class="pmo-b"><h3>Held on purpose</h3><p class="pmo-m">The code or a decision parks these; they stay off the cheap list until the owner says otherwise.</p>

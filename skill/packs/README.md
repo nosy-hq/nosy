@@ -4,7 +4,7 @@ A "pack" is domain knowledge layered on top of `nosy`'s general rules - like Pon
 
 ## How to load it
 
-`/nosy <command> --<pack>`, for example: `/nosy neighbors --fintech`, `/nosy spill --mobile <topic>`, `/nosy scoop --legaltech`, `/nosy stakeout --b2b-saas`.
+`/nosy:<command> --<pack>` in the Claude Code plugin (`/nosy <command> --<pack>` in a skill-only install), for example: `/nosy:neighbors --fintech`, `/nosy:spill --mobile <topic>`, `/nosy:scoop --legaltech`, `/nosy:stakeout --b2b-saas`.
 
 If no pack flag is given, the agent works with the general rules. If a product spans more than one pack (e.g. a mobile fintech app), both flags can be given at once; overlapping rows are de-duplicated, and overlapping "never" rules all apply.
 

@@ -9,7 +9,7 @@ Goal: two questions, both maintenance rather than product work (don't run any ot
 `node <skill>/tools/doctor.mjs --check [pm]` (or `nosy doctor --check`). Local only: no network, writes nothing. It checks Node (18.17 or newer; the tests run on 22 and up), git (required), gh (optional), the skill's own files, the plugin manifest and its commands, copies made by `nosy install` (a stale or broken one), whether the plugin is switched off in Claude Code, `hooks/hooks.json` (valid, every script present and parseable, which hooks you switched off), and `pm/sources.json` (readable, its repo is a git repo, its `ref` resolves).
 - Every line that isn't fine ends with the command or link that fixes it: **✗** a hard failure (exit 2), **!** fix it but Nosy still runs, **–** for your information (a missing `gh`, no `pm/` yet: nothing is wrong). Read the ✗ lines to the owner as they are and don't guess at other causes; run each fix only when the owner says so.
 - Exit 0: healthy (say so in one line). Exit 2: at least one ✗.
-- It can't tell whether *this session* loaded Nosy. That is what `/nosy` with no command is for: it prints "Nosy is loaded: N commands", which hooks are on, and whether `pm/` is here. No lines there means the plugin isn't loaded: `/plugin` → Installed tab, then `/plugin enable nosy` or restart the session.
+- It can't tell whether *this session* loaded Nosy. That is what the top-level skill with no command is for (`/nosy:nosy` in the plugin, `/nosy` in a skill-only install): it prints "Nosy is loaded: N commands", which hooks are on, and whether `pm/` is here. No lines there means the plugin isn't loaded: `/plugin` → Installed tab, then `/plugin enable nosy` or restart the session.
 
 ## Older `pm/` folders
 

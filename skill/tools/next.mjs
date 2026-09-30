@@ -193,7 +193,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
   const pm = argv.filter(a => a !== "--cli")[0] || "pm";
   const R = next(pm, { now: nowArg ? Date.parse(nowArg) : Date.now(), staleDays: staleArg ? +staleArg : 7 });
   if (jsonOut) { fs.mkdirSync(path.dirname(jsonOut), { recursive: true }); fs.writeFileSync(jsonOut, JSON.stringify(R, null, 1)); }
-  // `/nosy` with no command: first the three "is it loaded" lines (loaded.mjs), then the picks. Not with --json.
+  // the top-level skill with no command (`/nosy:nosy` in the plugin, `/nosy` as a skill): first the three "is it loaded" lines (loaded.mjs), then the picks. Not with --json.
   if (!jsonOut) { try { console.log(loadedRender(loadedStatus(), { prefix: cli ? `${nosyCommand()} ` : prefix, nextStep: false, moveIn: cli ? nosyCommand("setup .") : undefined }) + "\n"); } catch {} }
   console.log(render(R, { prefix, cli }));
 }

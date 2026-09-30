@@ -4,7 +4,7 @@
 
 That line needs a list you can check. This is the list.
 
-It was checked against version 0.15.0 (30 Sep 2026): every script, hook, agent, command file and the GitHub Action read, and the scripts run with their network, process and file activity logged. If Nosy does something that isn't written here, that is a bug in this file or in Nosy. Please report it.
+It was checked against version 0.15.1 (30 Sep 2026): every script, hook, agent, command file and the GitHub Action read, and the scripts run with their network, process and file activity logged. If Nosy does something that isn't written here, that is a bug in this file or in Nosy. Please report it.
 
 ## The short version
 
@@ -25,7 +25,7 @@ It was checked against version 0.15.0 (30 Sep 2026): every script, hook, agent, 
 | Your own documents | Decision log, roadmap or request document, README, `package.json`, design-system files, and any path you put in `pm/sources.json`. | A path in `sources.json` can be outside the repo. The reference check also lists file names (three levels deep) under every absolute path in `sources.json`. |
 | Public web pages | Scripts: the rival pages you list in `pm/rivals/*.md` (`## Sources`) or in `sources.json` (`rivals`, `watch`), plus same-origin script files of pages that need JavaScript. Your agent: rival research (`neighbors`, `move-in`) and your landing page (`frontyard`), through its own web tools. | Public pages only, plain GET, no login. |
 | Files you drop in | Support, survey and interview exports in `pm/signal/` (or the folder `signal.path` names): csv, json, jsonl, md, txt. | See "Masking" below. Nosy never rewrites or copies a raw export. |
-| Your agent session (hooks) | The last answer your agent gave (from the transcript file the host hands the hook) and markdown or text files the agent just wrote, only when they contain a `file:line`, `#N` or commit hash to check. | Only in a repo that has `pm/sources.json`. Nothing is stored. |
+| Your agent session (hooks) | The last answer your agent gave (Claude Code hands it to the hook as a hook input field; the hook opens no transcript or chat history file) and markdown or text files the agent just wrote, only when they contain a `file:line`, `#N` or commit hash to check. | Only in a repo that has `pm/sources.json`. Nothing is stored. |
 | Your Nosy install | `nosy doctor --check` reads `~/.claude/plugins/installed_plugins.json`, the `enabledPlugins` key of `~/.claude/settings.json`, the skill folders (`.claude/skills/nosy`, `.agents/skills/nosy`, here and in your home folder), and runs `git --version` and `gh --version`. | Only when you run it. |
 
 Environment variables read: `NOSY_*` and `CLAUDE_PLUGIN_*` settings, and `HOME` (to expand `~` in a path). Nothing else. `gh` reads its own sign-in; Nosy never touches that token.

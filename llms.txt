@@ -24,7 +24,7 @@ Nosy is a product manager that lives inside your coding agent. It reads your bac
 npx github:nosy-hq/nosy install
 ```
 
-Send the two Claude Code commands one at a time. Then type `/nosy` (Claude Code; Codex: `$nosy`) or ask your agent to run Nosy commands.
+Send the two Claude Code commands one at a time. Then, with the plugin, run `/nosy:move-in` (plugin commands are always `/nosy:<command>`, the top-level skill is `/nosy:nosy`). With the skill-only install, type `/nosy` (Codex: `$nosy`). Or ask your agent to run Nosy commands.
 
 ## Paste to your agent
 

@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Nosy · the reference check, run for the agent instead of left to it. The owner's 20-question test showed
 // agents read "run cite-check before the answer goes out" and skip it anyway, so it runs here:
-//   Stop / SubagentStop  the answer the agent just gave (its last message in the transcript)
+//   Stop / SubagentStop  the answer the agent just gave, from the `last_assistant_message` field Claude Code puts in
+//                     the hook input. No transcript or chat history file is opened; without the field (an older Claude
+//                     Code) the hook does nothing.
 //   PostToolUse Write|Edit|MultiEdit  a markdown/text file the agent just wrote (an answer or a draft)
 //   PostToolUse Bash  the same, when the file was written from the shell (`cat > a.md <<EOF`, `echo … >> a.md`,
 //                     `tee a.md`, `mv draft.md a.md`): the owner's hook run found agents write answers that way
@@ -16,21 +18,6 @@
 import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { fileURLToPath } from "node:url";
 
 const off = v => ["1", "true", "on", "yes"].includes(String(v ?? "").toLowerCase());
-
-// The text of the last assistant message in a Claude Code transcript (JSONL).
-export function lastAnswer(transcriptPath) {
-  let lines; try { lines = fs.readFileSync(transcriptPath, "utf8").trim().split("\n"); } catch { return ""; }
-  for (let i = lines.length - 1; i >= 0; i--) {
-    let d; try { d = JSON.parse(lines[i]); } catch { continue; }
-    const m = d.message || {};
-    if ((d.type === "assistant" || m.role === "assistant") && Array.isArray(m.content)) {
-      const text = m.content.filter(c => c.type === "text").map(c => c.text).join("\n").trim();
-      if (text) return text;
-    }
-    if (d.type === "user" && typeof (d.message?.content) === "string") return ""; // a new user turn: nothing answered since
-  }
-  return "";
-}
 
 // pm/ next to where the agent works, at the repo root, or above the file it just wrote (an answer draft under
 // pm/state/, or an answers folder next to pm/): the first one with a sources.json.
@@ -76,7 +63,7 @@ export async function run(input, { lookup } = {}) {
   let text = "", name = "your answer";
   if (event === "Stop" || event === "SubagentStop") {
     if (input.stop_hook_active) return null;
-    text = lastAnswer(input.agent_transcript_path || input.transcript_path);
+    text = typeof input.last_assistant_message === "string" ? input.last_assistant_message.trim() : "";
   } else if (event === "PostToolUse") {
     const f = input.tool_input?.file_path || "";
     if (!/\.(md|markdown|txt)$/i.test(f)) return null;

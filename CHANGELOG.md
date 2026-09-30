@@ -2,8 +2,13 @@
 
 Versions match `package.json` and `.claude-plugin/plugin.json`. Dates are when the version was committed. Versions before 0.10.0 were pre-release and aren't listed.
 
+## 0.15.1 (2026-09-30)
+- The reference check reads the agent's last answer from the hook input; it no longer opens the transcript file.
+- Without that input (an older Claude Code) the hook does nothing. It never falls back to the transcript.
+- Docs (`DATA.md`, `SECURITY.md`, `INSTALL.md`) say so, and a test proves no transcript path is opened.
+
 ## 0.15.0 (2026-09-30)
-- Install check: `nosy --version` prints the version. `/nosy` and the first session after an install say which version is loaded, how many commands it brought, which hooks are on, and whether the folder has a `pm/`. `nosy doctor --check` checks the install itself (Node, git, gh, skill files, hooks, `pm/sources.json`) and prints a fix for each problem. Plain `nosy doctor` still fixes a `pm/` from an older Nosy.
+- Install check: `nosy --version` prints the version. `/nosy:nosy` (`/nosy` in a skill-only install) and the first session after an install say which version is loaded, how many commands it brought, which hooks are on, and whether the folder has a `pm/`. `nosy doctor --check` checks the install itself (Node, git, gh, skill files, hooks, `pm/sources.json`) and prints a fix for each problem. Plain `nosy doctor` still fixes a `pm/` from an older Nosy.
 - Clearer errors: git or gh missing, gh signed out, no network, a folder that isn't a repo, a JSON typo. Each ends in one line with the command that fixes it.
 - Generated pages (`pm/page.html`, the scoreboard) escape all data and make no external requests.
 - `nosy publish` is opt-in and sends counts only: no commit subjects, author names, PR or issue titles, or quotes. Nothing is sent without a target you configured and a confirmation; `--dry-run` lists what would go.

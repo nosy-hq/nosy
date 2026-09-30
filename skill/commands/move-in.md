@@ -63,7 +63,7 @@ Structural signals (the "## K&lt;no&gt;" heading pattern, an ADR "Status:" line,
    2. **The matrix in one screen**: where we lead, the table stakes we lack (most rivals have it), what only we have. Link the page.
    3. **Low-hanging fruit**: the top 3–5 from `psst`, each sized, each with its evidence.
    4. **Roadmap**: the `scoop` waves (Now / Next / Later), one line each.
-   5. **Your next product decision**: exactly one, and why now: the one `node <skill>/tools/next-decision.mjs pm` gives, so the after-commit nudge and `/nosy` repeat the same answer later. If it says "not checked yet", say so.
+   5. **Your next product decision**: exactly one, and why now: the one `node <skill>/tools/next-decision.mjs pm` gives, so the after-commit nudge and `/nosy:nosy` (`/nosy` as a skill) repeat the same answer later. If it says "not checked yet", say so.
    6. **Landing page**: what shipped but isn't on it (if `frontyard` ran).
    End with how Nosy stays with them while they build: after each commit or merge it says which matrix gap the commit may close and what the next decision is (the after-commit hook; put `Matrix: <row>` in a commit to make the link explicit), and `/nosy:canwe "<scenario>"` answers "is the product close to this, what's missing?" at any time.
 

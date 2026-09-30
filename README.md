@@ -29,7 +29,7 @@ The plugin is free and MIT. Nosy Cloud (cloud.nosy.sh) is live and free for now:
 /plugin install nosy@nosy
 ```
 
-Send the two commands one at a time. In the desktop app the second one opens the plugin page: click **Install plugin**. `claude plugin list` should show `nosy@nosy` enabled. Start a new session (or run `/reload-plugins`), then type `/nosy` in your repo.
+Send the two commands one at a time. In the desktop app the second one opens the plugin page: click **Install plugin**. `claude plugin list` should show `nosy@nosy` enabled. Start a new session (or run `/reload-plugins`), open your repo and run `/nosy:move-in`. Every plugin command is namespaced with the plugin name, so it is `/nosy:<command>`; the top-level skill is `/nosy:nosy`.
 
 **Codex, Cursor, Gemini CLI, Copilot, OpenCode, Kiro** don't know `/plugin`. In your project, run:
 
@@ -39,13 +39,13 @@ npx github:nosy-hq/nosy install
 
 Or tell your agent: *"Read https://github.com/nosy-hq/nosy/blob/main/llms.txt and install Nosy in this repo."* Then type `/nosy` (Codex: `$nosy`). If your agent asks you to trust Nosy's hooks, there are four small ones, each with an off switch ([docs/INSTALL.md](docs/INSTALL.md)).
 
-Needs git and Node 18.17 or newer. Run `/nosy:move-in` once: it reads your README, docs, decision files, git history and, through `gh` if you have it, issues and PRs. The counting runs on your machine with no model.
+Needs git and Node 18.17 or newer. Run `move-in` once (`/nosy:move-in` from the plugin, `/nosy move-in` from a skill install): it reads your README, docs, decision files, git history and, through `gh` if you have it, issues and PRs. The counting runs on your machine with no model.
 
 ## Try these first
 
 | Type | You get |
 |---|---|
-| `/nosy` | The 2–3 commands worth running in *this* repo, each with the reason. |
+| `/nosy:nosy` | The 2–3 commands worth running in *this* repo, each with the reason. (Skill-only install: `/nosy`.) |
 | `/nosy:peek` | What shipped, what didn't, what has no screen. |
 | `/nosy:canwe "can we do X?"` | The code that already exists, the size from git history, and how often it was asked for. |
 | `/nosy:psst` | What you could ship this week. Asked for + ready goes first. |
@@ -84,7 +84,7 @@ Nosy is one skill folder (`skill/`, the open Agent Skills format) plus small dep
 | **Slack / Discord** | The Action, or `nosy notify`, posts the weekly "Psst…" to a webhook. |
 | **Terminal, no agent** | `npx github:nosy-hq/nosy weekly` |
 
-`npx github:…` runs code straight from a repo. To know which code, pin a release tag: `npx github:nosy-hq/nosy#v0.15.0 install`. Every path in detail: [docs/INSTALL.md](docs/INSTALL.md).
+`npx github:…` runs code straight from a repo. To know which code, pin a release tag: `npx github:nosy-hq/nosy#v0.15.1 install`. Every path in detail: [docs/INSTALL.md](docs/INSTALL.md).
 
 </details>
 
@@ -95,7 +95,7 @@ Nosy is one skill folder (`skill/`, the open Agent Skills format) plus small dep
 
 | Command | What it does |
 |---|---|
-| `/nosy` | Suggests the 2–3 commands worth running now. |
+| `/nosy:nosy` | Suggests the 2–3 commands worth running now. (Skill-only install: `/nosy`.) |
 | `/nosy:move-in` | Learns your product, rules and roadmap. Run once. |
 | `/nosy:shipped` | What reached your integration branch, and which decision each change was for. |
 | `/nosy:peek` | What shipped, what didn’t, what has no screen. |
@@ -113,7 +113,7 @@ Nosy is one skill folder (`skill/`, the open Agent Skills format) plus small dep
 | `/nosy:bet · /nosy:score` | Optional: record a bet, settle it against git later. |
 | `/nosy:doctor` | Renames old files and keys in a `pm/` written by an older Nosy (`--fix`). |
 
-Every command also runs from the terminal with no model: `npx github:nosy-hq/nosy <command>` ([list](docs/CLI-CONTRACT.md)).
+Most commands have a terminal twin that runs with no model, for example `npx github:nosy-hq/nosy peek` (see [docs/CLI-CONTRACT.md](docs/CLI-CONTRACT.md) for which, and for the ones that are agent only).
 
 </details>
 

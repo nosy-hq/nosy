@@ -10,6 +10,32 @@ Every Nosy script and `nosy <command>` exits with one of three codes, so CI, git
 
 A 2 is a result, not a failure: the output says what was found. `publish` and `notify` treat **any** non-zero code from the privacy scan as "stop", so a scan that couldn't run can't wave a file through.
 
+## Which commands run from the terminal
+
+Most of the 17 agent commands have a terminal twin that runs with no model: `npx github:nosy-hq/nosy <terminal command>` (or `nosy <terminal command>` once installed). The terminal part is the counting; the agent adds the judgment. Five have no twin and need the agent.
+
+| Command (in your agent) | Terminal command |
+|---|---|
+| `doctor` | `nosy doctor` (`--check` for the install) |
+| `peek` | `nosy peek` |
+| `shipped` | `nosy shipped` |
+| `psst` | `nosy psst` |
+| `canwe` | `nosy canwe "<question>"` |
+| `frontyard` | `nosy frontyard` |
+| `bet` | `nosy bet place "<what>" --why "…" --estimate S` |
+| `score` | `nosy score` |
+| `move-in` | `nosy setup` (proposes `pm/sources.json`; the rest of move-in is the agent) |
+| `neighbors` | `nosy watch` (which rivals' public pages changed; the research is the agent) |
+| `tea` | `nosy page` |
+| `stakeout` | `nosy weekly` |
+| `overheard` | none: agent only |
+| `dresscode` | none: agent only |
+| `scoop` | none: agent only |
+| `spill` | none: agent only |
+| `map` | none: agent only |
+
+`nosy help` lists every terminal command, including the helpers that have no agent command of their own (`facts`, `find`, `cite-check`, `never-check`, `inventory`, `notify`, `publish`, `mcp`, …).
+
 ## Commands that return 2
 
 | Command / script | Returns 2 when |

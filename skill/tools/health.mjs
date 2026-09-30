@@ -164,7 +164,7 @@ export function render(R) {
   const out = [`Nosy ${R.version} · install check (Node ${R.node}, ${process.platform})`];
   for (const l of R.lines) out.push(`  ${SYMBOL[l.level]} ${l.what}${l.fix ? `: ${l.fix}` : ""}`);
   const n = lv => R.lines.filter(l => l.level === lv).length, bad = n("fail"), warn = n("warn");
-  out.push("", bad ? `${bad} thing${bad === 1 ? "" : "s"} to fix first (✗)${warn ? `, then ${warn} more (!)` : ""}. Nothing was changed.` : warn ? `Runs, with ${warn} thing${warn === 1 ? "" : "s"} to fix (!).` : "Healthy. (Whether your agent has loaded it: type /nosy; it prints the loaded lines.)");
+  out.push("", bad ? `${bad} thing${bad === 1 ? "" : "s"} to fix first (✗)${warn ? `, then ${warn} more (!)` : ""}. Nothing was changed.` : warn ? `Runs, with ${warn} thing${warn === 1 ? "" : "s"} to fix (!).` : "Healthy. (Whether your agent has loaded it: type /nosy:nosy for the plugin, /nosy for a skill-only install; it prints the loaded lines.)");
   return out.join("\n");
 }
 export const exitCode = R => (R.lines.some(l => l.level === "fail") ? 2 : 0);
