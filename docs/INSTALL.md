@@ -1,6 +1,6 @@
 # Nosy · Install
 
-Short and exact. For detailed brand/voice, see `pm/name/brand-kit.html`; for what the commands do, `skill/SKILL.md`.
+Short and exact. For what the commands do, see `skill/SKILL.md`; for what Nosy reads, writes and sends, see [`DATA.md`](DATA.md).
 
 ## a) Claude Code (terminal, desktop, VS Code, JetBrains): the default path
 
@@ -15,18 +15,20 @@ From the shell instead: `claude plugin marketplace add nosy-hq/nosy` and `claude
 
 **Verify:** `claude plugin list`, or in a session `/plugin` → the **Installed** tab. You want `nosy@nosy`, status "enabled". Typing `/` shows `/nosy:peek`, `/nosy:psst` … in the command list. Then open your repo and type `/nosy`.
 
+**If it broke:** `npx github:nosy-hq/nosy doctor --check` (or `nosy doctor --check` if you have the `nosy` command). It checks Node (18.17+), git, gh, the skill files, the plugin's hooks and `pm/sources.json`, reads only local files, writes nothing, and prints the fix next to every failing line (exit 2 on a hard failure). Plain `nosy doctor` is a different job: it renames the old file names and keys in a `pm/` folder written by an older Nosy (`--fix`).
+
 **Uninstall:** `/plugin uninstall nosy@nosy`, then `/plugin marketplace remove nosy`. The commands, agents and hooks go with the plugin. Your `pm/` folder stays; it's yours, delete it by hand if you want it gone. More in (b).
 
 **Requirements:** git, and Node 18.17 or newer. The scripts use only Node's own modules (`fs`, `path`, `child_process`, …), the global `fetch` and `readdirSync(…, { recursive })`; the last one is what sets 18.17 as the floor. Nosy is developed and run on Node 22. Node 18 and 20 have not been run against the full test suite yet, so treat 18.17 as "should work", not "tested". `gh` is optional: it adds issues and PRs to `peek`, `overheard`, `neighbors --gh`.
 
-Installing from a local clone (to try changes, or before the repo is public): the same two commands, with the clone's path where the repo name was:
+Installing from a local clone (to try changes): the same two commands, with the clone's path where the repo name was:
 
 ```
 /plugin marketplace add <path-to-nosy>
 /plugin install nosy@nosy
 ```
 
-**The actual invocation name is `/nosy:<command>`** (`/nosy:peek`, `/nosy:psst`, `/nosy:canwe`, `/nosy:move-in`, and the rest of the 17). Claude Code namespaces every plugin component under the plugin name; there's no such thing as a bare `/peek` command. The "just `/peek`" examples in the brand kit are marketing simplification — the real command comes with a colon.
+**The actual invocation name is `/nosy:<command>`** (`/nosy:peek`, `/nosy:psst`, `/nosy:canwe`, `/nosy:move-in`, and the rest of the 17). Claude Code namespaces every plugin component under the plugin name; there's no such thing as a bare `/peek` command. The real command always comes with a colon.
 
 ## b) Uninstall / disable
 
@@ -40,14 +42,14 @@ Installing from a local clone (to try changes, or before the repo is public): th
 
 The one thing that does auto-load in the cloud (and in routines) is a **project skill** committed to the repo: `.claude/skills/<name>/SKILL.md`. Since `skill/SKILL.md` is already written with `name: nosy` and "Usage: `/nosy <move-in|peek|psst|...>`", if you also make the skill visible this way, the command in the cloud becomes `/nosy peek`, `/nosy psst` ... (a space-separated subcommand; different from the plugin's `/nosy:peek` form, no colon).
 
-If you want to turn this on (NOT DONE in this task, description only — to follow the "generate files only" rule and not touch `skill/`): without moving `skill/`, create a symlink at the root and commit it:
+Nosy's own repo already does this: `.claude/skills/nosy` is a committed symlink to `skill/`, so the same content is read locally and in the cloud with no duplicate copy. For your own repo, the simplest way is `nosy install` (section h0), which copies the skill folder to `.claude/skills/nosy`; commit it. To link instead of copy:
 
 ```
 ln -s ../../skill .claude/skills/nosy
 git add .claude/skills/nosy
 ```
 
-That way the same `skill/` content is read both locally and in the cloud, with no duplicate copy. **Known limit:** whether the cloud sandbox follows a symlinked skill folder could not be verified in this task (no `claude` CLI or cloud session access was available in this environment) — you'll need to try it in a real cloud session.
+**Known limit:** whether a cloud sandbox follows a symlinked skill folder has not been checked; a copy always works. A checkout without symlink support (some Windows setups) won't see a symlinked folder either.
 
 ## d0) Scheduled weekly run in the Claude desktop app (local, recommended)
 
@@ -57,7 +59,7 @@ The desktop app's **Scheduled** tasks run on your machine, so the installed plug
 3. Click **Run now** once while you're at the computer, so the tool approvals it needs (git, WebFetch) are saved for later runs.
 It runs while the app is open; a run missed while the app was closed runs at the next launch.
 
-## d) Scheduled routine for the weekly `stakeout` (description only — not created)
+## d) Scheduled routine for the weekly `stakeout` (a recipe)
 
 Anthropic's "Routines" feature: set up from claude.ai/code/routines, or with `/schedule` in the CLI; it connects to a repo and you pick a trigger (Scheduled: hourly/daily/weekly, or a GitHub webhook). For Nosy:
 
@@ -66,7 +68,7 @@ Anthropic's "Routines" feature: set up from claude.ai/code/routines, or with `/s
 3. The prompt needs to account for the cloud limit from item (c) — there are no plugin commands, so either go through the project skill (`/nosy stakeout`) or use a plain instruction: *"Use the Nosy skill: run peek → psst → neighbors → scoop → tea in order, and end with an entry in log.md (including tool gaps)."*
 4. Save.
 
-Per the rules for this task, it did NOT create a scheduled task or cloud routine; the above is description only.
+Nosy doesn't create a routine or scheduled task for you; the steps above are the recipe.
 
 ## e) Uploading a zip to claude.ai (chat)
 
@@ -82,20 +84,18 @@ Per the rules for this task, it did NOT create a scheduled task or cloud routine
 - After one `git commit`, two hooks may speak, in this order: the never-rule check (only when a rule matches) and the after-commit nudge.
 - The after-commit nudge (after `git commit`/`merge`/`pull`; a `gh pr merge` speaks once the merge reaches your checkout: which matrix gap the commit may close, the next product decision, the next command; silent when there's nothing new): `/plugin configure nosy@nosy` → **"Turn off the after-commit nudge."** Env var: `NOSY_NO_NUDGE=1`.
 - The never-rule check (after `git commit` or `gh pr create`: the added lines are matched against `pm/sources.json` `preread.never`, and the git/gh command itself too; on a match the agent is told which rule and where, so it can tell you before anything is pushed; it never blocks or undoes): `/plugin configure nosy@nosy` → **"Turn off the never-rule check."** Env var: `NOSY_NO_NEVER_CHECK=1`.
-- The reference check (when the agent finishes an answer, or writes a markdown file (with Write/Edit or from the shell), in a repo with `pm/sources.json`: every `file:line`, quote, commit and `#N` in it is checked against the repo and GitHub; if one doesn't hold up the agent is sent back once to fix or drop it): `/plugin configure nosy@nosy` → **"Turn off the reference check."** Env vars: `NOSY_NO_CITE_CHECK=1`; `NOSY_CITE_GH=0` skips the GitHub part. Without Claude Code: `nosy cite-check <answer.md> --gh`.
+- The reference check (when the agent finishes an answer, or writes a markdown file (with Write/Edit or from the shell), in a repo with `pm/sources.json`: every `file:line`, quote, commit and `#N` in it is checked against the repo and GitHub; if one doesn't hold up the agent is sent back once to fix or drop it). This is the one hook that reaches the network on its own: for each `#N` it runs a read-only `gh api repos/<issue.repo>/issues/<N>` through your own `gh`, when `pm/sources.json` names `issue.repo`. To turn it off: `/plugin configure nosy@nosy` → **"Turn off the reference check."** Env vars: `NOSY_NO_CITE_CHECK=1` turns the whole hook off; `NOSY_CITE_GH=0` keeps the local checks and skips the GitHub lookups. Without Claude Code: `nosy cite-check <answer.md> --gh`.
 - **The same check without Claude Code:** `nosy never-check` reads the staged changes (`--last-commit`, `--base <ref>` for a branch, `--worktree`) and exits 2 on a match. As a plain git hook it works in any agent, or none: put `node <path-to-nosy>/skill/tools/never-check.mjs pm` in `.git/hooks/pre-commit`. A git hook that exits non-zero does stop the commit; that's your choice to make, the plugin hook never does.
 - To disable the whole plugin, use `/plugin disable nosy` from item (b).
 
 ## g) Other coding agents
 
-The owner's decision from Sep 28: "technically this should work in other plugins too." The `skill/tools/*.mjs` scripts are already dependency-free, agent-independent Node; the only real gap was packaging. The root **`AGENTS.md`** is the host-agnostic entry point: the product description, the command table (each row links to `skill/commands/<name>.md`) and the rule summary live there, from a single source. The one requirement across every path: **Node 18.17 or newer + git** (see (a); optionally `gh`, for commands that read PRs/issues — `overheard`, `peek`, `neighbors --gh`). To double-check the scripts work: `node skill/tools/audit-package.mjs` (checks the local links in AGENTS.md and the adapters, and that the command list matches SKILL.md).
+Nosy's core is agent-independent: the `skill/tools/*.mjs` scripts are dependency-free Node, and only the packaging differs per agent. The root **`AGENTS.md`** is the host-agnostic entry point: the product description, the command table (each row links to `skill/commands/<name>.md`) and the rule summary live there, from a single source. The one requirement across every path: **Node 18.17 or newer + git** (see (a); optionally `gh`, for commands that read PRs/issues — `overheard`, `peek`, `neighbors --gh`). To double-check the scripts work: `node skill/tools/audit-package.mjs` (checks the local links in AGENTS.md and the adapters, and that the command list matches SKILL.md).
 
-- **Codex CLI** — verified ([developers.openai.com/codex/guides/agents-md](https://developers.openai.com/codex/guides/agents-md), read 2026-09-28): Codex automatically reads `AGENTS.md` in every folder from where it's run up through the git root; a single file at the repo root is enough, no separate setup step. This repo already has a root `AGENTS.md` — no extra file needed. If you want, you can also wire `skill/SKILL.md` into Codex's own skill mechanism: add the path to SKILL.md and `enabled = true` to `~/.codex/config.toml`, then restart Codex ([developers.openai.com/codex/skills](https://developers.openai.com/codex/skills), read 2026-09-28; the command is invoked with a mention like `$nosy`) — this step is optional and was not set up in this task (it's a user config file, no file was added to the repo).
-- **Cursor** — verified ([cursor.com/docs/context/rules](https://cursor.com/docs/context/rules), read 2026-09-28): project rules live under `.cursor/rules/*.mdc`, with YAML frontmatter (`description`, `alwaysApply`). This repo has `.cursor/rules/nosy.mdc` (`alwaysApply: false`, kicks in only on Nosy-related requests); it doesn't repeat content, it points to `AGENTS.md` and `skill/commands/*.md`. No extra setup — Cursor reads this file on its own once the repo is cloned.
-- **Gemini CLI** — verified ([geminicli.com/docs/cli/gemini-md](https://geminicli.com/docs/cli/gemini-md/), [geminicli.com/docs/reference/configuration](https://geminicli.com/docs/reference/configuration/), read 2026-09-28): at the project root, the `context.fileName` field in `.gemini/settings.json` determines which file (default `GEMINI.md`) is read as context. This repo's `.gemini/settings.json` is set to `{"context":{"fileName":["AGENTS.md","GEMINI.md"]}}`, so Gemini CLI reads the root `AGENTS.md` directly. No extra setup.
+- **Codex CLI** — verified ([developers.openai.com/codex/guides/agents-md](https://developers.openai.com/codex/guides/agents-md), read 28 Sep 2026): Codex automatically reads `AGENTS.md` in every folder from where it's run up through the git root; a single file at the repo root is enough, no separate setup step. This repo already has a root `AGENTS.md` — no extra file needed. If you want, you can also wire `skill/SKILL.md` into Codex's own skill mechanism: add the path to SKILL.md and `enabled = true` to `~/.codex/config.toml`, then restart Codex ([developers.openai.com/codex/skills](https://developers.openai.com/codex/skills), read 28 Sep 2026; the command is invoked with a mention like `$nosy`) — this step is optional (it's a user config file; Nosy doesn't add it for you).
+- **Cursor** — verified ([cursor.com/docs/context/rules](https://cursor.com/docs/context/rules), read 28 Sep 2026): project rules live under `.cursor/rules/*.mdc`, with YAML frontmatter (`description`, `alwaysApply`). This repo has `.cursor/rules/nosy.mdc` (`alwaysApply: false`, kicks in only on Nosy-related requests); it doesn't repeat content, it points to `AGENTS.md` and `skill/commands/*.md`. No extra setup — Cursor reads this file on its own once the repo is cloned.
+- **Gemini CLI** — verified ([geminicli.com/docs/cli/gemini-md](https://geminicli.com/docs/cli/gemini-md/), [geminicli.com/docs/reference/configuration](https://geminicli.com/docs/reference/configuration/), read 28 Sep 2026): at the project root, the `context.fileName` field in `.gemini/settings.json` determines which file (default `GEMINI.md`) is read as context. This repo's `.gemini/settings.json` is set to `{"context":{"fileName":["AGENTS.md","GEMINI.md"]}}`, so Gemini CLI reads the root `AGENTS.md` directly. No extra setup.
 - **General (any agent that reads `AGENTS.md`)** — a separate file format for other tools wasn't researched (unverified); if yours has its own `--read`/convention file, point it at the root `AGENTS.md`. For an agent with no special integration, the simplest path: at the start of the session, have the agent read `AGENTS.md` and say "apply one of the commands in here."
-
-This section doesn't change sections (a)-(f); it only adds to them.
 
 ## h0) One command for the agents Nosy knows: `nosy install`
 
@@ -124,7 +124,7 @@ Without `#<tag>` you get the default branch as it is right now.
 
 ## h) The standard installer for other agents: `npx skills add`
 
-Nosy's core is the `skill/` folder, in the open Agent Skills format. The standard installer finds it and drops it into every agent's folder (tried locally on Sep 28: found 1 skill, installed into `.agents/skills/nosy` and 50+ agent folders):
+Nosy's core is the `skill/` folder, in the open Agent Skills format. The standard installer finds it and drops it into every agent's folder (tried locally: it found 1 skill and installed it into `.agents/skills/nosy` and 50+ agent folders):
 
 ```
 npx skills add nosy-hq/nosy            # once the repo is on GitHub
@@ -172,17 +172,17 @@ Since the client doesn't know which folder to start the server in, `NOSY_PM` mus
 
 ## k) GitHub Action (weekly, free)
 
-No model key needed: the Action only runs the counting (`nosy weekly`), writes a summary to the job page, optionally posts to Slack/Discord, and commits `pm/state/` + `pm/page.html`. Example workflow: `docs/examples/nosy-weekly.yml` → `.github/workflows/nosy.yml` in the product's repo.
+No model key needed: the Action only runs the counting (`nosy weekly`), writes a summary to the job page, optionally posts to Slack/Discord, and, only if you set `commit: "true"`, commits `pm/state/` + `pm/page.html` and pushes. Note that `pm/state/` can hold issue and PR text (`pm/state/facts/github.json`, see [`DATA.md`](DATA.md)); the example workflow leaves `commit` off. Example workflow: `docs/examples/nosy-weekly.yml` → `.github/workflows/nosy.yml` in the product's repo.
 
 1. Once, locally, run `nosy setup .` and commit `pm/sources.json`. (In CI the `repo` path is automatically rewritten to the working folder; that change isn't committed.)
 2. `fetch-depth: 0` is required at checkout (peek reads git history).
-3. If you want a durable decision page: set `commit: "true"` and turn on GitHub Pages in the repo settings; give the page address via `page-url` and the message will include a link.
+3. If you want a durable decision page: set `commit: "true"` (read the note above first) and turn on GitHub Pages in the repo settings; give the page address via `page-url` and the message will include a link.
 
 The full agent loop (rivals, PRD, roadmap) doesn't run in the Action; for that, use the routine from (d) or an agent session.
 
 ## l) Slack and Discord
 
-Only sends, never reads chat (wave 4a). Get an "incoming webhook" address from your channel settings and keep it as a secret:
+Only sends, never reads chat. Get an "incoming webhook" address from your channel settings and keep it as a secret:
 
 ```
 nosy notify --slack "$NOSY_SLACK_WEBHOOK" --discord "$NOSY_DISCORD_WEBHOOK"

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write          # only needed for commit: "true"; read is enough otherwise
+  contents: read           # change to write only if you set commit: "true" below
   pull-requests: read
   issues: read
 
@@ -22,4 +22,4 @@ jobs:
         with:
           slack-webhook: ${{ secrets.NOSY_SLACK_WEBHOOK }}      # optional
           discord-webhook: ${{ secrets.NOSY_DISCORD_WEBHOOK }}  # optional
-          commit: "true"
+          commit: "false"   # "true" makes the Action commit pm/state/ and pm/page.html and push them. pm/state/ can hold issue and PR text.

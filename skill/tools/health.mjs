@@ -18,11 +18,12 @@ export const nodeOk = v => {
   const [M, m] = String(v).replace(/^v/, "").split(".").map(Number);
   return M === 18 ? m >= 17 : M === 20 ? m >= 1 : M >= 21; // 19.x never had recursive readdir
 };
-const RECOMMENDED = 22; // what the tests run on
 
 const readJson = f => { try { return { value: JSON.parse(fs.readFileSync(f, "utf8").replace(/^\uFEFF/, "")) }; } catch (e) { return { error: String(e.message).split("\n")[0].slice(0, 90) }; } };
 const mdCount = d => { try { return fs.readdirSync(d).filter(f => f.endsWith(".md")).length; } catch { return 0; } };
 const lstat = f => { try { return fs.lstatSync(f); } catch { return null; } };
+// The files of a skill folder the way `nosy install` copies them (test/ left out; the marker and .DS_Store aren't files of the skill).
+const filesOf = (dir, rel = "") => { try { return fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => { const r = rel ? `${rel}/${e.name}` : e.name; if ((!rel && e.name === "test") || e.name === ".nosy-install.json" || e.name === ".DS_Store") return []; return e.isDirectory() ? filesOf(path.join(dir, e.name), r) : [r]; }); } catch { return []; } };
 const REINSTALL = "reinstall: `/plugin uninstall nosy@nosy` then `/plugin install nosy@nosy` (or `npx github:nosy-hq/nosy install`)";
 
 // Runs a program the way the real tools do (no shell); { status, stdout } or { missing: true }.
@@ -34,13 +35,18 @@ const defaultRun = (cmd, args, cwd) => {
 export async function check({ cwd = process.cwd(), pm: pmArg, env = process.env, home = os.homedir(), node = process.versions.node, skill = SKILL, run = defaultRun } = {}) {
   const lines = [], add = (level, what, fix = null) => lines.push({ level, what, fix });
   const root = path.resolve(skill, ".."), soft = async f => { try { return await import(new URL(`./${f}`, import.meta.url)); } catch { return null; } };
-  const pkg = readJson(path.join(root, "package.json")).value, plugin = readJson(path.join(root, ".claude-plugin", "plugin.json")).value;
+  const pkgFile = path.join(root, "package.json"), pluginFile = path.join(root, ".claude-plugin", "plugin.json");
+  const pkgRead = readJson(pkgFile), pluginRead = readJson(pluginFile);
+  const isObject = v => !!v && typeof v === "object" && !Array.isArray(v);
+  const pkg = isObject(pkgRead.value) ? pkgRead.value : undefined, plugin = isObject(pluginRead.value) ? pluginRead.value : undefined;
+  // A file that is there but won't read is a failure of its own, never "no manifest, fine for a skill-only install".
+  const pluginBroken = fs.existsSync(pluginFile) && !plugin;
+  const H = await soft("hints.mjs"), command = sub => (H?.nosyCommand ? H.nosyCommand(sub) : `nosy ${sub}`); // the command that runs here (there may be no global `nosy`)
   const marker = readJson(path.join(skill, ".nosy-install.json")).value;
   const version = pkg?.version || plugin?.version || marker?.version || "unknown";
 
   // 1. Node.
   if (!nodeOk(node)) add("fail", `Node ${node} found, needs ${MIN_NODE}+`, "install from https://nodejs.org (the current LTS is fine)");
-  else if (+node.split(".")[0] < RECOMMENDED) add("note", `Node ${node} is new enough (needs ${MIN_NODE}+) but Nosy is only tested on ${RECOMMENDED} and up`, `if something acts oddly, update: https://nodejs.org`);
   else add("ok", `Node ${node} (needs ${MIN_NODE}+)`);
 
   // 2. git (required: every command reads history with it) and gh (optional: issues and PRs).
@@ -62,6 +68,8 @@ export async function check({ cwd = process.cwd(), pm: pmArg, env = process.env,
   else add("ok", `skill files found: SKILL.md, ${cmds} commands, ${fs.readdirSync(path.join(skill, "tools")).filter(f => f.endsWith(".mjs")).length} tools (${skill})`);
 
   // 4. The plugin: manifest, commands next to the skill's, version agreement.
+  if (pluginBroken) add("fail", `.claude-plugin/plugin.json isn't valid${pluginRead.error ? ` (${pluginRead.error})` : ": not a JSON object"}, so Claude Code can't load the plugin`, REINSTALL);
+  else if (fs.existsSync(pkgFile) && !pkg) add("warn", `package.json isn't valid${pkgRead.error ? ` (${pkgRead.error})` : ": not a JSON object"}, so this copy can't say which version it is`, REINSTALL);
   if (plugin) {
     const skillPaths = [].concat(plugin.skills || []);
     const gone = skillPaths.filter(p => !fs.existsSync(path.resolve(root, p)));
@@ -70,7 +78,7 @@ export async function check({ cwd = process.cwd(), pm: pmArg, env = process.env,
     else if (pluginCmds && cmds && pluginCmds !== cmds) add("warn", `the plugin has ${pluginCmds} commands but the skill documents ${cmds}`, REINSTALL);
     else add("ok", `plugin manifest read (${[plugin.name || "nosy", plugin.version].filter(Boolean).join(" ")}): ${pluginCmds} /nosy:<command> commands`);
     if (pkg?.version && plugin.version && pkg.version !== plugin.version) add("warn", `package.json says ${pkg.version} but the plugin manifest says ${plugin.version}`, REINSTALL);
-  } else if (!marker) add("note", "no plugin manifest next to this skill: fine for a skill-only install (Codex, Cursor…); Claude Code's /nosy:<command> and hooks come with the plugin", "/plugin marketplace add nosy-hq/nosy, then /plugin install nosy@nosy");
+  } else if (!marker && !pluginBroken) add("note", "no plugin manifest next to this skill: fine for a skill-only install (Codex, Cursor…); Claude Code's /nosy:<command> and hooks come with the plugin", "/plugin marketplace add nosy-hq/nosy, then /plugin install nosy@nosy");
 
   // 5. Copies `nosy install` made, in this project and the user folders (where each agent expects them).
   const I = await soft("install.mjs");
@@ -85,7 +93,14 @@ export async function check({ cwd = process.cwd(), pm: pmArg, env = process.env,
         if (l.isSymbolicLink() && !fs.existsSync(target)) { trouble = true; add("fail", `${label} is a broken link`, `remove it (\`rm ${target}\`) and run \`npx github:nosy-hq/nosy install\``); continue; }
         const m = readJson(path.join(target, ".nosy-install.json")).value;
         if (!fs.existsSync(path.join(target, "SKILL.md"))) { trouble = true; add("fail", `${label} has no SKILL.md, so the agent can't load it`, `remove it and run \`npx github:nosy-hq/nosy install\``); continue; }
-        if (m?.version && version !== "unknown" && m.version !== version) { trouble = true; add("warn", `${label} is version ${m.version}, this Nosy is ${version}`, "`nosy update`"); }
+        // A copy is judged by its marker (the version, and how many files it was written with) and by what is actually in it.
+        const have = filesOf(target), haveSet = new Set(have);
+        if (m?.version && version !== "unknown" && m.version !== version) { trouble = true; add("warn", `${label} is version ${m.version}, this Nosy is ${version}`, `\`${command("update")}\``); }
+        else if (Number.isInteger(m?.files) && have.length < m.files) {
+          // Same version as this Nosy: name what is gone from the copy that is running now.
+          const gone = m.version === version ? filesOf(skill).filter(f => !haveSet.has(f)) : [];
+          trouble = true; add("warn", `${label} is damaged: ${have.length} of its ${m.files} files are there${gone.length ? ` (missing ${gone.slice(0, 3).join(", ")}${gone.length > 3 ? ", …" : ""})` : ""}`, `\`${command("update")}\` puts them back`);
+        }
         else seen.push(label);
       }
     if (seen.length) add("ok", `skill copies found: ${seen.join(", ")}`);

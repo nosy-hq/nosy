@@ -10,6 +10,7 @@
 // Dovetail's bridge from tag frequency to prioritization (pm/rivals/dovetail.md).
 import fs from "node:fs"; import path from "node:path"; import crypto from "node:crypto"; import { execFileSync } from "node:child_process"; import { matrixRead } from "./read-matrix.mjs"; import { patternsOfLoad } from "./refs.mjs"; import { small, smallAscii, root, ascii, langOfLoad } from "./text.mjs"; import { thresholds } from "./thresholds.mjs";
 import { mask } from "./mask.mjs";
+import { windowText } from "./demand.mjs";
 import { readSources } from "./sources-file.mjs";
 
 const argv = process.argv.slice(2);
@@ -297,16 +298,28 @@ for (const file of files) { let rows = [];
   sources.push({ path: file, format: rows[0]?.format || path.extname(file).slice(1).toLowerCase(), signal: rows.length });
   rawSignals.push(...rows.map(r => ({ ...r, file }))); }
 
+const GhLimit = 200;
+let ghWindow = null;
 if (GH && K.issue?.repo) { try {
-    const js = JSON.parse(execFileSync("gh", ["issue", "list", "-R", K.issue.repo, "--state", "all", "--limit", "200", "--json", "number,title,body,createdAt,author,labels"], { encoding: "utf8", maxBuffer: 64 << 20 }));
+    const js = JSON.parse(execFileSync("gh", ["issue", "list", "-R", K.issue.repo, "--state", "all", "--limit", String(GhLimit), "--json", "number,title,body,createdAt,author,labels"], { encoding: "utf8", maxBuffer: 64 << 20 }));
     const sourceNameOf = `gh:${K.issue.repo}`;
     for (const it of js) { const text = `${it.title} · ${(it.body || "").slice(0, 2000)}`;
       rawSignals.push({ text, date: dateParse(it.createdAt), customerRaw: it.author?.login || null, file: sourceNameOf, line: `#${it.number}`, format: "github" }); }
-    sources.push({ path: sourceNameOf, format: "github", signal: js.length });
+    // The window is part of every count taken from these issues: it is the newest GhLimit issues (open and closed), so a
+    // count moves when issues arrive. Recorded here so every place that prints a demand number can say what it was counted over.
+    const stamps = js.map(it => Date.parse(it.createdAt)).filter(Number.isFinite);
+    ghWindow = { kind: "github issues", limit: GhLimit, count: js.length, states: "open and closed", complete: js.length < GhLimit,
+      oldest: stamps.length ? new Date(Math.min(...stamps)).toISOString().slice(0, 10) : null, newest: stamps.length ? new Date(Math.max(...stamps)).toISOString().slice(0, 10) : null,
+      as_of: new Date().toISOString().slice(0, 10) };
+    sources.push({ path: sourceNameOf, format: "github", signal: js.length, window: ghWindow });
   } catch (e) { warnings.push(`gh issue list could not be read: ${String(e.message).slice(0, 120)}`); } }
 else if (GH) warnings.push("--gh was given but sources.json has no issue.repo");
 
 // Privacy: masking rules live in mask.mjs (shared with interview-themes.mjs).
+
+// A fixed order before anything is counted: the same input gives the same numbers whatever order `gh` or a file lists
+// them in (the first copy of a duplicate is the one kept, and matching ties are broken by position).
+rawSignals.sort((a, b) => (+(a.date || Infinity) - +(b.date || Infinity)) || String(a.file).localeCompare(String(b.file)) || String(a.line).localeCompare(String(b.line), "en", { numeric: true }));
 
 const signalsRaw = rawSignals.filter(s => s.text && s.text.trim()).map(s => ({
   text: s.text.trim().replace(/\s+/g, " "), date: s.date || null, file: s.file, line: s.line, format: s.format,
@@ -377,7 +390,8 @@ for (const s of signals) {
   for (const { h, sc } of cand) h.signals.push({ s, sc });
 }
 
-const DayMs = Day * 864e5, Now = Date.now();
+// "Now" is the end of today (UTC), so the trend numbers do not move between two runs on the same day.
+const DayMs = Day * 864e5, Now = new Date().setUTCHours(23, 59, 59, 999);
 const summary = h => { const record = h.signals;
   const customerSet = new Set(record.map(x => x.s.customerHash).filter(Boolean));
   const sourceDistribution = {}; for (const { s } of record) sourceDistribution[s.format] = (sourceDistribution[s.format] || 0) + 1;
@@ -414,6 +428,7 @@ if (themes.length < 10) aggregate(candidateSetup(s => s.words));
 // --- report (stdout) ---
 let o = `# Demand signal · ${new Date().toISOString().slice(0, 10)} · ${signals.length} signals (${files.length} files${GH ? " + gh" : ""}), ${goalsOut.length} targets matched, ${unmatchedOnes.length} unmatched\n\n`;
 o += `Sources: ${sources.map(k => `${k.path} (${k.format}, ${k.signal})`).join(" · ") || "—"}\n\n`;
+if (ghWindow) o += `GitHub window: ${windowText(ghWindow)}. A count from these issues is a topic cluster of related issues within this window, not the number of times one thing was asked.\n\n`;
 if (warnings.length) o += `Warnings: ${warnings.join(" · ")}\n\n`;
 const prepares = goalsOut.filter(h => h.ready);
 if (prepares.length) { o += `## Demand + ready (${prepares.length})\n\nBackend is ready or the screen is missing, and the customer wants it — can be done now.\n\n| Target | Ref | Signals | Customers | Last${Day}d/previous |\n|---|---|---|---|---|\n`;

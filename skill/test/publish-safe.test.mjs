@@ -51,10 +51,10 @@ before(async () => {
     let body = ""; req.on("data", d => (body += d));
     req.on("end", () => { got = { url: req.url, body: JSON.parse(body || "{}") }; res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true, url: "http://cloud/p/me/cargo" })); });
   });
-  await new Promise(r => server.listen(0, "127.0.0.1", r));
+  await new Promise(r => server.listen(0, "127.0.0.1", r)); server.unref();
   url = `http://127.0.0.1:${server.address().port}`;
 });
-after(() => { server.close(); clean(tmp); });
+after(() => { server.close(); server.closeAllConnections?.(); clean(tmp); });
 
 test("unit: status keeps the shape Cloud reads and turns words into counts", () => {
   const S = safeStatus(STATUS);

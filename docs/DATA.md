@@ -9,9 +9,10 @@ It comes from reading every script, hook, agent, command file and the GitHub Act
 ## The short version
 
 - **No telemetry.** No analytics, usage pings, crash reports, update checks or install IDs. Nosy has no dependencies (`package.json` lists none), so no third-party code runs inside it either.
-- **Nosy sends nothing on its own.** Every network call is one you start: it reads the public rival pages you listed, reads GitHub through your own `gh`, posts to the webhook you give `nosy notify`, or (`nosy publish`, off until you configure a target and confirm) sends counts and structure, never quotes, to a Nosy Cloud you configured. `publish` and `notify` stop on a secret or personal data unless you pass `--allow-sensitive`. Every path is in the table under "What leaves your machine".
+- **Reads.** Nosy reads your code, git history, GitHub issues and PRs including their text (titles, bodies, comments and author logins, through your own `gh`), your decision and roadmap docs, and public web pages. Bodies and comments are cut at 4,000 characters and saved in `pm/state/facts/github.json`. Support and interview exports are read only if you drop them into `pm/signal/`, with personal data masked.
+- **Writes.** Nosy writes to your `pm/` folder, plus a few named files: temporary files, a first-run marker, the skill folders `nosy install` copies and files you name with a flag. The optional weekly GitHub Action commits and pushes `pm/state/` and the decision page only if you set `commit: "true"`. The full list is under "What Nosy writes".
+- **Sends.** Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed, and GitHub through your own `gh`, including, after each agent answer, a read-only lookup of the `#N` issues the answer cites (turn that off with `NOSY_CITE_GH=0`, or turn the whole reference-check hook off with `NOSY_NO_CITE_CHECK=1`). `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes). `publish` and `notify` stop on a secret or personal data unless you pass `--allow-sensitive`. Every path is in the table under "What leaves your machine".
 - **Nosy reads your code through git.** It reads committed files, not your disk. Files git doesn't track, such as an ignored `.env`, are not opened.
-- **Nosy writes under `pm/`**, plus a few named exceptions.
 - **The model call is your agent's, not Nosy's.** Whatever Nosy prints to your agent, your agent's model sees.
 
 ## What Nosy reads
@@ -67,7 +68,7 @@ Outside `pm/`:
 | Your branch | The GitHub Action's `commit: true` commits generated `pm/` files and pushes. | Only when you set it. |
 | The plugin folder itself | `dresscode suggest --publish` adds generic patterns (never product text) to `skill/data/dresscode-exceptions.json`. A maintainer command. | Only when you run it. |
 
-Nosy never runs `git commit`, `git add` or `git push` itself, apart from that Action option. It never runs a `gh` command that creates or changes anything.
+Nosy's scripts and commands never run `git commit`, `git add` or `git push`, apart from that Action option. It never runs a `gh` command that creates or changes anything.
 
 ## What leaves your machine
 
@@ -128,7 +129,7 @@ The MCP server (`nosy mcp`) talks over stdio, opens no port, and the plugin does
 
 ## Telemetry
 
-None. No script, hook, agent, command file, Action step or dependency sends usage, errors, versions or identifiers anywhere. The word "analytics" in the code is about detecting analytics events in *your* product (`scan-metrics.mjs`). The only network calls are the rows above, and each one is something you ran or configured.
+None. No script, hook, agent, command file, Action step or dependency sends usage, errors, versions or identifiers anywhere. The word "analytics" in the code is about detecting analytics events in *your* product (`scan-metrics.mjs`). The only network calls are the rows above, and each one is something you ran or configured, except the reference-check hook's read-only GitHub lookups (see its row above; off with `NOSY_CITE_GH=0`).
 
 ## Limits
 

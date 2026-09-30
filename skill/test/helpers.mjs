@@ -57,8 +57,10 @@ export function clean(dir) {
 //      issueTimelineFail names issues whose own alias should fail (matches gh's real partial-failure shape:
 //      a non-zero exit with the OTHER aliases' data still in stdout); issueTimelineMorePages names issues
 //      whose first page should report hasNextPage (forces the single-issue pagination fallback).
+// CommonJS on purpose: the file has no extension and sits in a temp folder with no package.json, so Node treats it as
+// CommonJS, and Node 18.17 cannot load an ES module written that way (no `import`).
 const FAKE_GH = `#!/usr/bin/env node
-import fs from "node:fs";
+const fs = require("node:fs");
 const fixturePath = process.env.FAKE_GH_FIXTURE;
 if (!fixturePath) { process.stderr.write("fake gh: FAKE_GH_FIXTURE is not set\\n"); process.exit(1); }
 let F;

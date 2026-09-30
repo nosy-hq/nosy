@@ -36,10 +36,10 @@ before(async () => {
       res.end(JSON.stringify(ok ? { ok: true, url: `http://cloud/p/me/${got.body.project}` } : { error: "Invalid or expired publish token." }));
     });
   });
-  await new Promise(r => server.listen(0, "127.0.0.1", r));
+  await new Promise(r => server.listen(0, "127.0.0.1", r)); server.unref();
   url = `http://127.0.0.1:${server.address().port}`;
 });
-after(() => { server.close(); clean(tmp); });
+after(() => { server.close(); server.closeAllConnections?.(); clean(tmp); });
 
 test("publishes only the dashboard files, with the env token, replacing the project", async () => {
   got = null;

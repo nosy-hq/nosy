@@ -28,7 +28,8 @@ const MARKER_NAME = /(Pending|Awaiting|Waiting|Missing|NotReady|Todo|Stub|Mock)(
 const MARKER_GREP = "(function|const|class)[[:space:]]+[A-Za-z0-9]*(Backend|Api|Server|Endpoint|ComingSoon|NotImplemented|Unimplemented)";
 // Test and Storybook scaffolding isn't a screen: on Twenty the "screens on mock data" were testing/decorators/*.tsx
 //.
-const TEST_FILE = /(^|\/)(tests?|testing|test-utils|__tests__|__mocks__|__stories__|stories|storybook|\.storybook|decorators|fixtures|e2e|cypress|playwright)\/|\.(test|spec|stories|story)\.[jt]sx?$/;
+// Histoire/Storybook previews (`X.story.vue`, `X.stories.tsx`) are for developers, not screens: the suffix counts on any file extension.
+const TEST_FILE = /(^|\/)(tests?|testing|test-utils|__tests__|__mocks__|__stories__|stories|storybook|\.storybook|decorators|fixtures?|e2e|cypress|playwright)\/|\.(test|spec|stories|story)\.[a-z]+$/i;
 const SCREEN = /\.(jsx|tsx|vue|svelte|astro|js|ts)$/;
 const MOCK_DIR = /(^|[/@~])(mocks?|__mocks__|fixtures?|stubs?|fake[-_]?data|dummy[-_]?data|sample[-_]?data)(\/|$|\.|["'])/i;
 // Props that usually carry the name of the waiting feature; the rest go to detail.

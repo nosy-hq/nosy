@@ -56,7 +56,7 @@ test("an old Node is a hard failure whose line names the version, the floor and 
   assert.equal(exitCode(R), 2);
   assert.match(render(R), /✗ Node 16\.20\.0 found, needs 18\.17\+: install from https:\/\/nodejs\.org/);
   const mid = await checkPlugin(plugin(), { node: "20.5.0" });
-  assert.equal(line(mid, /Node 20/).level, "note", "a working but older Node is a note, not a failure");
+  assert.equal(line(mid, /Node 20/).level, "ok", "18.17, 20 and 22 are all run in CI: nothing to warn about");
   assert.equal(exitCode(mid), 0);
 });
 

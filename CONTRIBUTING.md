@@ -8,7 +8,7 @@ Small, focused changes are welcome. Open an issue first for anything larger than
 npm test
 ```
 
-That runs `node --test skill/test/*.test.mjs`. The tests are hermetic: a fake product and a fake `gh`, no network, no writes outside a temp folder. It takes a few minutes (about 680 tests). Node 18.17 or newer and git are all you need. See `skill/test/README.md` for how the fake product works.
+That runs `node --test skill/test/*.test.mjs`. The tests are hermetic: a fake product and a fake `gh`, no network, no writes outside a temp folder. It takes a few minutes (about 770 tests). Node 18.17 or newer and git are all you need. See `skill/test/README.md` for how the fake product works.
 
 ## Rules for code
 

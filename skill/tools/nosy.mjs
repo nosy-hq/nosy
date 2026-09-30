@@ -244,12 +244,12 @@ const Commands = {
   page: () => {
     // No pm/ at all: say so and how to make one, instead of failing on the file it can't write.
     if (!fs.existsSync(pm) || (!fs.existsSync(path.join(pm, "sources.json")) && oldLayout(pm).length)) { console.error(`Psst… ${sourcesProblem(pm)}`); process.exitCode = 1; return; }
-    const out = args[0] || path.join(pm, "page.html");
+    // The scoreboard is its own file (pm/scoreboard.html): it never overwrites the decision page.
     if (scoreboardPage) {
-      if (fs.existsSync(path.join(pm, "state", "shipped.json"))) return script("scoreboard.mjs", [pm, out]);
+      if (fs.existsSync(path.join(pm, "state", "shipped.json"))) return script("scoreboard.mjs", [pm, args[0] || path.join(pm, "scoreboard.html")]);
       console.log(`(no record yet: pm/state/shipped.json is written by \`${nosyCommand("shipped")}\`; building the decision page instead)`);
     }
-    return script("build-page.mjs", [pm, out]);
+    return script("build-page.mjs", [pm, args[0] || path.join(pm, "page.html")]);
   },
   // Weekly model-free cycle, inside to outside: inventory → shipped → psst → score (if pm/bets/) → rival watch (if
   // rival files; NOSY_OFFLINE=1 skips it) → page. --short: shipped → score → page only. If one fails, the others still run.
@@ -321,7 +321,7 @@ Model-free counts (judgment stays with the agent; these just gather evidence):
   nosy canwe "<question>"  an evidence skeleton for "can we do this?"
   nosy notes [7d] [--for customer|team|manager]   shareable release notes
   nosy recent [--since d|date] [--days N] [--branch b]   merged since the last run + close to merging
-  nosy page [output.html]  the decision page (default pm/page.html); --scoreboard: the bets/shipped scoreboard
+  nosy page [output.html]  the decision page (default pm/page.html); --scoreboard: the bets/shipped scoreboard (default pm/scoreboard.html)
   nosy watch               which rivals' public pages changed since the last run
   nosy bet place "<what>" --why "…" --estimate S|M|L   place a bet; prints the id to put in the commit/PR (Bet: nb-…)
   nosy score               settle bets from git (landed, reverted, patched, partial) → pm/state/score.json

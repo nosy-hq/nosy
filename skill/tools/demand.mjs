@@ -10,7 +10,8 @@ import { words, root, smallAscii } from "./text.mjs";
 export function demandLoad(pm) {
   const p = path.join(pm, "state", "signals.json");
   if (!fs.existsSync(p)) return null;
-  try { const J = JSON.parse(fs.readFileSync(p, "utf8")); return { generated: J.generated || null, goals: (J.goals || []).filter(g => (g.count || 0) > 0), total: J.total || 0 }; }
+  try { const J = JSON.parse(fs.readFileSync(p, "utf8")); return { generated: J.generated || null, goals: (J.goals || []).filter(g => (g.count || 0) > 0), total: J.total || 0,
+    window: (J.sources || []).map(s => s?.window).find(w => w?.kind === "github issues") || null }; }
   catch { return null; }
 }
 
@@ -50,12 +51,27 @@ export function trendWord(t) {
   return t.last30 > t.previous30 * 1.1 ? "rising" : t.last30 < t.previous30 * 0.9 ? "falling" : "flat";
 }
 
-// One line a person can read: "asked 14 times by 6 customers since 2026-03-02 · rising (5 in the last 30 days, 2 before)".
-export function demandLine(g) {
+// What a GitHub-issue count was counted over ("newest 200 issues (open and closed, opened 2026-08-01 to 2026-09-30), as of
+// 2026-09-30"). The window is the whole reason a count moves between runs, so it is printed next to every one.
+export function windowText(w) {
+  if (!w) return "";
+  const span = w.oldest && w.newest ? `, opened ${w.oldest} to ${w.newest}` : "";
+  return `${w.complete ? `all ${w.count} issues` : `newest ${w.limit} issues`} (${w.states || "open and closed"}${span}), as of ${w.as_of || "?"}`;
+}
+// A goal made only of GitHub issues is a topic cluster (related issues matched by wording), never "N people asked once".
+export const isCluster = g => { const k = Object.keys(g?.source || {}); return k.length > 0 && k.some(x => x === "github"); };
+
+// One line a person can read. Exports (support tickets, surveys): "asked 14 times by 6 customers since 2026-03-02 · rising
+// (5 in the last 30 days, 2 before)". Issues: "14 related issues, 6 people since 2026-03-02 · rising (...)" - a cluster, so it
+// never says "asked N times". `D` (demandLoad) adds the window the count was taken over.
+export function demandLine(g, D) {
   if (!g) return "";
-  const first = g.first || g.ilk, tw = trendWord(g.trend);
-  return `asked ${g.count} time${g.count === 1 ? "" : "s"}${g.customer ? ` by ${g.customer} customer${g.customer === 1 ? "" : "s"}` : ""}${first ? ` since ${String(first).slice(0, 10)}` : ""}` +
-    (tw ? ` · ${tw}${g.trend ? ` (${g.trend.last30} in the last 30 days, ${g.trend.previous30} before)` : ""}` : "");
+  const first = g.first || g.ilk, tw = trendWord(g.trend), cluster = isCluster(g);
+  const tail = (first ? ` since ${String(first).slice(0, 10)}` : "") + (tw ? ` · ${tw}${g.trend ? ` (${g.trend.last30} in the last 30 days, ${g.trend.previous30} before)` : ""}` : "");
+  const win = D?.window && cluster ? ` · counted over ${windowText(D.window)}` : "";
+  if (!cluster) return `asked ${g.count} time${g.count === 1 ? "" : "s"}${g.customer ? ` by ${g.customer} customer${g.customer === 1 ? "" : "s"}` : ""}${tail}${win}`;
+  const onlyIssues = Object.keys(g.source).every(x => x === "github");
+  return `${g.count} related ${onlyIssues ? `issue${g.count === 1 ? "" : "s"}` : `mention${g.count === 1 ? "" : "s"}`}${g.customer ? `, ${g.customer} ${g.customer === 1 ? "person" : "people"}` : ""}${tail}${win}`;
 }
 
 // Where collect-signals looks for input (same order as the script): sources.json signal.path, else <pm>/signal/.

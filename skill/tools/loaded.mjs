@@ -22,8 +22,9 @@ export const HOOKS = [
   { name: "reference check", option: "CLAUDE_PLUGIN_OPTION_DISABLE_CITE_CHECK", env: "NOSY_NO_CITE_CHECK", file: "cite-check.mjs" },
 ];
 const truthy = v => ["1", "true", "on", "yes"].includes(String(v ?? "").toLowerCase());
-// The same rule the hooks use: the plugin option wins when it is set at all, else the env var.
-export const hookOff = (h, env = process.env) => truthy(env[h.option] ?? env[h.env]);
+// The same rule the hooks use: off when either switch says so. An option Claude Code exports as "false" (its default for a
+// boolean nobody changed) must not hide a NOSY_NO_* you set yourself, so neither one shadows the other.
+export const hookOff = (h, env = process.env) => truthy(env[h.option]) || truthy(env[h.env]);
 
 const readJson = f => { try { return JSON.parse(fs.readFileSync(f, "utf8").replace(/^\uFEFF/, "")); } catch { return null; } };
 const mdCount = d => { try { return fs.readdirSync(d).filter(f => f.endsWith(".md")).length; } catch { return 0; } };

@@ -13,7 +13,7 @@ import { readSources } from "./sources-file.mjs";
 
 const Source = /\.((m|c)?[jt]sx?|py|go|rb|php|java|kt|swift|dart|cs|rs|vue|svelte|ex|exs)$/i;
 const Setting = /\.(json|ya?ml|toml)$/i;
-const withTest = f => /(^|\/)(tests?|__tests__|testdata|fixtures?|e2e|cypress|playwright)\//i.test(f) || /\.(test|spec|stories)\.[jt]sx?$/i.test(f) || /_test\.go$/.test(f) || /(^|\/)test_[^/]+\.py$/.test(f);
+const withTest = f => /(^|\/)(tests?|__tests__|testdata|fixtures?|e2e|cypress|playwright)\//i.test(f) || /\.(test|spec|stories|story)\.[a-z]+$/i.test(f) || /_test\.go$/.test(f) || /(^|\/)test_[^/]+\.py$/.test(f);
 const noise = f => /(^|\/)(node_modules|dist|build|vendor|\.next|coverage)\//.test(f) || /(package-lock|yarn\.lock|pnpm-lock|composer\.lock|Gemfile\.lock|go\.sum|Cargo\.lock)/.test(f) || /\.(md|mdx|txt|lock|snap|map|min\.js)$/i.test(f);
 
 // git grep -E (POSIX ERE) doesn't recognize \\b and \\s on every platform; a loose ERE picks the lines first, the

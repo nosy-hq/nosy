@@ -40,11 +40,14 @@ test("status: a skill copied without the plugin has no hooks, and says so", () =
   assert.match(render(L, { prefix: "/nosy " }), /Hooks: none, this is the skill without the plugin \(the plugin adds them: \/plugin install nosy@nosy\)\./);
 });
 
-test("hook switches: the option wins when set, else the env var; every switch is the one its hook file reads", () => {
+test("hook switches: either one turns a hook off (an option left at \"false\" never shadows the env var); every switch is the one its hook file reads", () => {
   const h = HOOKS[0];
   assert.equal(hookOff(h, { NOSY_NO_PSST: "1" }), true);
   assert.equal(hookOff(h, { NOSY_NO_PSST: "0" }), false);
-  assert.equal(hookOff(h, { CLAUDE_PLUGIN_OPTION_DISABLE_PSST_HOOK: "false", NOSY_NO_PSST: "1" }), false, "the plugin option wins, like in the hook");
+  assert.equal(hookOff(h, { CLAUDE_PLUGIN_OPTION_DISABLE_PSST_HOOK: "false", NOSY_NO_PSST: "1" }), true, "an option at \"false\" (Claude Code's exported default) does not shadow the env switch");
+  assert.equal(hookOff(h, { CLAUDE_PLUGIN_OPTION_DISABLE_PSST_HOOK: "false" }), false);
+  assert.equal(hookOff(h, { CLAUDE_PLUGIN_OPTION_DISABLE_PSST_HOOK: "true" }), true);
+  for (const x of HOOKS) assert.equal(hookOff(x, { [x.option]: "false", [x.env]: "1" }), true, `${x.env} with ${x.option}=false`);
   for (const x of HOOKS) {
     const src = fs.readFileSync(path.join(REPO, "hooks", x.file), "utf8");
     assert.ok(src.includes(x.option) && src.includes(x.env), `${x.file} reads ${x.option} / ${x.env}`);
@@ -103,6 +106,7 @@ test("session hook: NOSY_NO_PSST and the plugin option keep it fully silent, and
   const state = tmp("nosy-state-"), cwd = withPm();
   assert.equal(hook(cwd, state, { NOSY_NO_PSST: "1" }).output, "");
   assert.equal(hook(cwd, state, { CLAUDE_PLUGIN_OPTION_DISABLE_PSST_HOOK: "true" }).output, "");
+  assert.equal(hook(cwd, state, { CLAUDE_PLUGIN_OPTION_DISABLE_PSST_HOOK: "false", NOSY_NO_PSST: "1" }).output, "", "option \"false\" + NOSY_NO_PSST=1: still off");
   assert.ok(!fs.existsSync(path.join(state, "nosy-loaded.json")), "switched off means not even counted as greeted");
   assert.match(JSON.parse(hook(cwd, state).output).systemMessage, /is loaded/, "turned back on: the greeting is still due");
 });

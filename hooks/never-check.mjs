@@ -8,9 +8,10 @@
 // (the product nudge); this one is only about the owner's never rules.
 import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { fileURLToPath } from "node:url";
 
+// Either switch turns it off: an option Claude Code exports as "false" (its default) must not hide a NOSY_NO_* you set yourself.
 const off = v => ["1", "true", "on", "yes"].includes(String(v ?? "").toLowerCase());
 async function main() {
-  if (off(process.env.CLAUDE_PLUGIN_OPTION_DISABLE_NEVER_CHECK ?? process.env.NOSY_NO_NEVER_CHECK)) return;
+  if (off(process.env.CLAUDE_PLUGIN_OPTION_DISABLE_NEVER_CHECK) || off(process.env.NOSY_NO_NEVER_CHECK)) return;
   let input; try { input = JSON.parse(fs.readFileSync(0, "utf8") || "{}"); } catch { return; }
   const cmd = String(input?.tool_input?.command || ""), cwd = input?.cwd || process.cwd();
   if (!/\b(git|gh)\s/.test(cmd)) return;

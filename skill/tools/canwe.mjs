@@ -7,7 +7,7 @@
 // (gather-evidence.mjs ITSELF IS UNCHANGED). Writes a gracefully missing section, without crashing, if
 // gather-evidence.mjs is missing or pm/sources.json is missing.
 import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { small, root, ascii, words as tokens, langOfLoad } from "./text.mjs"; import { NEGATION_RE, negationRegexFor, decisionsOfRead } from "./read-decisions.mjs";
-import { demandLoad, demandForQuestion, demandLine, interviewsLoad, interviewsForQuestion, interviewLine } from "./demand.mjs";
+import { demandLoad, demandForQuestion, demandLine, isCluster, interviewsLoad, interviewsForQuestion, interviewLine } from "./demand.mjs";
 import { readSources } from "./sources-file.mjs";
 import { redactLine } from "./redact.mjs"; // a line of committed code prints as file:line, a secret in it hidden
 
@@ -521,6 +521,20 @@ if (neverHits.length) {
   verdict = "Not now: no trace in the backend";
   description = "No matching endpoint in the inventory, and no relevant section in the request doc.";
 }
+// The guess must never contradict the evidence printed above it. "Not now: no trace in the backend" is false as soon as
+// the code section lists lines for the question's own words (real run on a public repo: the guess said "no trace" over
+// a retry loop that was printed two screens up). Every "no trace in the backend" verdict is checked here, once, against
+// those lines: with code hits it becomes "partly there" and names where the code has it and where it does not.
+const codeAnchored = anchorInfo.filter(a => a.code.length);
+if (/^Not now: no trace in the backend/.test(verdict) && codeAnchored.length) {
+  const fileOf = l => (String(l).match(/^([^:\s]+):\d+/) || [])[1];
+  const files = [...new Set(codeAnchored.flatMap(a => a.lines.map(fileOf)).filter(Boolean))].slice(0, 3);
+  const shown = files.length ? files : [...new Set(codeAnchored.flatMap(a => a.code))].slice(0, 3);
+  const absent = anchorInfo.filter(a => !a.code.length);
+  const missing = [absent.length ? `${absent.map(a => `"${a.term}"`).join(", ")} ${absent.length === 1 ? "is" : "are"} in no code file` : null, strongMatches.length ? null : "no endpoint in the inventory matches strongly", usedMatch.length ? null : "nothing matching is used on screen"].filter(Boolean).join("; ");
+  verdict = `Partly there: exists in ${shown.join(", ")}; missing: ${missing || "read the rest"}`;
+  description = `The code lines under "In the code" mention ${codeAnchored.map(a => `"${a.term}" (${a.code.length} code file${a.code.length === 1 ? "" : "s"})`).join(", ")}, so this is not "no trace". ${weakMatches.length ? `${weakMatches.length} endpoint(s) only share one generic term with the question (see "Weak matches"). ` : ""}${anchorsAreFallback ? "Every word in the question is common in this repo, so these lines may only share a word with it. " : ""}The judgement of what exists and what is missing is the agent's: open those files first.`;
+}
 // "no trace in the backend" is a claim that the backend was checked and came up empty —
 // never true when the inventory itself couldn't be built (no pm/state/inventory.json, and the on-the-fly
 // compute above also failed). Overridden here, once, so every branch above stays unchanged and this can't be
@@ -531,7 +545,7 @@ if (inventoryStatus === "failed" && verdict === "Not now: no trace in the backen
 }
 
 // --- output ---
-const line = e => `- ${e.method} \`${e.path}\` — ${e.file}:${e.line}${e.used ? ` (on screen: ${e.usage})` : " (no screen)"}${e.matchedOn ? ` — matched: ${e.matchedOn}` : ""}${e.audienceMismatch ? " — admin/internal surface vs. a customer-facing question" : ""}`;
+const line = e => `- ${e.method} \`${e.path}\` — ${e.file}:${e.line}${e.used ? ` (on screen: ${e.usage})` : ` (${EN?.frontend_dynamic ? EN.frontend_dynamic.note : "no screen"})`}${e.matchedOn ? ` — matched: ${e.matchedOn}` : ""}${e.audienceMismatch ? " — admin/internal surface vs. a customer-facing question" : ""}`;
 // blind test Q6: the very first line restates the question as asked, so the answer
 // can't silently drift onto a different one; a second line flags it if the question names one surface
 // (calendar, records table, ...) but the only matching evidence sits on a different one.
@@ -621,11 +635,11 @@ o += `## Size (from history)\n\n` + (deliberate
 const Dm = demandLoad(pm), demandHits = demandForQuestion(Dm, question, words);
 o += `## Demand\n\n` + (!Dm ? "No demand data (pm/state/signals.json). Drop support/interview/survey exports in pm/signal/ and run `collect-signals`; `nosy psst` does it when that folder has files.\n\n"
   : !demandHits.length ? "No customer request in the demand data matches this question.\n\n"
-  : demandHits.map(g => `- **${String(g.title).slice(0, 90)}**${g.ref ? ` (${g.ref})` : ""}: ${demandLine(g)}${g.ready ? " · backend ready" : ""}`).join("\n") + "\n\n");
+  : demandHits.map(g => `- **${String(g.title).slice(0, 90)}**${g.ref ? ` (${g.ref})` : ""}: ${demandLine(g, Dm)}${g.ready ? " · backend ready" : ""}`).join("\n") + "\n\n");
 // Interview themes: the same question against pm/state/interviews.json.
 const Iv = interviewsLoad(pm), ivHits = interviewsForQuestion(Iv, question, words);
 if (Iv) o += `### In interviews\n\n` + (ivHits.length ? ivHits.map(t => `- **${t.target ? t.target.title : t.key}**: ${interviewLine(t, Iv.interviews.length)}`).join("\n") : `No theme from ${Iv.interviews.length} interview(s) matches this question.`) + "\n\n";
-if (demandHits[0]) description += ` Customers asked for it: ${demandLine(demandHits[0])}.`;
+if (demandHits[0]) description += ` ${isCluster(demandHits[0]) ? "Related requests" : "Customers asked for it"}: ${demandLine(demandHits[0], Dm)}.`;
 if (ivHits[0]) description += ` In interviews: ${ivHits[0].interviews} of ${Iv.interviews.length}.`;
 o += `## Suggested verdict (script's guess)\n\n**${verdict}** — ${description}\n\nThe agent gives the final verdict; this is only an evidence skeleton.\n`;
 process.stdout.write(o);

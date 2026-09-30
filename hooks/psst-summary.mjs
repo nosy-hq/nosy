@@ -33,10 +33,9 @@ function readStdinCwd() {
 }
 
 function hookDisabled() {
-  const v = String(
-    process.env.CLAUDE_PLUGIN_OPTION_DISABLE_PSST_HOOK ?? process.env.NOSY_NO_PSST ?? ""
-  ).toLowerCase();
-  return v === "1" || v === "true" || v === "on" || v === "yes";
+  // Either switch turns it off: an option Claude Code exports as "false" (its default) must not hide a NOSY_NO_* you set yourself.
+  const on = v => ["1", "true", "on", "yes"].includes(String(v ?? "").toLowerCase());
+  return on(process.env.CLAUDE_PLUGIN_OPTION_DISABLE_PSST_HOOK) || on(process.env.NOSY_NO_PSST);
 }
 
 async function main() {

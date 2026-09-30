@@ -6,7 +6,7 @@
 // (7) shipped but not tied to any plan (if state/plan-gates.json exists), (8) a key step isn't measured (if state/metrics.json exists).
 // Deterministic; the agent does the interpretation.
 import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { matrixRead } from "./read-matrix.mjs"; import { thresholds } from "./thresholds.mjs";
-import { demandLoad, demandFor, demandLine, trendWord } from "./demand.mjs";
+import { demandLoad, demandFor, demandLine, trendWord, isCluster, windowText } from "./demand.mjs";
 import { advice } from "./hints.mjs";
 import { readSources } from "./sources-file.mjs";
 const argv = process.argv.slice(2), ji = argv.indexOf("--json"), jsonOut = ji >= 0 ? argv.splice(ji, 2)[1] : null;
@@ -24,7 +24,27 @@ if (K.issue) { try {
   for (const p of prs) for (const r of new Set(((p.title + " " + p.body).match(/§\d+[a-z]?|#\d+|K\d{2,3}/g) || []))) inPr.set(r, p.number);
 } catch {} }
 const prNote = ref => inPr.has(ref) ? ` (in #${inPr.get(ref)})` : "";
-const add = (o) => { const r = (o.ref || ""); if (r && inPr.has(r)) { o.title += prNote(r); o.value = Math.max(1, (o.value ?? 2) - 2); o.type += " · in PR"; } items.push({ value: 2, effort: 1, ...o }); };
+// Any OTHER open PR (not only ours) that closes or names an item: someone is already doing it, so it is not "cheap work to ship".
+// A real run on a public repo ranked requests that already had an open PR among the cheap work. Linked by GitHub's own
+// closing-issue references and by "closes/fixes/resolves #N" in the PR body, or a #N in its title.
+const openPr = new Map();
+if (K.issue) { try {
+  let prs;
+  const list = fields => JSON.parse(execFileSync("gh", ["pr", "list", "-R", K.issue.repo, "--state", "open", "--limit", "100", "--json", fields], { encoding: "utf8", maxBuffer: 64 << 20 }));
+  try { prs = list("number,title,body,closingIssuesReferences"); } catch { prs = list("number,title,body"); }
+  const closing = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b:?\s+(?:[\w.-]+\/[\w.-]+)?#(\d+)/gi;
+  for (const p of prs) {
+    const linked = new Set((p.closingIssuesReferences || []).map(r => r?.number).filter(Boolean));
+    for (const m of String(p.body || "").matchAll(closing)) linked.add(+m[1]);
+    for (const m of String(p.title || "").matchAll(/#(\d+)/g)) linked.add(+m[1]);
+    linked.delete(p.number);
+    for (const n of linked) if (!openPr.has(`#${n}`)) openPr.set(`#${n}`, p.number);
+  }
+} catch {} }
+const add = (o) => { const r = (o.ref || "");
+  if (r && inPr.has(r)) { o.title += prNote(r); o.value = Math.max(1, (o.value ?? 2) - 2); o.type += " · in PR"; }
+  else if (r && openPr.has(r)) { o.type += ` · a PR is already open (#${openPr.get(r)})`; o.value = 0; o.openPr = openPr.get(r); (o.detail ||= []).unshift(`A PR is already open (#${openPr.get(r)}): not cheap work to ship, review or unblock that one instead.`); }
+  items.push({ value: 2, effort: 1, ...o }); };
 const Effort = { 1: "S", 2: "M", 3: "L" };
 
 // (1) Backend fields not used on screen
@@ -206,8 +226,10 @@ if (fs.existsSync(metricsPath)) { try {
 // alone. Title and type stay untouched: collect-signals and build-waves match on them exactly.
 const D = demandLoad(pm);
 if (D) for (const i of items) { const g = demandFor(D, { ref: i.ref, title: i.title }); if (!g) continue;
-  i.demand = { count: g.count, customer: g.customer || 0, first: g.first || g.ilk || null, last: g.last || null, trend: trendWord(g.trend) || null };
-  i.value = Math.min(3, (i.value ?? 2) + 1); (i.detail ||= []).unshift(`Demand: ${demandLine(g)}`); }
+  i.demand = { count: g.count, customer: g.customer || 0, first: g.first || g.ilk || null, last: g.last || null, trend: trendWord(g.trend) || null, ...(isCluster(g) ? { cluster: true, window: windowText(D.window) || null } : {}) };
+  // demand does not lift an item somebody is already building (an open PR keeps value 0)
+  if (!i.openPr) i.value = Math.min(3, (i.value ?? 2) + 1);
+  (i.detail ||= []).unshift(`Demand: ${demandLine(g, D)}`); }
 items.forEach(i => i.score = +(i.value / i.effort).toFixed(2));
 // Equal score and demand: work that puts something new in front of the customer first (a waiting screen, a ready backend
 // with no screen), then bookkeeping and questions (stale status, plan gates, metrics). Internal request 113: in blind test
@@ -228,7 +250,8 @@ if (!items.length) {
   emptyWhy = why;
   o += `\n**Nothing found this time.** ${why.length ? `Missing inputs: ${why.join("; ")}.` : "Every signal ran and none fired."} Reading the code by hand is the fallback: psst.md step 3.\n`;
 }
-items.forEach((i, n) => o += `| ${n + 1} | ${i.score} | ${i.sizeUnknown ? "?" : Effort[i.effort]} | ${i.type} | ${i.title.replace(/\|/g, "/")} | ${i.demand ? `${i.demand.count}×${i.demand.customer ? ` · ${i.demand.customer} cust.` : ""}${i.demand.trend ? ` · ${i.demand.trend}` : ""}` : "—"} | ${String(i.evidence || "").replace(/\|/g, "/").slice(0, 120)} |\n`);
+items.forEach((i, n) => o += `| ${n + 1} | ${i.score} | ${i.sizeUnknown ? "?" : Effort[i.effort]} | ${i.type} | ${i.title.replace(/\|/g, "/")} | ${i.demand ? (i.demand.cluster ? `${i.demand.count} related issue${i.demand.count === 1 ? "" : "s"}${i.demand.customer ? ` · ${i.demand.customer} ${i.demand.customer === 1 ? "person" : "people"}` : ""}` : `${i.demand.count}×${i.demand.customer ? ` · ${i.demand.customer} cust.` : ""}`) + (i.demand.trend ? ` · ${i.demand.trend}` : "") : "—"} | ${String(i.evidence || "").replace(/\|/g, "/").slice(0, 120)} |\n`);
+if (D?.window && items.some(i => i.demand?.cluster)) o += `\nDemand from GitHub issues counts related issues (a topic cluster matched by wording, not one request asked N times), over ${windowText(D.window)}.\n`;
 if (!D) o += `\nNo demand data yet (pm/state/signals.json): drop support/interview/survey exports in pm/signal/ and run collect-signals, or \`nosy psst\` does it when that folder has files.\n`;
 if (supersededNote) o += `\n${supersededNote}\n`;
 if (riskNote) o += `\n${riskNote}\n`;

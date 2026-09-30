@@ -130,6 +130,18 @@ export function backendAppsFind(repo, ref) {
     .filter(a => BACKEND_NAME.test(a.split("/").pop()));
 }
 
+// Roots ("" for the repo root, else "apps/x") of Next.js apps: a next.config.* file or a `next` dependency in package.json.
+export function nextRootsFind(repo, ref) {
+  const tryGit = (...a) => { try { return execFileSync("git", ["-C", repo, ...a], { encoding: "utf8", maxBuffer: 256 << 20, stdio: ["ignore", "pipe", "ignore"] }); } catch { return ""; } };
+  const top = tryGit("ls-tree", "--name-only", ref).split("\n").filter(Boolean);
+  const kids = ["apps", "packages"].filter(c => top.includes(c)).flatMap(c => tryGit("ls-tree", "--name-only", ref, c + "/").split("\n").filter(Boolean).map(a => a.replace(/\/$/, "")).map(a => a.startsWith(c + "/") ? a : `${c}/${a}`));
+  return ["", ...kids].filter(r => {
+    const at = f => r ? `${r}/${f}` : f, names = r ? tryGit("ls-tree", "--name-only", ref, r + "/").split("\n") : top;
+    if (names.some(n => /(^|\/)next\.config\.[cm]?[jt]s$/.test(n))) return true;
+    try { const pkg = JSON.parse(tryGit("show", `${ref}:${at("package.json")}`) || "{}"); return !!({ ...pkg.dependencies, ...pkg.devDependencies }).next; } catch { return false; }
+  });
+}
+
 // Guesses inventory paths from the repo if they're not in sources.json. find-sources.mjs (move-in) uses the same guess.
 // `git ls-tree <ref> apps/` gives names with the full path already ("apps/x"); the old version used to prepend "apps/"
 // once more ("apps/apps/x"): the frontend was never found, and without an inventory block, 490 of the first product's 490
@@ -144,8 +156,15 @@ export function pathEstimated(repo, ref) {
   // Frontend: the old NAME-only guess (apps/web, apps/*frontend*, web, src) UNIONED with the SHAPE detector
   // — the union keeps a name-only match (a repo whose only signal is its folder name)
   // while adding apps a name guess alone would miss (apps/dashboard, apps/portal, packages/web-client…).
-  const backend = [...new Set([...guess(["apps/*api*", "apps/backend", "server", "backend"]), ...backendAppsFind(repo, ref)])];
-  const frontend = [...new Set([...guess(["apps/web", "apps/*frontend*", "web", "src"]), ...frontendAppsFind(repo, ref)])].filter(f => !backend.includes(f));
+  // Next.js apps keep their routes in the same folders as their screens (app/**/route.ts, pages/api): those folders are both.
+  const nextApps = nextRootsFind(repo, ref), nextDirs = nextApps.flatMap(r => ["src/app", "app", "src/pages/api", "pages/api"].map(d => r ? `${r}/${d}` : d)).filter(d => dirExists(d)),
+    nextBackend = nextDirs.filter(d => /(^|\/)(src\/)?app$/.test(d) ? (tryGit("ls-tree", "-r", "--name-only", ref, "--", d).split("\n").some(f => /(^|\/)route\.[cm]?[jt]sx?$/.test(f))) : true);
+  const nextFront = nextApps.flatMap(r => ["src", "app", "pages", "components"].map(d => r ? `${r}/${d}` : d)).filter(d => dirExists(d));
+  const backend = [...new Set([...guess(["apps/*api*", "apps/backend", "server", "backend"]), ...backendAppsFind(repo, ref), ...nextBackend])];
+  // Rails, Laravel, Django and plain "client/" layouts keep the screens somewhere the old name guess never looked (a Rails app's
+  // app/javascript left the frontend folder empty, and then every endpoint read "no screen").
+  const conventional = guess(["app/javascript", "app/frontend", "app/packs", "app/assets/javascripts", "app/views", "resources/js", "resources/views", "client", "frontend", "ui"]);
+  const frontend = [...new Set([...guess(["apps/web", "apps/*frontend*", "web", "src"]), ...frontendAppsFind(repo, ref), ...conventional, ...nextFront])].filter(f => !backend.includes(f) || nextFront.includes(f));
   return { backend, frontend, excluded: [] };
 }
 
@@ -201,7 +220,7 @@ function works(pm) {
   const excluded = E.excluded || [];
   const excludedRe = excluded.map(globRe);
   // Default exclusion: test files never count as "usage"/"endpoint" in any product.
-  const withTest = f => /(^|\/)(tests?|__tests__|testdata)\//i.test(f) || /\.(test|spec)\.[jt]sx?$/i.test(f) || /_test\.go$/.test(f) || /(^|\/)test_[^/]+\.py$/.test(f);
+  const withTest = f => /(^|\/)(tests?|__tests__|testdata|fixtures?)\//i.test(f) || /\.(test|spec)\.[jt]sx?$/i.test(f) || /\.(stories|story)\.[a-z]+$/i.test(f) || /_test\.go$/.test(f) || /(^|\/)test_[^/]+\.py$/.test(f);
   const exclude = f => withTest(f) || excludedRe.some(r => r.test(f));
 
   // Backend binaries/directories without a product surface: smoke-test binaries, script/tool
@@ -302,6 +321,91 @@ function works(pm) {
     return out;
   }
 
+  // --- Next.js and Django: routes that live in the file tree / nested URL files, not on one greppable line -----------
+  // Next.js (app router): every `app/**/route.(ts|js|...)` is an endpoint, its URL is its folder ("app/api/users/[id]/route.ts"
+  // -> /api/users/{id}; (groups) and @slots are not part of the URL) and its methods are the exported GET/POST/... functions.
+  // pages router: `pages/api/**` files are endpoints (any method). Django: `path()`/`re_path()`/`url()` calls in urls.py files
+  // are followed through `include()` from the root URL file, so a nested `path("<int:pk>/", ...)` gets its real prefix.
+  // Bounded on purpose: no settings parsing, no variable following except DRF's `router.register` + `include(router.urls)`.
+  const METHODS_RE = /\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/g;
+  const listFiles = dirs => { try { return git("ls-tree", "-r", "--name-only", K.ref, "--", ...dirs).split("\n").filter(Boolean); } catch { return []; } };
+  const nextSeg = sg => /^\(.*\)$/.test(sg) || sg.startsWith("@") || /^\(\.{1,3}\)/.test(sg) ? null : /^\[{1,2}\.\.\.(.+?)\]{1,2}$/.test(sg) ? `{${sg.replace(/^\[+\.\.\./, "").replace(/\]+$/, "")}}` : /^\[(.+)\]$/.test(sg) ? `{${sg.slice(1, -1)}}` : sg;
+  function nextEndpoints() {
+    const all = listFiles(backend).filter(f => !exclude(f));
+    const routeFiles = all.filter(f => /(^|\/)route\.[cm]?[jt]sx?$/.test(f) && f.split("/").includes("app"));
+    const pageFiles = all.filter(f => /\.[cm]?[jt]sx?$/.test(f) && /(^|\/)pages\/api\//.test(f) && !/(^|\/)_/.test(f.split("/").pop()));
+    if (!routeFiles.length && !pageFiles.length) return [];
+    const texts = fullRead(routeFiles.slice(0, 1500));
+    const out = [];
+    for (const f of routeFiles.slice(0, 1500)) {
+      const parts = f.split("/"), i = parts.indexOf("app"), url = "/" + parts.slice(i + 1, -1).map(nextSeg).filter(Boolean).join("/");
+      const lines = texts.get(f) || [], found = [];
+      lines.forEach((l, ix) => { if (/^\s*export\b/.test(l)) for (const m of l.matchAll(METHODS_RE)) if (/\bexport\s+(?:async\s+)?(?:function\s+|const\s+|\{)/.test(l) && !found.some(x => x[0] === m[1])) found.push([m[1], ix + 1]); });
+      for (const [method, line] of found.length ? found : [["ANY", 1]]) out.push({ method, path: url === "/" ? "/" : url, file: f, line, regLine: "", routeFile: true });
+    }
+    for (const f of pageFiles.slice(0, 1500)) {
+      const parts = f.split("/"), i = parts.findIndex((x, ix) => x === "pages" && parts[ix + 1] === "api");
+      const tail = parts.slice(i + 1); tail[tail.length - 1] = tail[tail.length - 1].replace(/\.[cm]?[jt]sx?$/, "");
+      if (tail[tail.length - 1] === "index" && tail.length > 1) tail.pop();
+      out.push({ method: "ANY", path: "/" + tail.map(nextSeg).filter(Boolean).join("/"), file: f, line: 1, regLine: "", routeFile: true });
+    }
+    return out;
+  }
+  const djangoPath = r => { let q = String(r).replace(/^\^/, "").replace(/\$$/, "").replace(/\(\?P<(\w+)>[^)]*\)/g, "{$1}").replace(/<(?:[\w.]+:)?(\w+)>/g, "{$1}").replace(/\\\./g, ".").replace(/[?*+\\]/g, ""); return q; };
+  // Splits the arguments of a call at top-level commas, starting after the opening "(" at `from` in `text`.
+  function callArgs(text, from) {
+    const args = []; let depth = 0, cur = "", q = null;
+    for (let i = from; i < text.length; i++) {
+      const c = text[i];
+      if (q) { cur += c; if (c === "\\") cur += text[++i] ?? ""; else if (c === q) q = null; continue; }
+      if (c === '"' || c === "'") { q = c; cur += c; continue; }
+      if ("([{".includes(c)) depth++;
+      if (")]}".includes(c)) { if (depth === 0) { args.push(cur.trim()); return args; } depth--; }
+      if (c === "," && depth === 0) { args.push(cur.trim()); cur = ""; continue; }
+      cur += c;
+    }
+    return args;
+  }
+  const DJANGO_CALL = /(?<![\w.])(?:re_path|path|url)\(/g;
+  function djangoEndpoints() {
+    const files = listFiles(backend).filter(f => /(^|\/)urls?\.py$/.test(f) || /(^|\/)urls\/(?!__init__)[^/]+\.py$/.test(f)).filter(f => !exclude(f));
+    if (!files.length) return { endpoints: [], files: 0 };
+    const texts = fullRead(files.slice(0, 400)), parsed = new Map();
+    for (const f of files) {
+      const text = (texts.get(f) || []).join("\n"), lineAt = idx => text.slice(0, idx).split("\n").length, calls = [], routers = [];
+      for (const m of text.matchAll(DJANGO_CALL)) {
+        const args = callArgs(text, m.index + m[0].length), route = (args[0] || "").match(/^[rRbBuU]?(["'])(.*)\1$/s);
+        if (!route) continue;
+        const target = args[1] || "", inc = target.match(/include\(\s*\(?\s*(?:["']([\w.]+)["']|(\w+)\.urls)/);
+        calls.push({ route: route[2], regex: m[0].startsWith("re_") || m[0].startsWith("url"), include: inc ? (inc[1] || `@router:${inc[2]}`) : null, line: lineAt(m.index) });
+      }
+      for (const m of text.matchAll(/(\w+)\.register\(\s*r?["']([^"']*)["']/g)) routers.push({ router: m[1], prefix: m[2], line: lineAt(m.index) });
+      parsed.set(f, { calls, routers });
+    }
+    // "plane.api.urls" is api/urls.py, or a package api/urls/ whose modules all count (a package's __init__ just lists them).
+    const resolve = mod => { const base = mod.replace(/\./g, "/"), one = files.find(f => f === base + ".py" || f.endsWith("/" + base + ".py"));
+      if (one) return [one];
+      return files.filter(f => (f.startsWith(base + "/") || f.includes("/" + base + "/")) && /\/[^/]+\.py$/.test(f) && f.split("/").length - 1 === (f.startsWith(base + "/") ? base.split("/").length : f.indexOf("/" + base + "/") >= 0 ? f.slice(0, f.indexOf("/" + base + "/")).split("/").length + base.split("/").length : 0)); };
+    const included = new Set();
+    for (const [f, P] of parsed) for (const c of P.calls) if (c.include && !c.include.startsWith("@router:")) for (const t of resolve(c.include)) if (t !== f) included.add(t);
+    const roots = files.filter(f => !included.has(f)).sort((a, b) => a.split("/").length - b.split("/").length).slice(0, 3);
+    const out = [], seenKey = new Set();
+    const emit = (f, line, prefix, route, regex) => { const p = "/" + (prefix + djangoPath(route)).replace(/\/+/g, "/").replace(/^\/+/, ""); const k = `${p}`; if (seenKey.has(k + f + line)) return; seenKey.add(k + f + line); out.push({ method: "ANY", path: p.length > 1 ? p.replace(/\/$/, "") || "/" : "/", file: f, line, regLine: "" }); };
+    const walk = (f, prefix, depth, trail) => {
+      const P = parsed.get(f); if (!P || depth > 6 || trail.has(f)) return;
+      const next = new Set(trail).add(f);
+      for (const c of P.calls) {
+        if (c.include?.startsWith("@router:")) {
+          const rt = c.include.slice(8);
+          for (const r of P.routers.filter(x => x.router === rt)) { emit(f, r.line, prefix + djangoPath(c.route) + "/", r.prefix, false); emit(f, r.line, prefix + djangoPath(c.route) + "/", r.prefix + "/{pk}", false); }
+        } else if (c.include) { for (const t of resolve(c.include)) walk(t, prefix + djangoPath(c.route) + (c.route && !/\/$/.test(c.route) && !c.regex ? "/" : ""), depth + 1, next); }
+        else emit(f, c.line, prefix, c.route, c.regex);
+      }
+    };
+    for (const r of roots) walk(r, "", 0, new Set());
+    return { endpoints: out, files: files.length };
+  }
+
   // --- path normalization and area ---
   const normPath = p => { let q = String(p).replace(/\$\{[^}]*\}/g, "*").replace(/:[A-Za-z_]\w*/g, "*").replace(/\{[^}]*\}/g, "*").replace(/\/+$/, ""); return q.startsWith("/") ? q || "/" : "/" + q; };
   const areaOf = p => (p.match(/^\/api\/v\d+\/([^/]+)/) || p.match(/^\/v\d+\/([^/]+)/) || p.match(/^\/([^/]+)/) || [, "other"])[1];
@@ -309,7 +413,12 @@ function works(pm) {
   const suffixMatches = (a, b, n = 2) => { const sa = segs(a), sb = segs(b), k = Math.min(n, sa.length, sb.length); return k > 0 && sa.slice(-k).join("/") === sb.slice(-k).join("/"); };
 
   // Heuristically found ones take priority (file:line is more useful); the contract only fills gaps.
-  const heur = heuristicEndpoints();
+  const heurBase = heuristicEndpoints(), nextFound = nextEndpoints(), django = djangoEndpoints();
+  // A resolved Django URL tree replaces the line-by-line urls.py guess (which had no prefix for nested files); if nothing resolved, the old guess stays.
+  const heur = [...(django.endpoints.length ? heurBase.filter(e => !/(^|\/)urls?\.py$/.test(e.file)) : heurBase), ...nextFound, ...django.endpoints];
+  // Said out loud instead of a silent zero: what was looked at and not understood.
+  const readNotes = [];
+  if (django.files && !django.endpoints.length) readNotes.push(`Django URL files not read: ${django.files} urls.py file(s) found, but no path()/re_path() route could be resolved from them.`);
   const contract = E.openapi ? contractEndpoints(E.openapi) : [];
   const seen = new Map();
   for (const e of [...heur, ...contract]) { const k = `${e.method} ${normPath(e.path)}`; if (!seen.has(k)) seen.set(k, e); }
@@ -411,12 +520,85 @@ function works(pm) {
     return usage || null;
   }
   const { byMP, byPath } = frontendUsage(frontend);
+
+  // --- calls the URL string never shows (real run on a public Rails+Vue repo: webhooks, canned responses and automation
+  // rules all have settings screens, and all were "no screen") ---------------------------------------------------------
+  // A screen often talks to the backend through a base API class or a resource helper: `class Webhooks extends ApiClient
+  // { constructor() { super('webhooks') } }`. The URL is built inside the base class, so no "/api/.../webhooks" string
+  // exists anywhere for the literal matcher above. Three further signals, weakest last, and the rule for all of them is
+  // that a false "has a screen" is better than a false "no screen":
+  //   1. registered resource: the name a base class / helper is given (`super('webhooks')`, `new ApiClient('x')`,
+  //      `api.get('x')`) equals a path segment of the endpoint       -> used, "built through a base API class"
+  //   2. a frontend file or folder named for the endpoint's noun (api/webhooks.js, settings/webhooks/)   -> used, "by name"
+  //   3. the noun appears anywhere in frontend code                -> not "sure" any more (weak trace), still no screen
+  // And when the frontend has a base API class at all, calls built that way can't all be seen: every no-screen endpoint
+  // is then "shouldLookAt" and the report says so.
+  const SCOPE_SEGMENTS = new Set(["api", "accounts", "account", "orgs", "organizations", "workspaces", "tenants"]);
+  const nounKey = w => String(w).toLowerCase().replace(/[^a-z0-9]/g, "").replace(/(ies)$/, "y").replace(/(es|s)$/, "");
+  const isParamSeg = sg => sg === "*" || /^\{.*\}$|^:/.test(sg);
+  const nounsOf = np => segs(np).filter(sg => !isParamSeg(sg) && !/^v\d+$/.test(sg) && !SCOPE_SEGMENTS.has(sg.toLowerCase())).slice(-2);
+  const BASE_CLASS = /\bclass\s+\w+\s+extends\s+([A-Z]\w*(?:Api|API|Client|Resource|Service|Repository|Http|Endpoint)\w*)\b/;
+  const RESOURCE_CALLS = [
+    /\bsuper\(\s*["'`]([A-Za-z][\w/.-]*)["'`]/,
+    /\b(?:new\s+)?[A-Za-z_$]*(?:Api|API|Client|Resource|resource|apiFetch|createApi)[A-Za-z_$]*\(\s*["'`]([a-z][\w-]*(?:\/[\w-]+)*)["'`]/,
+    /\b\w*(?:api|client|http|axios|request)\w*\.(?:get|post|put|patch|delete)\(\s*["'`]([a-z][\w-]*(?:\/[\w-]+)*)["'`]/i,
+  ];
+  function frontendDynamic(dirs) {
+    const out = { resources: new Map(), baseClasses: new Set(), files: 0 };
+    if (!dirs.length) return out;
+    let raw; try { raw = git("grep", "-n", "-i", "-E", "(extends[[:space:]]+[A-Za-z_]*(api|client|resource|service|repository|http|endpoint)|super\\(|(api|client|resource|http|axios|request)[A-Za-z_$]*[.(]+[[:space:]]*[\"'`][a-z])", K.ref, "--", ...dirs); } catch { raw = ""; }
+    const perFile = new Map();
+    for (const line of raw.split("\n")) { const m = line.match(/^[^:]+:([^:]+):(\d+):(.*)$/); if (!m || exclude(m[1])) continue;
+      if (!perFile.has(m[1])) perFile.set(m[1], []); perFile.get(m[1]).push({ no: +m[2], text: m[3] }); }
+    for (const [file, lines] of perFile) {
+      const ext = lines.map(l => l.text.match(BASE_CLASS)).find(Boolean);
+      if (ext) out.baseClasses.add(ext[1]);
+      for (const { no, text } of lines) for (let i = 0; i < RESOURCE_CALLS.length; i++) {
+        if (i === 0 && !ext) continue; // super('x') only counts inside a class that extends a client/api/resource class
+        const rm = text.match(RESOURCE_CALLS[i]); if (!rm) continue;
+        const name = rm[1].replace(/^\/+/, "");
+        for (const seg of name.split("/")) { const k = nounKey(seg); if (k.length >= 3 && !out.resources.has(k)) out.resources.set(k, { name: seg, loc: `${file}:${no}` }); }
+        break;
+      }
+    }
+    out.files = perFile.size;
+    return out;
+  }
+  const dyn = frontendDynamic(frontend);
+  // A base class handed bare resource names ("webhooks"); one that only gets full "/api/..." strings is read by the literal matcher.
+  const dynamicFrontend = dyn.baseClasses.size > 0 && dyn.resources.size > 0;
+  // Files and folders of the frontend, by name: a client or screen named for the noun is a trace by itself.
+  let frontendFiles = [];
+  // Source files only (a translation catalog or an image named "login" is not a screen), no stories/fixtures.
+  const SCREEN_SRC = /\.(?:[jt]sx?|vue|svelte|astro|html?|erb|haml|slim|blade\.php|twig|hbs|dart|swift|kt)$/i;
+  const NOT_SCREEN = /(^|\/)(locales?|i18n|translations?|fixtures?|mocks?|stories|__mocks__)\/|\.(?:stories?|spec|test)\./i;
+  if (frontend.length) { try { frontendFiles = git("ls-tree", "-r", "--name-only", K.ref, "--", ...frontend).split("\n").filter(f => f && !exclude(f) && SCREEN_SRC.test(f) && !NOT_SCREEN.test(f)); } catch {} }
+  const nameLoc = new Map();
+  for (const f of frontendFiles) { const parts = f.split("/"), base = parts.pop().replace(/\.[^.]*$/, "").replace(/\.(story|stories)$/, "");
+    for (const part of [base, ...parts]) { const k = nounKey(part); if (k.length >= 4 && !nameLoc.has(k)) nameLoc.set(k, f); } }
+  // The weakest signal: the noun anywhere in frontend code. One search for every noun of a no-screen endpoint.
+  const stem = noun => noun.split(/[-_]/).filter(Boolean).map(esc).join("[-_]?").replace(/(ies|es|s)$/i, "");
+  const wordRe = noun => new RegExp(stem(noun) + "(?:ies|es|s|y)?(?![a-z])", "i");
+  let wordHits = new Map();
+  const wantNouns = new Map(); // key -> noun
+  for (const e of endpoints) { if (findUsage(byMP, byPath, e)) continue; for (const n of nounsOf(e.np)) if (n.length >= 5) wantNouns.set(nounKey(n), n); }
+  if (wantNouns.size && frontend.length) {
+    const alt = [...wantNouns.values()].map(stem).join("|");
+    let raw3; try { raw3 = git("grep", "-n", "-i", "-E", `(${alt})`, K.ref, "--", ...frontend); } catch { raw3 = ""; }
+    const res = [...wantNouns].map(([k, n]) => [k, wordRe(n)]);
+    let seenLines = 0;
+    for (const line of raw3.split("\n")) { if (++seenLines > 200000) break;
+      const m = line.match(/^[^:]+:([^:]+):(\d+):(.*)$/); if (!m || exclude(m[1])) continue;
+      for (const [k, re] of res) if (!wordHits.has(k) && re.test(m[3])) wordHits.set(k, `${m[1]}:${m[2]}`); }
+  }
   for (const e of endpoints) {
-    const usage = findUsage(byMP, byPath, e);
-    e.used = !!usage; e.usage = usage;
-    // Weak trace: for an endpoint not counted as fully used (used=false), is there a single-segment match?
-    // Only meaningful in the "confidence" calculation for used=false endpoints; found and cached here ahead of time.
-    e.weakTrace = !e.used && [...byPath.keys()].some(p => suffixMatches(p, e.np, 1));
+    let usage = findUsage(byMP, byPath, e), how = usage ? "url" : null;
+    if (!usage) for (const n of nounsOf(e.np)) { const hit = dyn.resources.get(nounKey(n)); if (hit) { usage = `${hit.loc} (built through a base API class: '${hit.name}')`; how = "resource"; break; } }
+    if (!usage) { const last = nounsOf(e.np).slice(-1)[0], f = last && nameLoc.get(nounKey(last)); if (f) { usage = `${f} (by name, no URL string)`; how = "name"; } }
+    e.used = !!usage; e.usage = usage; if (how && how !== "url") e.usageKind = how;
+    // Weak trace: for an endpoint not counted as fully used (used=false), is there a single-segment match, or does its noun
+    // appear in frontend code at all? Only meaningful in the "confidence" calculation for used=false endpoints.
+    e.weakTrace = !e.used && ([...byPath.keys()].some(p => suffixMatches(p, e.np, 1)) || nounsOf(e.np).some(n => wordHits.has(nounKey(n))));
   }
 
   // --- callers: in-repo API clients that AREN'T a product screen ---
@@ -440,7 +622,8 @@ function works(pm) {
   // of 28 "endpoint exists, no screen" items.
   const Infrastructure = /^\/?(?:healthz?|livez?|readyz?|ready|ping|metrics|debug|_[a-z]+|status\/?$)(?:\/|$)/i;
   for (const e of endpoints) e.infrastructure = Infrastructure.test(String(e.path || "").replace(/^\/(?:api\/)?(?:v\d+\/)?/, "/"));
-  for (const e of endpoints) e.product_excluded = productExcludedRe.some(r => r.test(e.file));
+  // A Next.js route file's folder is its URL ("app/api/scripts/route.ts" is /api/scripts), not a scripts folder.
+  for (const e of endpoints) e.product_excluded = !e.routeFile && productExcludedRe.some(r => r.test(e.file));
 
   // --- superseded: language-independent STRUCTURAL signals only ------------------------
   // Never matches comment WORDS in any language (see the language audit) — only a fixed tag/convention/field/
@@ -572,10 +755,11 @@ function works(pm) {
   const contractFileOf = e => !!E.openapi && e.file === E.openapi;
   for (const e of endpoints) {
     if (e.used || e.infrastructure || e.product_excluded || e.superseded || e.callers.length) { e.confidence = null; continue; }
-    e.confidence = (e.weakTrace || contractFileOf(e)) ? "shouldLookAt" : "sure";
+    e.confidence = (e.weakTrace || contractFileOf(e) || dynamicFrontend) ? "shouldLookAt" : "sure";
   }
   // superseded/caller-claimed endpoints drop out of "no screen" entirely (own sections below); possiblySuperseded
   // stays IN the list (it's only a flag, not a claim).
+  if (!endpoints.length) readNotes.push(`0 endpoints found in ${backend.join(", ") || "the OpenAPI file"}. Routes are read from Go, Express/Koa/Fastify/Hono, FastAPI/Flask, Django urls.py, Rails routes.rb and Next.js (app/**/route.*, pages/api) files and from an OpenAPI file; a backend built another way (GraphQL, tRPC, decorators on controllers, a custom router) is not seen.`);
   const noScreenEndpoints = endpoints.filter(e => !e.used && !e.infrastructure && !e.product_excluded && !e.superseded && !e.callers.length);
   const noScreen = noScreenEndpoints.length;
   const noScreenSure = noScreenEndpoints.filter(e => e.confidence === "sure").length;
@@ -584,6 +768,7 @@ function works(pm) {
   const callerOnlyCount = endpoints.filter(e => !e.used && e.callers.length).length;
   const outwardGive = endpoints.map(e => ({
     method: e.method, path: e.path, file: e.file, line: e.line, area: e.area, used: e.used, usage: e.usage,
+    ...(e.usageKind ? { usage_kind: e.usageKind } : {}),
     ...(e.infrastructure ? { infrastructure: true } : {}),
     ...(e.product_excluded ? { product_excluded: true } : {}),
     ...(e.superseded ? { superseded: true, supersededEvidence: e.supersededEvidence } : {}),
@@ -593,13 +778,18 @@ function works(pm) {
   }));
   // noScreen: stays for backward compat (sure + shouldLookAt combined, same count as the old behavior). no_screen_sure:
   // new, only the certain (sure) subset — consumers like lowhanging should use this field as their signal (see task report).
-  return { type: "inventory", generated: new Date().toISOString(), ref: K.ref, estimate, backend_missing: false, total: outwardGive.length, noScreen, no_screen_sure: noScreenSure, product_excluded: productExcludedCount, superseded: supersededCount, caller_only: callerOnlyCount, endpoints: outwardGive };
+  return { type: "inventory", generated: new Date().toISOString(), ref: K.ref, estimate, backend_missing: false, total: outwardGive.length, noScreen, no_screen_sure: noScreenSure, product_excluded: productExcludedCount, superseded: supersededCount, caller_only: callerOnlyCount,
+    ...(readNotes.length ? { notes: readNotes } : {}), ...(dynamicFrontend ? { frontend_dynamic: { base_classes: [...dyn.baseClasses].slice(0, 5), resources: dyn.resources.size, note: DYNAMIC_NOTE } } : {}), endpoints: outwardGive };
 }
+
+export const DYNAMIC_NOTE = "no screen found (frontend calls built dynamically aren't seen)";
 
 function formatMd(R) {
   if (R.backend_missing) return `# Backend inventory\n\nNo backend found (no \`inventory.backend\` in sources.json, and no candidate folder at the repo root either). For this product, \`canwe\` only works from decisions/request document/rivals.\n`;
   const shouldLookAt = R.noScreen - R.no_screen_sure;
   let o = `# Backend inventory · ${R.ref}${R.estimate ? " · paths were estimated (no inventory block in sources.json)" : ""}\n\n${R.total} endpoints, ${R.no_screen_sure} definitely no-screen, ${shouldLookAt} should be checked${R.product_excluded ? ` (${R.product_excluded} endpoints excluded as outside the product surface — smoke/scripts/tools/mock)` : ""}.\n\n`;
+  if (R.notes?.length) o += R.notes.map(n => `_${n}_\n\n`).join("");
+  if (R.frontend_dynamic) o += `_Confidence: ${R.frontend_dynamic.note}. The frontend builds URLs through a base API class (${R.frontend_dynamic.base_classes.join(", ")}); ${R.frontend_dynamic.resources} resource names were read from it and matched by name, so a "no screen" below is a lead to check, never a finding._\n\n`;
   const groups = new Map();
   for (const e of R.endpoints) if (!e.used && !e.infrastructure && !e.product_excluded && !e.superseded && !(e.callers && e.callers.length)) { if (!groups.has(e.area)) groups.set(e.area, []); groups.get(e.area).push(e); }
   o += `## No screen\n\n`;

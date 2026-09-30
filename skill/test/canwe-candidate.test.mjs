@@ -36,7 +36,7 @@ test("a request-doc section matched only by word overlap (status \"exists\", no 
   assert.doesNotMatch(r.output, /\*\*We can: backend ready, no screen\*\*/, "must not be reported as settled \"backend ready\" either");
 });
 
-test("a request-doc section with status \"missing\" still states absence plainly (no existence claim to soften)", () => {
+test("a request-doc section with status \"missing\" does not turn into \"no trace\" when the code printed above shows part of it", () => {
   const copyPm = path.join(tmp, "pm-missing");
   fs.cpSync(K.pm, copyPm, { recursive: true });
   noBackendInventoryWrite(copyPm);
@@ -45,9 +45,12 @@ test("a request-doc section with status \"missing\" still states absence plainly
   // internal request 80 fixed canwe's Decisions-section parsing to actually see that decision, "route
   // optimization" now correctly answers "There's a decision: not doing this" instead; that's covered
   // separately below, this test isolates the plain-"missing" case on its own).
+  // The request doc says "missing", but the code has an invoice summary page ("invoice" is in a frontend file) and nothing for
+  // "pdf" or "archive". The guess must not say "no trace" over code lines it printed itself: it says what exists and what is missing.
   const r = run(path.join(Tool, "canwe.mjs"), [copyPm, "invoice pdf archive"]);
   assert.equal(r.code, 0, `stderr: ${r.error}`);
-  assert.match(r.output, /\*\*Not now: no trace in the backend\*\*/);
+  assert.match(r.output, /\*\*Partly there: exists in frontend\/billing\/pages\/Summary\.jsx; missing: "pdf", "archive" are in no code file; /);
+  assert.doesNotMatch(r.output, /\*\*Not now: no trace in the backend\*\*/);
 });
 
 test("a decision heading at the same level as gather-evidence's own section titles ('## K11') no longer hides the decision — 'route optimization' now answers with the actual not-doing decision", () => {

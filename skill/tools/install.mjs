@@ -5,7 +5,7 @@
 //   nosy update    re-copies every install this tool made (found by its marker file)
 //   nosy uninstall [--providers …]   removes only folders this tool made; never one it didn't write
 // What it writes: a copy of skill/ (without skill/test/) at <agent folder>/skills/nosy/, plus a marker file
-// (.nosy-install.json: version, source, when) inside it. A copy, not a link: the npx cache is temporary, and a
+// (.nosy-install.json: version, the source label "github:nosy-hq/nosy", when) inside it. A copy, not a link: the npx cache is temporary, and a
 // cloud session reads what's committed. It never touches settings files, hooks or anything outside those folders.
 // Claude Code's hooks and /nosy:<command> commands come with the plugin; install says so and prints the command.
 // Uninstall leaves nothing of Nosy's behind except pm/ (yours): it removes the copies, the agent folders install itself created
@@ -18,6 +18,9 @@ import { advice, nodeCommandFor, nosyOnPath } from "./hints.mjs";
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MARKER = ".nosy-install.json";
+// Where the copy came from, as a label that is the same on every machine. The marker is committed with the folder, so it
+// must not carry the installing machine's own path (a home folder, npx's temp cache). `update` re-copies from the Nosy that runs it.
+const SOURCE = "github:nosy-hq/nosy";
 const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(SKILL, "..", "package.json"), "utf8")).version; } catch { return "unknown"; } })();
 
 // Where each agent reads project skills, and what in a project says the agent is used there. `global` is the
@@ -110,7 +113,7 @@ export function apply(P) {
     // Replace wholesale: files a newer version dropped don't linger.
     if (markerOf(s.target)) fs.rmSync(s.target, { recursive: true, force: true });
     for (const f of files) { const to = path.join(s.target, f); fs.mkdirSync(path.dirname(to), { recursive: true }); fs.copyFileSync(path.join(SKILL, f), to); }
-    fs.writeFileSync(path.join(s.target, MARKER), JSON.stringify({ tool: "nosy install", version: VERSION, source: SKILL, installed: new Date().toISOString(), files: files.length, created }, null, 1) + "\n");
+    fs.writeFileSync(path.join(s.target, MARKER), JSON.stringify({ tool: "nosy install", version: VERSION, source: SOURCE, installed: new Date().toISOString(), files: files.length, created }, null, 1) + "\n");
   }
   // The hooks' memo files in the temp folder: per-product nudge memory and the first-run marker. Harmless, but not ours to leave.
   if (P.action === "uninstall" && !P.global && P.steps.some(x => x.remove)) for (const f of tempMemos(P.project)) fs.rmSync(f, { force: true });

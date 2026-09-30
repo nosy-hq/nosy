@@ -1,0 +1,52 @@
+# Nosy
+
+Nosy about your product. Never your data.
+
+Nosy is a product manager that lives inside your coding agent. It reads your backend, git history and roadmap; checks what rivals shipped; and tells you what you can build next: sized, placed on the roadmap, with a receipt for every claim.
+
+## What it reads, writes and sends
+
+- Reads: Nosy reads your code, git history, GitHub issues and PRs including their text (titles, bodies, comments and author logins, through your own `gh`), your decision and roadmap docs, and public web pages.
+- Writes: Nosy writes to your `pm/` folder, plus a few named files: temporary files, a first-run marker, the skill folders `nosy install` copies and files you name with a flag. The optional weekly GitHub Action commits and pushes `pm/state/` and the decision page only if you set `commit: "true"`.
+- Sends: Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed, and GitHub through your own `gh`, including, after each agent answer, a read-only lookup of the `#N` issues the answer cites (turn that off with `NOSY_CITE_GH=0`, or turn the whole reference-check hook off with `NOSY_NO_CITE_CHECK=1`). `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes).
+- No telemetry. Full list: github.com/nosy-hq/nosy/blob/main/docs/DATA.md
+
+## Install
+
+**Claude Code (default):**
+```
+/plugin marketplace add nosy-hq/nosy
+/plugin install nosy@nosy
+```
+
+**Any coding agent in one command:**
+```
+npx github:nosy-hq/nosy install
+```
+
+Send the two Claude Code commands one at a time. Then type `/nosy` (Claude Code; Codex: `$nosy`) or ask your agent to run Nosy commands.
+
+## Paste to your agent
+
+"Read https://github.com/nosy-hq/nosy, then run `npx github:nosy-hq/nosy install` in my repo; it copies the skill folder into this project and changes no settings. Then type `/nosy`. If anything fails, do not retry: run `npx github:nosy-hq/nosy doctor --check` and show me its output."
+
+## Links
+
+- **README:** github.com/nosy-hq/nosy/blob/main/README.md
+- **Install guide:** github.com/nosy-hq/nosy/blob/main/docs/INSTALL.md
+- **Data policy:** github.com/nosy-hq/nosy/blob/main/docs/DATA.md
+- **Evals:** github.com/nosy-hq/nosy/blob/main/docs/EVALS.md
+- **For every agent:** github.com/nosy-hq/nosy/blob/main/AGENTS.md
+
+## If install fails
+
+Do not retry in a loop. Run this once:
+```
+npx github:nosy-hq/nosy doctor --check
+```
+
+It checks Node (18.17+), git, gh, the skill files and hooks, and prints the fix next to every failing line. Show its output to the human.
+
+---
+
+The plugin is free and MIT. Nosy Cloud (cloud.nosy.sh) is live and free for now: a shared record for your team. It never changes what the plugin does. Sample report: https://cloud.nosy.sh/demo

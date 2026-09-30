@@ -92,6 +92,10 @@ test("hook: silent for a clean commit, a non-git command, no pm/, or when turned
   assert.equal(hook(bare, "git commit -m x").output, "");
   r.put("fax.js", "send(fax)\n"); r.git("add", "."); r.git("commit", "-q", "-m", "fax");
   assert.equal(hook(r.root, "git commit -m fax", { NOSY_NO_NEVER_CHECK: "1" }).output, "");
+  // An option Claude Code exports as "false" must not shadow the env switch, and must not switch the check off.
+  const optionFalse = { CLAUDE_PLUGIN_OPTION_DISABLE_NEVER_CHECK: "false" };
+  assert.equal(hook(r.root, "git commit -m fax", { ...optionFalse, NOSY_NO_NEVER_CHECK: "1" }).output, "", "option \"false\" + NOSY_NO_NEVER_CHECK=1: still off");
+  assert.match(JSON.parse(hook(r.root, "git commit -m fax", optionFalse).output).reason, /never list/, "option \"false\" alone: it still checks");
 });
 
 test("hook: after `gh pr create`, the branch's changes since the integration branch are checked", () => {

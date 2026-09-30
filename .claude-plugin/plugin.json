@@ -5,6 +5,16 @@
   "author": {
     "name": "Nosy HQ"
   },
+  "homepage": "https://nosy.sh",
+  "repository": "https://github.com/nosy-hq/nosy",
+  "license": "MIT",
+  "keywords": [
+    "product-management",
+    "roadmap",
+    "competitors",
+    "git",
+    "agent-skill"
+  ],
   "skills": [
     "./skill/"
   ],

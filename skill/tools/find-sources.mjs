@@ -30,14 +30,33 @@ if (spawnSync("git", ["--version"], { stdio: "ignore" }).error?.code === "ENOENT
 if (write && !fs.existsSync(path.join(pmDir, "sources.json"))) { const old = oldLayoutNote(pmDir); if (old) { console.error(`✗ ${old}`); process.exit(1); } }
 if (gitTry("rev-parse", "--git-dir") === null) { console.log(`✗ ${repo} is not a git repo. Run this inside the product's git folder (or pass its path: ${nosyCommand("setup <path>")}); if it isn't under git yet, \`git init\` and make a first commit first.`); process.exit(1); }
 
-// ---- ref: symbolic-ref → origin/main → origin/master → main → master ----
+// ---- ref: the branch the team's day-to-day work lands on ----
+// 1. the remote's default branch (`git symbolic-ref refs/remotes/origin/HEAD`), else origin/main, origin/master, main, master;
+// 2. but when a develop/dev/development/staging branch exists AND is ahead of that default AND is at least as recent, the default
+//    is only the release branch (git-flow style: default `master`, work on `dev`) and the working branch wins. Reading the
+//    release branch under-reads the product: the code, the inventory and the size history all lag behind what the team ships.
+// The choice and how to change it are printed with the ref.
+const INTEGRATION_NAMES = ["develop", "dev", "development", "staging"];
 function refFind() {
   const sym = gitTry("symbolic-ref", "refs/remotes/origin/HEAD");
-  if (sym) return sym.replace(/^refs\/remotes\//, "");
-  for (const candidate of ["origin/main", "origin/master", "main", "master"]) if (gitTry("rev-parse", "--verify", "--quiet", candidate) !== null) return candidate;
-  return null;
+  const exists = r => gitTry("rev-parse", "--verify", "--quiet", r) !== null;
+  const defaultRef = sym ? sym.replace(/^refs\/remotes\//, "") : ["origin/main", "origin/master", "main", "master"].find(exists) || null;
+  if (!defaultRef) return null;
+  const base = defaultRef.replace(/^origin\//, "");
+  const found = { ref: defaultRef, defaultRef, reason: sym ? "the remote's default branch (git symbolic-ref refs/remotes/origin/HEAD)" : "no symbolic ref; candidates tried in order (origin/main, origin/master, main, master)", alternatives: [] };
+  if (INTEGRATION_NAMES.includes(base)) return { ...found, reason: `${found.reason}; it is itself the integration branch` };
+  const tipTime = r => +(gitTry("log", "-1", "--format=%ct", r) || 0);
+  for (const name of INTEGRATION_NAMES) for (const cand of [`origin/${name}`, name]) {
+    if (!exists(cand)) continue;
+    const ahead = +(gitTry("rev-list", "--count", `${defaultRef}..${cand}`) || 0);
+    found.alternatives.push(`${cand} (${ahead} commits ahead of ${defaultRef})`);
+    if (ahead > 0 && tipTime(cand) >= tipTime(defaultRef)) return { ...found, ref: cand, reason: `${cand} is ${ahead} commit(s) ahead of the default branch ${defaultRef} and at least as recent: ${defaultRef} looks like the release branch and ${cand} the branch the work lands on` };
+    break; // origin/<name> exists: don't fall through to a stale local copy of the same name
+  }
+  return found;
 }
-const ref = refFind();
+const refInfo = refFind();
+const ref = refInfo?.ref || null;
 if (!ref) { console.log(`✗ No default branch found (none of origin/main, origin/master, main, master exist). The repo probably has no commits yet: make one (\`git commit --allow-empty -m start\`). If its branch has another name, \`git branch -m main\` (or \`git fetch\` for a remote one). Then run \`${nosyCommand("setup .")}\` again.`); process.exit(1); }
 
 const show = f => gitTry("show", `${ref}:${f}`);
@@ -67,7 +86,7 @@ const pmInsideRepo = relPmToRepo === "" || (!relPmToRepo.startsWith("..") && !pa
 const repoValue = pmInsideRepo ? "." : repoAbs;
 
 add("repo", repoValue, "high", `git rev-parse --git-dir${pmInsideRepo ? " (--pm is inside the repo, written relative)" : ""}`);
-add("ref", ref, "high", gitTry("symbolic-ref", "refs/remotes/origin/HEAD") ? "git symbolic-ref refs/remotes/origin/HEAD" : "no symbolic ref; candidates tried in order (origin/main, origin/master, main, master)");
+add("ref", ref, ref === refInfo.defaultRef ? "high" : "medium", `${refInfo.reason}${refInfo.alternatives.length && ref === refInfo.defaultRef ? `; also present but not chosen: ${refInfo.alternatives.join(", ")}` : ""}`);
 
 // ============================================================
 // inventory — paths come from inventory.mjs's own guess (single source: pathEstimated); only the OpenAPI file and
@@ -249,23 +268,31 @@ if (droppedBest) {
 // script can spot a bilingual glossary in a TARGET repo's own docs — translating the Turkish terms away would
 // break the feature (see the final migration report).
 // ============================================================
-// Glossary candidates (a Turkish product term → English words), data not code: skill/data/lang/tr/glossary-seed.json.
-const GLOSSARY_SEED = JSON.parse(fs.readFileSync(new URL("../data/lang/tr/glossary-seed.json", import.meta.url), "utf8")).seed;
+// Glossary candidates (a product term -> English words), data not code: skill/data/lang/tr/glossary-seed.json, grouped in packs.
+// A pack is a vertical (legal) or a language (Turkish) and is applied ONLY when the repo's own docs show its detect markers;
+// a repo with no matching pack gets no glossary at all. (A real run on a public chat-support product got the legal pair
+// "file" -> "matter" written into its sources.json because the seed was one flat list and the word "matter" is in every README.)
+const GLOSSARY_PACKS = JSON.parse(fs.readFileSync(new URL("../data/lang/tr/glossary-seed.json", import.meta.url), "utf8")).packs;
 // each source is bounded SEPARATELY (the decisions document alone can be hundreds of KB — 400KB+ in the first product — a
 // single shared bound would truncate the request document before it ever enters the pool; internal request: the
 // idf/stem pattern from gather-evidence.mjs works here too).
 const PART_BOUNDARY = 80000;
 const textPool = [show("README.md"), decisionsPath ? show(decisionsPath) : "", request ? show(request.path) : ""].filter(Boolean).map(s => s.slice(0, PART_BOUNDARY)).join("\n");
 const occurrenceCount = (text, word) => (text.match(new RegExp(`\\b${escapes(word)}\\b`, "gi")) || []).length;
+const asciiFold = t => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ı/g, "i");
+const foldedPool = asciiFold(textPool);
+const packVerdicts = GLOSSARY_PACKS.map(pack => { const hit = pack.detect.markers.filter(m => occurrenceCount(foldedPool, asciiFold(m)) > 0); return { pack, hit, applies: hit.length >= (pack.detect.min ?? 2) }; });
+const GLOSSARY_SEED = packVerdicts.filter(v => v.applies).flatMap(v => v.pack.seed);
 const glossaryCandidates = GLOSSARY_SEED.map(([sourceTerm, targets]) => {
   // A pair that maps a word to itself ("user" → "user", an English-only product) says nothing: dropped.
   const sourceN = occurrenceCount(textPool, sourceTerm), targetHits = targets.filter(t => t.toLowerCase() !== sourceTerm.toLowerCase()).map(target => ({ target, n: occurrenceCount(textPool, target) })).filter(x => x.n > 0);
   return { sourceTerm, sourceN, targetHits, total: sourceN + targetHits.reduce((s, x) => s + x.n, 0) };
 }).filter(x => x.sourceN > 0 && x.targetHits.length > 0).sort((a, b) => b.total - a.total).slice(0, 10);
 const glossary = Object.fromEntries(glossaryCandidates.map(x => [x.sourceTerm, x.targetHits.map(h => h.target)]));
+const packNote = packVerdicts.map(v => `${v.pack.name} pack ${v.applies ? "applied" : "not applied"} (${v.hit.length}/${v.pack.detect.min ?? 2} markers${v.hit.length ? `: ${v.hit.join(", ")}` : ""})`).join("; ");
 add("glossary", glossary, glossaryCandidates.length ? "low" : "–", glossaryCandidates.length
-  ? `${glossaryCandidates.length} pairs, kept because both sides appear in the docs (README/decisions/request, ${textPool.length} characters) — (unverified: owner should confirm)`
-  : "the docs don't look mixed-language, or none of the seed glossary pairs appear together");
+  ? `${glossaryCandidates.length} pairs, kept because both sides appear in the docs (README/decisions/request, ${textPool.length} characters); ${packNote} — (unverified: owner should confirm)`
+  : `nothing written: no vertical or language pack matched this repo's docs (${packNote})`);
 
 // ============================================================
 // matris — fixed rule: <pm>/matris.json (move-in step 4 sets this up)
@@ -343,12 +370,15 @@ const suggestion = {
 // markdown report
 // ============================================================
 let md = `# sources.json suggestion · ${path.basename(path.resolve(repo))} · ${ref}\n\n`;
-md += `This script only READS the repo, it writes nowhere (unless --write is given). Every line comes with its evidence.\n\n`;
+md += `This report only reads the repo. Nothing is written unless you run setup or pass --write, and then only under pm/. Every line comes with its evidence.\n\n`;
 // if --pm isn't given, the pm folder defaults to the current directory's pm/; stated explicitly so running it from
 // a different repo doesn't make a wrong matrix look "found".
 if (!pmGiven) md += `**Note:** --pm not given; the pm folder defaults to \`${path.resolve(pmDir)}\` (matris and --write look at this folder).\n\n`;
 md += `| Key | Confidence | Suggestion | Evidence |\n|---|---|---|---|\n`;
 for (const k of records) md += `| ${k.key} | ${k.confidence} | ${summarize(k.value)} | ${String(k.evidence).replace(/\|/g, "/").slice(0, 200)} |\n`;
+md += ref !== refInfo.defaultRef
+  ? `\n**Branch:** read from \`${ref}\`, not the default branch \`${refInfo.defaultRef}\` (${refInfo.reason}). To read the default branch instead, set \`"ref": "${refInfo.defaultRef}"\` in sources.json.\n`
+  : `\n**Branch:** read from \`${ref}\` (${refInfo.reason}). To read another branch, set \`"ref"\` in sources.json${refInfo.alternatives.length ? ` (also present: ${refInfo.alternatives.join(", ")})` : ""}.\n`;
 if (packageWinner) md += `\n**Package guess:** \`--${packageWinner.name}\` (${packageWinner.e.map(x => `${x.k.replace(/\\b/g, "")}×${x.n}`).join(", ")}). Add \`- **Package:** ${packageWinner.name}\` to \`product.md\`, or pass \`--${packageWinner.name}\` to the commands.\n`;
 if (team.length) md += `\n**Team (last 30 days, product.md suggestion — not part of sources.json):** ${team.map(e => `${e.name} ${e.n}`).join(", ")}\n`;
 

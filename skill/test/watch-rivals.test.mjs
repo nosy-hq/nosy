@@ -17,7 +17,7 @@ const pages = {
 };
 before(async () => {
   server = http.createServer((q, r) => { if (q.url === "/broken") { r.writeHead(500); return r.end(); } const b = pages[q.url]; if (b == null) { r.writeHead(404); return r.end(); } r.writeHead(200, { "content-type": "text/html" }); r.end(b); });
-  await new Promise(res => server.listen(0, "127.0.0.1", res));
+  await new Promise(res => server.listen(0, "127.0.0.1", res)); server.unref();
   base = `http://127.0.0.1:${server.address().port}`;
   pm = temporary("nosy-watch-");
   fs.mkdirSync(path.join(pm, "rivals"), { recursive: true });
@@ -25,7 +25,7 @@ before(async () => {
   fs.writeFileSync(path.join(pm, "rivals", "gone.md"), `# Gone\n\n## Sources\n- http://127.0.0.1:1/broken (read 2026-09-28)\n`);
   fs.writeFileSync(path.join(pm, "rivals", "_TEMPLATE.md"), "# <Product name>\n");
 });
-after(() => { server.close(); clean(pm); });
+after(() => { server.close(); server.closeAllConnections?.(); clean(pm); });
 
 // The server lives in this process, so the script must run asynchronously (spawnSync would block the server).
 const watch = () => new Promise(res => {

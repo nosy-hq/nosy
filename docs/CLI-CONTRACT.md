@@ -31,7 +31,7 @@ A 2 is a result, not a failure: the output says what was found. Callers that mus
 | `collect-signals.mjs` | an export's message column couldn't be confidently determined by shape or header — never a silent 0-signal pass |
 | `explain.mjs <id>` | — (an unknown id is a usage error: 1) |
 
-Everything else is a report (`shipped`, `peek`, `psst`, `canwe`, `page`, …): 0 when it ran, 1 when it couldn't. Its findings are in the output, for the agent and the owner to judge.
+Everything else is a report (`shipped`, `peek`, `psst`, `canwe`, `page`, …): 0 when it ran, 1 when it couldn't. Its findings are in the output, for the agent and you to judge.
 
 ## In CI
 

@@ -16,7 +16,7 @@
 // built page is still over it — it never blocks the write.
 import fs from "node:fs"; import path from "node:path"; import { section as sectionValue } from "./auto-section.mjs"; import { thresholds } from "./thresholds.mjs";
 import { glance, renderGlance, GLANCE_CSS } from "./glance.mjs"; import { next as nextPicks } from "./next.mjs";
-import { readSources } from "./sources-file.mjs";
+import { readSources } from "./sources-file.mjs"; import { esc } from "./html-safe.mjs";
 const pm = process.argv[2] || "pm", out = process.argv[3] || "page.html";
 const rd = f => { try { return fs.readFileSync(path.join(pm, f), "utf8"); } catch { return ""; } };
 const truncate = (s, n) => { s = String(s ?? ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
@@ -32,12 +32,11 @@ function logTail(raw, budgetBytes) {
   for (let i = sections.length - 1; i >= 0; i--) { kept.unshift(sections[i]); size += Buffer.byteLength(sections[i]); if (size >= budgetBytes) break; }
   return { text: head + kept.join(""), omitted: sections.length - kept.length };
 }
-const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const inline = s => esc(s)
   .replace(/`([^`]+)`/g, "<code>$1</code>")
   .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
   .replace(/~~([^~]+)~~/g, "<s>$1</s>")
-  .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2">$1</a>')
+  .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>')
   .replace(/(^|[\s(])(https?:\/\/[^\s)<]+)/g, (m, p, u) => `${p}<a href="${u}">${u.replace(/^https?:\/\/(www\.)?/, "").slice(0, 48)}</a>`);
 function md(src) { // a small markdown subset: headings, lists, numbered lists, paragraphs; no tables
   src = String(src || "").replace(/^[ \t]*<!--[\s\S]*?-->[ \t]*$/gm, ""); // marker lines like <!-- nosy:build-waves --> aren't page text; one quoted in `code` stays
@@ -101,7 +100,7 @@ const rivalCard = r => {
     ? `<div class="announcement"><div class="lab">Latest announcement · important${delivery}</div><p>${inline(r.announcementText)}</p>${r.announcementReason ? `<p class="reason">${inline(r.announcementReason)}</p>` : ""}</div>`
     : `<div class="meta"><span>Latest${delivery}: ${inline(r.announcementText)}${r.announcementSeverity ? ` · importance: ${esc(r.announcementSeverity)}` : ""}</span></div>`;
   return `<article class="card"><h3>${esc(r.name)}</h3>${badge}
-<div class="meta">${r.delivery ? `<span>${inline(r.delivery)}</span>` : ""}${r.price ? `<span>${inline(r.price).slice(0, 400)}</span>` : ""}</div>
+<div class="meta">${r.delivery ? `<span>${inline(r.delivery)}</span>` : ""}${r.price ? `<span>${inline(String(r.price).slice(0, 400))}</span>` : ""}</div>
 ${announcement}
 ${r.location ? `<div><div class="lab">Position relative to us</div>${md(r.location)}</div>` : ""}
 ${r.pattern ? `<div><div class="lab">What we'll take</div>${md(r.pattern)}</div>` : ""}${r.weak ? `<details><summary>Weaknesses</summary>${md(r.weak)}</details>` : ""}
@@ -205,7 +204,7 @@ ${stepCount ? `<section id="coverage"><div class="head"><div class="lab">Inside 
 ${active.length ? `<section id="head-to-head"><div class="head"><div class="lab">Us vs. the neighbours · head to head</div><h2>Against us</h2><p>We have it, they don't; they have it, we're missing it. Computed from the matrix; an acquired or closed rival doesn't count.</p></div><div class="scroll"><table class="h2h" id="h2h"></table></div></section>` : ""}
 ${rivals.length ? `<section id="rivals"><div class="head"><div class="lab">The neighbours · rivals</div><h2>What to take, where they're weak</h2></div>
 ${cats.map(c => { const here = active.filter(r => catOf(r.category) === c), full = here.filter(r => fullCards.has(r.name)), rest = here.filter(r => !fullCards.has(r.name));
-  return `<h3>${esc(categoryLabel(c))}</h3>${full.length ? `<div class="cards">${full.map(rivalCard).join("")}</div>` : ""}${rest.length ? `<ul class="rival-rest">${rest.map(r => `<li><b>${esc(r.name)}</b>${r.announcementText ? ` · ${inline(r.announcementText).slice(0, 140)}` : ""} <span class="meta">pm/rivals/${esc(r.file)}</span></li>`).join("")}</ul>` : ""}`; }).join("")}
+  return `<h3>${esc(categoryLabel(c))}</h3>${full.length ? `<div class="cards">${full.map(rivalCard).join("")}</div>` : ""}${rest.length ? `<ul class="rival-rest">${rest.map(r => `<li><b>${esc(r.name)}</b>${r.announcementText ? ` · ${inline(String(r.announcementText).slice(0, 140))}` : ""} <span class="meta">pm/rivals/${esc(r.file)}</span></li>`).join("")}</ul>` : ""}`; }).join("")}
 ${closedOne.length ? `<details class="closed-group"><summary>Moved or closed (${closedOne.length}) · not on the block anymore</summary><div class="cards">${closedOne.map(rivalCard).join("")}</div></details>` : ""}
 </section>` : `<section id="rivals"><div class="head"><div class="lab">The neighbours · rivals</div><h2>No rivals researched yet</h2><p>The matrix has the product's own rows but no rival columns. Run <code>/nosy:neighbors</code>: it proposes rivals (or takes the ones you name), researches each from public sources and fills their columns; head to head and these cards follow.</p></div></section>`}` : `<section id="coverage"><div class="head"><div class="lab">Over the fence</div><h2>No feature matrix yet</h2><p>The matrix, coverage, head to head and rival cards appear once rivals are researched: run <code>/nosy:neighbors</code> (move-in's first tour does it). Until then this page shows the inside view only.</p></div></section>`}
 ${auto}
@@ -216,20 +215,24 @@ ${rd("decisions.md").trim() ? `<section id="decisions"><details class="fold"><su
 </div>
 <script>
 const D=${JSON.stringify(data).replace(/</g, "\\u003c")};
+// Everything in D is text from pm/ (rival names, evidence, step names): it goes into the page escaped, never as markup.
+const E=s=>String(s==null?"":s).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[ch]);
 const SYM={y:"●",p:"◐",n:"—",u:"?",d:"◌"},TIP={y:"exists",p:"partial",n:"missing",u:"not found",d:"announced, not shipped yet"};
-const cols=(D.biz?[{name:D.biz.name,me:1,status:"active",codes:Object.fromEntries(Object.entries(D.biz.codes).map(([k,v])=>[k,[v,(D.biz.notes||{})[k]||""]]))}]:[]).concat(D.products);
-const cell=(c,no)=>{const [k,ev]=(c.codes[no]||["u",""]);return '<td class="c'+(c.me?" me":"")+'"><span class="d d-'+k+'" title="'+(c.name+": "+TIP[k]+(ev?" · "+ev:"")).replace(/"/g,"&quot;")+'">'+SYM[k]+'</span></td>'};
-const statusTag=c=>(c.status&&c.status!=="active")?' <span class="tag">'+c.status+'</span>':'';
-let h='<thead><tr><th class="s">Step</th>'+cols.map(c=>'<th class="p'+(c.me?" me":"")+'">'+c.name.replace(/\\s*\\(.*$/,"").slice(0,34)+'</th>').join("")+'</tr><tr class="cat"><th class="s"></th>'+cols.map(c=>'<th class="'+(c.me?"me":"")+'">'+(c.me?"us":c.layer.slice(0,8))+'</th>').join("")+'</tr></thead><tbody>';
-for(const a of D.steps) h+='<tr><td class="s">'+a.no+'. '+a.name+'</td>'+cols.map(c=>cell(c,a.no)).join("")+'</tr>';
+const K=k=>typeof k==="string"&&/^[ypnud]$/.test(k)?k:"u";
+const get=(c,no)=>{const v=c.codes&&Object.prototype.hasOwnProperty.call(c.codes,no)?c.codes[no]:null;return Array.isArray(v)?v:["u",""]};
+const cols=(D.biz?[{name:D.biz.name,me:1,status:"active",layer:"",codes:Object.fromEntries(Object.entries(D.biz.codes||{}).map(([k,v])=>[k,[v,(D.biz.notes||{})[k]||""]]))}]:[]).concat(D.products);
+const cell=(c,no)=>{const [k0,ev]=get(c,no),k=K(k0);return '<td class="c'+(c.me?" me":"")+'"><span class="d d-'+k+'" title="'+E(c.name+": "+TIP[k]+(ev?" · "+ev:""))+'">'+SYM[k]+'</span></td>'};
+const statusTag=c=>(c.status&&c.status!=="active")?' <span class="tag">'+E(c.status)+'</span>':'';
+let h='<thead><tr><th class="s">Step</th>'+cols.map(c=>'<th class="p'+(c.me?" me":"")+'">'+E(String(c.name).replace(/\\s*\\(.*$/,"").slice(0,34))+'</th>').join("")+'</tr><tr class="cat"><th class="s"></th>'+cols.map(c=>'<th class="'+(c.me?"me":"")+'">'+(c.me?"us":E(String(c.layer).slice(0,8)))+'</th>').join("")+'</tr></thead><tbody>';
+for(const a of D.steps) h+='<tr><td class="s">'+E(a.no)+'. '+E(a.name)+'</td>'+cols.map(c=>cell(c,a.no)).join("")+'</tr>';
 document.getElementById("mx").innerHTML=h+'</tbody>';
-const score=c=>D.steps.reduce((s,a)=>{const k=(c.codes[a.no]||["u"])[0];return s+(k==="y"?1:k==="p"?.5:0)},0);
+const score=c=>D.steps.reduce((s,a)=>{const k=K(get(c,a.no)[0]);return s+(k==="y"?1:k==="p"?.5:0)},0);
 const ranked=cols.map(c=>({c,s:score(c)})).sort((a,b)=>b.s-a.s);
-document.getElementById("cov").innerHTML='<thead><tr><th>Product</th><th>Score</th><th style="width:45%">Coverage</th></tr></thead><tbody>'+ranked.map(({c,s})=>'<tr><td>'+(c.me?"<b>"+c.name+"</b>":c.name)+statusTag(c)+'</td><td>'+s.toFixed(1)+' / '+D.steps.length+'</td><td><div class="bar"><i class="'+(c.me?"me":"")+'" style="width:'+(100*s/D.steps.length)+'%"></i></div></td></tr>').join("")+'</tbody>';
+document.getElementById("cov").innerHTML='<thead><tr><th>Product</th><th>Score</th><th style="width:45%">Coverage</th></tr></thead><tbody>'+ranked.map(({c,s})=>'<tr><td>'+(c.me?"<b>"+E(c.name)+"</b>":E(c.name))+statusTag(c)+'</td><td>'+s.toFixed(1)+' / '+D.steps.length+'</td><td><div class="bar"><i class="'+(c.me?"me":"")+'" style="width:'+(100*s/D.steps.length)+'%"></i></div></td></tr>').join("")+'</tbody>';
 if(D.biz){const me=cols[0];let t='<thead><tr><th>Rival</th><th>We have it, they don\\'t</th><th>They have it, we\\'re missing it</th><th>Our gaps</th></tr></thead><tbody>';
-for(const c of D.products.filter(c=>!c.status||c.status==="active")){const lead=D.steps.filter(a=>(me.codes[a.no]||["u"])[0]==="y"&&(c.codes[a.no]||["u"])[0]==="n").length;
-const gaps=D.steps.filter(a=>(c.codes[a.no]||["u"])[0]==="y"&&"pn".includes((me.codes[a.no]||["u"])[0]));
-t+='<tr><td>'+c.name.replace(/\\s*\\(.*$/,"")+'</td><td class="n">'+lead+'</td><td class="n">'+gaps.length+'</td><td style="font-size:13px;color:var(--muted)">'+(gaps.map(a=>a.name).join(" · ")||"—")+'</td></tr>'}
+for(const c of D.products.filter(c=>!c.status||c.status==="active")){const lead=D.steps.filter(a=>K(get(me,a.no)[0])==="y"&&K(get(c,a.no)[0])==="n").length;
+const gaps=D.steps.filter(a=>K(get(c,a.no)[0])==="y"&&"pn".includes(K(get(me,a.no)[0])));
+t+='<tr><td>'+E(String(c.name).replace(/\\s*\\(.*$/,""))+'</td><td class="n">'+lead+'</td><td class="n">'+gaps.length+'</td><td style="font-size:13px;color:var(--muted)">'+(gaps.map(a=>E(a.name)).join(" · ")||"—")+'</td></tr>'}
 document.getElementById("h2h").innerHTML=t+'</tbody>'}
 </script>`;
 fs.writeFileSync(out, html); console.log("written:", out, (html.length / 1024).toFixed(0) + " KB");

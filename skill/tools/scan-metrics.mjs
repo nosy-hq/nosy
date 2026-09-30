@@ -14,7 +14,7 @@ import { readSources } from "./sources-file.mjs";
 const TrWords = JSON.parse(fs.readFileSync(new URL("../data/lang/tr/scan-metrics.json", import.meta.url), "utf8"));
 
 const Source = /\.((m|c)?[jt]sx?|py|go|rb|php|java|kt|swift|dart|cs|rs|vue|svelte|ex|exs)$/i;
-const withTest = f => /(^|\/)(tests?|__tests__|testdata|fixtures?|e2e|cypress|playwright|mocks?)\//i.test(f) || /\.(test|spec|stories)\.[jt]sx?$/i.test(f) || /_test\.go$/.test(f) || /(^|\/)test_[^/]+\.py$/.test(f);
+const withTest = f => /(^|\/)(tests?|__tests__|testdata|fixtures?|e2e|cypress|playwright|mocks?)\//i.test(f) || /\.(test|spec|stories|story)\.[a-z]+$/i.test(f) || /_test\.go$/.test(f) || /(^|\/)test_[^/]+\.py$/.test(f);
 const noise = f => /(^|\/)(node_modules|dist|build|vendor|\.next|coverage)\//.test(f) || /\.(min\.js|map|d\.ts)$/i.test(f);
 const esc = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 

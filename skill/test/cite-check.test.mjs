@@ -176,6 +176,12 @@ test("hook, Stop: a made-up quote in the last answer sends the agent back once; 
   const good = transcript(r.root, "Rows cap at 500 (review.go:20).");
   assert.equal(hook({ hook_event_name: "SubagentStop", cwd: r.root, transcript_path: good }).output, "");
   assert.equal(hook({ hook_event_name: "Stop", cwd: r.root, transcript_path: bad }, { NOSY_NO_CITE_CHECK: "1" }).output, "", "off switch");
+  // An option Claude Code exports as "false" must not shadow the env switch, and must not switch the check off.
+  // (A fresh answer each time: the check asks once per answer, so an answer it already flagged stays quiet either way.)
+  const optionFalse = { CLAUDE_PLUGIN_OPTION_DISABLE_CITE_CHECK: "false" }, r2 = repo();
+  const bad2 = transcript(r2.root, 'Deadlines: PRODUCT.md:3 "süre asla çıkarım değildir".');
+  assert.equal(hook({ hook_event_name: "Stop", cwd: r2.root, transcript_path: bad2 }, { ...optionFalse, NOSY_NO_CITE_CHECK: "1" }).output, "", "option \"false\" + NOSY_NO_CITE_CHECK=1: still off");
+  assert.equal(JSON.parse(hook({ hook_event_name: "Stop", cwd: r2.root, transcript_path: bad2 }, optionFalse).output).decision, "block", "option \"false\" alone: it still checks (the off run did not use up the answer)");
 });
 
 test("hook, PostToolUse: a written .md with a wrong reference is flagged; code files, no pm/, nothing to check: silent", () => {

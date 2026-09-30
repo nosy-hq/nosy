@@ -10,7 +10,7 @@
 //                                                       skill/tools/health.mjs; each ✗ line carries its fix)
 // Exit: 0 nothing found · 2 findings remain · 1 couldn't read the pm folder. Read-only without --fix.
 import fs from "node:fs"; import path from "node:path"; import { fileURLToPath } from "node:url";
-import { next as nextPicks } from "./next.mjs";
+import { next as nextPicks } from "./next.mjs"; import { parseJson } from "./sources-file.mjs"; // parseJson: the shared reader (a UTF-8 BOM is not a typo)
 
 // --check is a different question and has to work when this file's own data is what's broken: hand it over before reading anything.
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url) && process.argv.includes("--check")) {
@@ -81,7 +81,7 @@ export function examine(pm) {
   const src = ["sources.json", "kaynaklar.json"].map(f => path.join(pm, f)).find(f => fs.existsSync(f));
   if (!src) add("route", "no-sources", "no sources.json", "run move-in (or `nosy setup <repo>`)");
   else {
-    let K = null; try { K = JSON.parse(fs.readFileSync(src, "utf8")); } catch (e) { add("mention", "sources-unreadable", `${path.basename(src)} isn't valid JSON`, `fix it by hand: ${String(e.message).slice(0, 80)}`); }
+    let K = null; try { K = parseJson(fs.readFileSync(src, "utf8")); } catch (e) { add("mention", "sources-unreadable", `${path.basename(src)} isn't valid JSON`, `fix it by hand: ${String(e.message).slice(0, 80)}`); }
     if (K) {
       const [, keys] = renameKeys(K), paths = []; renamePaths(K, paths);
       // One finding per file, not per key: "23 old keys (birakilan → dropped, istek → request, …)".
@@ -95,7 +95,7 @@ export function examine(pm) {
   for (const dirName of ["state", "durum"]) {
     const d = path.join(pm, dirName); if (!fs.existsSync(d)) continue;
     for (const f of fs.readdirSync(d).filter(f => f.endsWith(".json"))) {
-      let j; try { j = JSON.parse(fs.readFileSync(path.join(d, f), "utf8")); } catch { continue; }
+      let j; try { j = parseJson(fs.readFileSync(path.join(d, f), "utf8")); } catch { continue; }
       const old = oldKeysIn(j); if (!old.length) continue;
       const name = FILES[f] || f;
       add("route", "old-state", `${dirName}/${f} was written by an older Nosy (keys like ${old.slice(0, 3).join(", ")})`, `re-run ${WRITER[name] || "the command that writes it"}`, { path: `${dirName}/${f}` });
@@ -116,7 +116,7 @@ export function fix(pm, R) {
   const done = [];
   const src = ["sources.json", "kaynaklar.json"].map(f => path.join(pm, f)).find(f => fs.existsSync(f));
   if (src && R.findings.some(f => f.id === "old-key" || f.id === "old-path")) {
-    let K = JSON.parse(fs.readFileSync(src, "utf8"));
+    let K = parseJson(fs.readFileSync(src, "utf8"));
     K = renameKeys(K)[0]; K = renamePaths(K);
     fs.writeFileSync(src, JSON.stringify(K, null, 1) + "\n");
     done.push(`${path.basename(src)}: keys and paths renamed`);

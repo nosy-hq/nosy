@@ -26,7 +26,7 @@ const pages = {
 };
 before(async () => {
   server = http.createServer((q, r) => { const p = pages[q.url]; if (!p) { r.writeHead(404); return r.end(); } r.writeHead(200, { "content-type": p.type }); r.end(p.body); });
-  await new Promise(res => server.listen(0, "127.0.0.1", res));
+  await new Promise(res => server.listen(0, "127.0.0.1", res)); server.unref();
   base = `http://127.0.0.1:${server.address().port}`;
   pm = temporary("nosy-watch-js-");
   fs.mkdirSync(path.join(pm, "rivals"), { recursive: true });
@@ -34,7 +34,7 @@ before(async () => {
   fs.writeFileSync(path.join(pm, "rivals", "bare.md"), `# Bare\n\n## Sources\n- ${base}/bare (read 2026-09-28)\n`);
   fs.writeFileSync(path.join(pm, "sources.json"), JSON.stringify({ watch: { bare: [`${base}/bare`] } })); // not the site root, which is the shell above
 });
-after(() => { server.close(); clean(pm); });
+after(() => { server.close(); server.closeAllConnections?.(); clean(pm); });
 
 const watch = () => new Promise(res => {
   const json = path.join(pm, "state", "watch.json");

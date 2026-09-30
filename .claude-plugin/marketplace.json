@@ -1,6 +1,6 @@
 {
   "name": "nosy",
-  "description": "Nosy's local plugin marketplace. One plugin (nosy), one-command install.",
+  "description": "Nosy's plugin marketplace. One plugin (nosy), one-command install.",
   "owner": {
     "name": "Nosy HQ"
   },

@@ -8,7 +8,7 @@ This file is host-agnostic: it's the common entry point for Codex, Cursor, Gemin
 
 ## Commands
 
-Every command is active (owner decision, 28 Sep: the narrowing to the shipped record was reversed, `pm/decisions.md`). Grouped by direction: set up `move-in`, `map`, `doctor` · inside `shipped`, `peek`, `overheard`, `psst`, `frontyard`, `dresscode` · over the fence `neighbors` · ahead `canwe`, `spill`, `scoop` · share `tea` · loop `stakeout`. `bet` / `score` are optional.
+Every command is active. Grouped by direction: set up `move-in`, `map`, `doctor` · inside `shipped`, `peek`, `overheard`, `psst`, `frontyard`, `dresscode` · over the fence `neighbors` · ahead `canwe`, `spill`, `scoop` · share `tea` · loop `stakeout`. `bet` / `score` are optional.
 
 For each command: what it does, and the file with the full step-by-step instructions.
 
@@ -66,6 +66,6 @@ The scripts (`<skill>/tools/*.mjs`) are dependency-free Node — they count, mat
 
 For agent-specific steps (Cursor, Codex CLI, Gemini CLI, Claude Code plugin/project skill, claude.ai zip): `docs/INSTALL.md`.
 
-One-command install (`npx github:nosy-hq/nosy install`): Claude Code, Codex, Cursor, Gemini CLI, Copilot, OpenCode, Kiro. Works by copying the skill folder (`npx skills add nosy-hq/nosy`, or by hand): Windsurf, Roo, Junie. Node 18.17 or newer and git are the only requirements.
+One-command install (`npx github:nosy-hq/nosy install`): Claude Code, Codex, Cursor, Gemini CLI, Copilot, OpenCode, Kiro. Works by copying the skill folder (`npx skills add nosy-hq/nosy`, or by hand): Windsurf, Roo, Junie. Node 18.17 or newer and git are the only requirements. If an install fails, don't retry in a loop: run `npx github:nosy-hq/nosy doctor --check` once and show its output to the human. Installing changes no settings; it copies the skill folder into the project.
 
 The model-free counting in one command: `node skill/tools/nosy.mjs <setup|check|peek|inventory|psst|refute|decision|nudge|facts|find|cite-check|never-check|canwe|notes|page|weekly|notify|mcp>` (`help` lists them all). The same core also runs as an MCP server (`nosy.mjs mcp`), a GitHub Action (`action.yml`), and a Slack/Discord notifier (`nosy.mjs notify`).

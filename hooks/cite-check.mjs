@@ -98,7 +98,7 @@ export async function run(input, { lookup } = {}) {
 }
 
 async function main() {
-  if (off(process.env.CLAUDE_PLUGIN_OPTION_DISABLE_CITE_CHECK ?? process.env.NOSY_NO_CITE_CHECK)) return;
+  if (off(process.env.CLAUDE_PLUGIN_OPTION_DISABLE_CITE_CHECK) || off(process.env.NOSY_NO_CITE_CHECK)) return;
   let input; try { input = JSON.parse(fs.readFileSync(0, "utf8") || "{}"); } catch { return; }
   const r = await run(input); if (!r) return;
   const out = r.event === "PostToolUse"

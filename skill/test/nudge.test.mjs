@@ -96,6 +96,14 @@ test("after-commit hook: speaks once per new commit, only for commands that land
   assert.equal(hook(bare, "git commit -m x", env).output, "", "not moved in: silent");
 });
 
+test("after-commit hook: a plugin option left at \"false\" does not shadow NOSY_NO_NUDGE, and does not switch the hook off", () => {
+  const { root } = product(), memo = temporary("nosy-memo-"); dirs.push(memo);
+  commit(root, "feat: bulk CSV export for invoices");
+  const optionFalse = { NOSY_NUDGE_DIR: memo, CLAUDE_PLUGIN_OPTION_DISABLE_COMMIT_NUDGE: "false" };
+  assert.equal(hook(root, 'git commit -m "x"', { ...optionFalse, NOSY_NO_NUDGE: "1" }).output, "", "option \"false\" + NOSY_NO_NUDGE=1: off");
+  assert.match(JSON.parse(hook(root, 'git commit -m "x"', optionFalse).output).systemMessage, /Bulk export to CSV/, "option \"false\" alone: it speaks (the off run did not use up the commit)");
+});
+
 test("after-commit hook: first time in a repo, an old HEAD (a no-op pull) stays silent", () => {
   const { root } = product(), memo = temporary("nosy-memo-"); dirs.push(memo);
   const old = "2026-01-01T00:00:00Z";

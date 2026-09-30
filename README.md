@@ -6,7 +6,7 @@
 
 Nosy is a product manager that lives inside your coding agent. It goes through your backend, your git history and your roadmap, checks what your rivals already shipped, and tells you what you can build next: sized, placed on the roadmap, with a receipt for every claim.
 
-The plugin is free and MIT. Nosy Cloud (later) adds a shared record for your team; it never changes what the plugin does.
+The plugin is free and MIT. Nosy Cloud (cloud.nosy.sh) is live and free for now: a shared record for your team. It never changes what the plugin does. [See a sample report](https://cloud.nosy.sh/demo) (made-up data).
 
 ## Install
 
@@ -17,32 +17,38 @@ In Claude Code (terminal, desktop app, VS Code, JetBrains):
 /plugin install nosy@nosy
 ```
 
-Check it loaded: `claude plugin list` shows `nosy@nosy` as enabled. Then type `/nosy` in your repo: it looks at what's there and tells you the two or three things worth running first. Needs git and Node 18.17 or newer.
+Send the two commands one at a time. Check it loaded: `claude plugin list` shows `nosy@nosy` as enabled. Then type `/nosy` in your repo: it looks at what's there and tells you the two or three things worth running first. Needs git and Node 18.17 or newer. Something wrong? `npx github:nosy-hq/nosy doctor --check` ([If it broke](#if-it-broke)).
 
-**First run.** `/nosy:move-in` runs once. It reads your README, docs, decision files, git history, and issues and PRs (through `gh`, if you have it). The counting scripts run on your machine with no model. It asks you at most three questions, plus one about your North Star number. The model work is your agent's session, plus up to 5 rival-research sub-agents (web search, cheaper model) and one refuter pass. How long that takes depends on repo size; we haven't measured it yet, so there is no number here.
+**First run.** `/nosy:move-in` runs once. It reads your README, docs, decision files, git history, and issues and PRs (through `gh`, if you have it). The counting scripts run on your machine with no model. It asks at most three questions, plus one about your North Star number and, the first time, one about which web search to use for rival research. The model work is your agent's session, plus one cheaper-model sub-agent per rival (web search) and one refuter pass. The counting scripts take seconds on a small repo (setup took about 0.4 s on a 43-file repo in our test); the model steps take minutes, and how many depends on your repo and how many rivals you list. We haven't measured a full first run yet, so there is no total here.
 
 Not Claude Code? Codex, Cursor, Gemini CLI, Copilot, MCP, CI: see [Other agents](#other-agents).
 
 ## What you get
 
-*Illustration: product and numbers are made up.*
+A real run, unedited except for removed lines (marked `[… N lines removed]`), on [chatwoot/chatwoot](https://github.com/chatwoot/chatwoot), 30 Sep 2026, commit `03702d17`:
 
 ```
-$ /nosy:canwe "bulk export"
+$ nosy canwe "retry failed webhooks"
+## In the code (read this first)
+[… 1 line removed]
+### "retry" · 141 code file(s), 304 doc(s) at origin/develop
+[… 2 lines removed]
+- app/jobs/agent_bots/webhook_job.rb:3  retry_on Webhooks::Trigger::RetryableError, wait: 3.seconds, attempts: 3 do |job, error|
+[… 3 lines removed]
+- lib/webhooks/trigger.rb:3  RETRYABLE_AGENT_BOT_STATUSES = [429, 500].freeze
+[… 67 lines removed]
+## Size (from history)
 
-Plain agent:  It reads the code as it is today and tells you what it finds.
-              It doesn't know 23 customers asked, or that a rival shipped
-              theirs on Tuesday, or where it fits your roadmap.
-
-Nosy:         We can. POST /exports/bulk exists. No button.
-              Missing: button, progress toast, 1 filter
-              Size ~1 day · wave 2 · asked 23×
-              Last asked 7 Sep: then "no endpoint yet".
+**S** · active-day median 1 (p25-p75: 1-1) · confidence: medium · keyword coverage 77%
 ```
 
-Nosy isn't smarter than your agent. What it has is the record, the demand and the memory. A real run, on a public repo, is [further down](#on-a-real-repo).
+Read it like this: retries exist for one kind of webhook (agent bots, 3 attempts), and the size comes from similar past changes in git. Treat **S** as a rough guess: the three similar changes it was based on were about WhatsApp, not webhooks (the full output says so). The script also printed a verdict guess and demand counts; both were off in this run, so they are left out here and the full run says why.
 
-**1 skill · 17 commands · 79 scripts · 4 hooks · 16 named rules** (`nosy explain` lists the rules, and says which a script checks and which are instructions). The counting is plain, dependency-free Node: it runs in your terminal, in CI or as an MCP server, with no model and no API key. Your agent adds the judgment on top. Everything Nosy remembers lives in a `pm/` folder in your repo.
+This shows Nosy's output only. It is not a comparison with plain Claude on the same question; the head-to-head tests, including the ones Nosy lost, are in [docs/EVALS.md](docs/EVALS.md).
+
+Nosy isn't smarter than your agent. What it has is the record, the demand and the memory. It reads a product in any language, and its own output is English. The commands, the longer output and what this run got wrong are in [docs/EXAMPLE.md](docs/EXAMPLE.md); more real counts are [further down](#on-a-real-repo). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
+
+**1 skill · 17 commands · 80 scripts · 4 hooks · 16 named rules** (`nosy explain` lists the rules, and says which a script checks and which are instructions). The counting is plain, dependency-free Node: it runs in your terminal, in CI or as an MCP server, with no model and no API key. Your agent adds the judgment on top. Everything Nosy remembers lives in a `pm/` folder in your repo.
 
 ## Other agents
 
@@ -72,28 +78,30 @@ Details for every path: `docs/INSTALL.md`.
 ## Three directions, in order
 
 1. **Inside.** Your backend, your git history, your roadmap. What shipped, what's half-built, what nobody wired up to a screen.
-2. **Over the fence.** What the neighbours (competitors) shipped, only as a reason to act, never the whole story. Nosy builds the feature matrix itself: every rival against the same 25 steps, a public source in every cell, and "announced" kept apart from "shipped". Every line ends with "here's how much of that we already have."
+2. **Over the fence.** What the neighbours (competitors) shipped, only as a reason to act, never the whole story. Nosy builds the feature matrix itself: every rival against the same steps (the rows of your own matrix), a public source in every cell, and "announced" kept apart from "shipped". Every line ends with "here's how much of that we already have."
 3. **Ahead.** "We can do this." Nosy works out what you can do now by matching what actually shipped (git, backend) against what's still asked for (requests, issues, decisions, the gaps rivals exposed). Sized, placed in a wave on the roadmap, spec'd for your agents to build.
 
 ## While you build
 
-Nosy doesn't wait for the weekly run. After each commit or merge it whispers what that change means for the product: *"This looks like it closes **bulk export**, which Acme and Globex already have. Mark it done; it goes in this week's landing roundup. Next product decision: SSO."* Silent when there's nothing new. Your landing page gets a weekly roundup, not a change per commit (every page change is a deploy): *"This week you shipped SSO, bulk export and audit filters. Put them on the page in one change?"*
+Nosy doesn't wait for the weekly run. After each commit or merge it whispers what that change means for the product (example wording, not from a real run): *"This looks like it closes **bulk export**, which Acme and Globex already have. Mark it done; it goes in this week's landing roundup. Next product decision: SSO."* Silent when there's nothing new. Your landing page gets a weekly roundup, not a change per commit (every page change is a deploy): *"This week you shipped SSO, bulk export and audit filters. Put them on the page in one change?"*
 
-And if a commit or PR adds something you put on your never list ("we don't send by fax", "no fake data"), your agent is told which rule and which line, before anything is pushed. It never blocks you; the rule is yours to change. Each of the four hooks has an off switch (`docs/INSTALL.md`, section f).
+And if a commit or PR adds something you put on your never list ("we don't send by fax", "no fake data"), your agent is told which rule and which line, before anything is pushed. It never blocks your commands; the rule is yours to change. When your agent finishes an answer, the reference-check hook also checks every `file:line`, quote, commit and `#N` in it (for `#N` it reads GitHub through your own `gh`) and sends the agent back once to fix or drop a reference that doesn't hold up. Each of the four hooks has an off switch (`NOSY_NO_PSST=1`, `NOSY_NO_NUDGE=1`, `NOSY_NO_NEVER_CHECK=1`, `NOSY_NO_CITE_CHECK=1`, or the plugin settings; `docs/INSTALL.md`, section f).
 
 ## If it broke
 
-- **Something looks wrong or old:** run `/nosy:doctor`. It finds old file names and settings keys in your `pm/` folder and renames them (`--fix`), and tells you what to regenerate. Terminal: `nosy doctor`.
-- **The install itself broke:** open your agent in this repo and say: *"Read AGENTS.md and docs/INSTALL.md, install Nosy for me."*
+- **The install looks broken:** `npx github:nosy-hq/nosy doctor --check`. It checks Node, git, gh, the skill files, the hooks and `pm/sources.json`, and prints the fix next to each failing line. Local only: no network, writes nothing. If your agent is installing Nosy for you, tell it to run this once and show you the output instead of retrying.
+- **Something looks old:** run `/nosy:doctor` (terminal: `npx github:nosy-hq/nosy doctor`). It finds old file names and settings keys in a `pm/` folder written by an older Nosy and renames them (`--fix`), and tells you what to regenerate.
+- **Still stuck:** open your agent in this repo and say: *"Read AGENTS.md and docs/INSTALL.md, install Nosy for me."*
 - **Uninstall (Claude Code):** `/plugin uninstall nosy@nosy`, then `/plugin marketplace remove nosy`. The commands and hooks go with it. To just pause it: `/plugin disable nosy`.
 - **Uninstall (other agents):** `npx github:nosy-hq/nosy uninstall` removes only the skill folders `nosy install` wrote (each has a marker file). A `nosy` folder you made yourself is never touched.
 - **What stays:** your `pm/` folder. It's yours; delete it by hand if you want it gone.
 
 ## What Nosy reads, what leaves your machine
 
-- **Reads:** your code, git history, issue and PR metadata, your decision and roadmap docs, and public pages (rival sites, your own landing page).
-- **Writes:** your `pm/` folder, plus a few named exceptions (temporary files, the skill folders `nosy install` writes, files you name with a flag), all listed in [`docs/DATA.md`](docs/DATA.md).
-- **Sends:** Nosy sends nothing on its own. Every network call is one you start: it reads the public rival pages you listed, reads GitHub through your own `gh`, posts to the webhook you give `nosy notify`, or (`nosy publish`, off until you configure a target and confirm) sends counts and structure, never quotes, to a Nosy Cloud you configured. `publish` and `notify` stop on a secret or personal data unless you pass `--allow-sensitive`. The model call is your agent's own.
+- **Reads.** Nosy reads your code, git history, GitHub issues and PRs including their text (titles, bodies, comments and author logins, through your own `gh`), your decision and roadmap docs, and public web pages. Bodies and comments are cut at 4,000 characters and saved in `pm/state/facts/github.json`. Support and interview exports are read only if you drop them into `pm/signal/`, with personal data masked.
+- **Writes.** Nosy writes to your `pm/` folder, plus a few named files: temporary files, a first-run marker, the skill folders `nosy install` copies and files you name with a flag. The optional weekly GitHub Action commits and pushes `pm/state/` and the decision page only if you set `commit: "true"`. Every path is listed in [`docs/DATA.md`](docs/DATA.md).
+- **Sends.** Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed, and GitHub through your own `gh`, including, after each agent answer, a read-only lookup of the `#N` issues the answer cites (turn that off with `NOSY_CITE_GH=0`, or turn the whole reference-check hook off with `NOSY_NO_CITE_CHECK=1`). `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes). `publish` and `notify` stop on a secret or personal data unless you pass `--allow-sensitive`. The model call is your agent's own.
+- **No telemetry.** No analytics, usage pings, crash reports or update checks.
 
 The exact list: [`docs/DATA.md`](docs/DATA.md).
 
@@ -107,8 +115,8 @@ The exact list: [`docs/DATA.md`](docs/DATA.md).
 | There's **no roadmap, no decision log, few issues** | Nosy can still count code and git, but it has nothing to compare them with. Rates built on fewer than 10 rows are withheld ("too few to say"), not shown low. |
 | It's a **tiny or brand-new repo** | Thin history gives thin counts. Give it a few weeks of commits first. |
 | You only have **claude.ai chat** | No git or repo access there, so the scripts don't run. Only `neighbors` and `spill` are useful (`docs/INSTALL.md`, section e). |
-| You want it to **decide or act for you** | It suggests. It never edits your page, pushes, opens a PR or an issue, or sends a message unless you ask for that exact thing. |
-| You want **customer data or analytics** | It never reads customer data, secrets or keys. It sees analytics event names, not events. Demand comes only from exports you drop into `pm/signal/`. |
+| You want it to **decide or act for you** | It suggests. Its commands never edit your page, push, open a PR or an issue, or send a message unless you ask for that exact thing. (The optional weekly GitHub Action pushes a commit only if you set `commit: "true"`.) |
+| You want **customer data or analytics** | It doesn't connect to customer systems and doesn't read secrets or keys. It does read GitHub issue and PR text, which can quote customers, and any export you drop into `pm/signal/` (personal data masked). It sees analytics event names, not events. |
 
 ## Commands
 
@@ -140,6 +148,7 @@ The counting runs without a model (`npx github:nosy-hq/nosy <command>` or `node 
 
 | Command | What it counts |
 |---|---|
+| `nosy doctor --check` | Is the install healthy: Node, git, gh, the skill files, hooks, `pm/sources.json`; each problem carries its fix (exit 2 on a hard failure). |
 | `nosy doctor [--fix]` | An older `pm/` folder: what's out of date, and the renames (exit 2 while anything's left). |
 | `nosy setup [repo]` | Proposes `pm/sources.json` for your repo (the script half of `move-in`). |
 | `nosy` | What to run now: 2–3 suggestions with reasons, then every command. |
@@ -168,6 +177,8 @@ The counting runs without a model (`npx github:nosy-hq/nosy <command>` or `node 
 - The headline shipped count is **withheld**: some Metabase work is linked only in issue comments. Until those are counted, the number would undercount, so Nosy doesn't show one.
 - **At least 576** open requests have no decision yet: no assignee, no milestone, no decision label, older than two weeks. 267 of them sit with one team.
 
+How we tested `psst` against a plain agent, including the runs where Nosy lost: [`docs/EVALS.md`](docs/EVALS.md). Our own tests, small, with the limits written down.
+
 ## Status
 
-Early version, open source (MIT). Built for ourselves first: Nosy researches its own competitors with its own commands before anyone else uses it. Not yet published anywhere; no stability promise.
+Early version, open source (MIT). Built for ourselves first: Nosy researches its own competitors with its own commands before anyone else uses it. No stability promise yet.

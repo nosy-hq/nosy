@@ -20,8 +20,9 @@ function input() {
   try { return JSON.parse(fs.readFileSync(0, "utf8") || "{}"); } catch { return {}; }
 }
 function disabled() {
-  const v = String(process.env.CLAUDE_PLUGIN_OPTION_DISABLE_COMMIT_NUDGE ?? process.env.NOSY_NO_NUDGE ?? "").toLowerCase();
-  return v === "1" || v === "true" || v === "on" || v === "yes";
+  // Either switch turns it off: an option Claude Code exports as "false" (its default) must not hide a NOSY_NO_* you set yourself.
+  const on = v => ["1", "true", "on", "yes"].includes(String(v ?? "").toLowerCase());
+  return on(process.env.CLAUDE_PLUGIN_OPTION_DISABLE_COMMIT_NUDGE) || on(process.env.NOSY_NO_NUDGE);
 }
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
 
