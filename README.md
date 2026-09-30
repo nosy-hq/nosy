@@ -84,7 +84,7 @@ Nosy is one skill folder (`skill/`, the open Agent Skills format) plus small dep
 | **Slack / Discord** | The Action, or `nosy notify`, posts the weekly "Psst…" to a webhook. |
 | **Terminal, no agent** | `npx github:nosy-hq/nosy weekly` |
 
-`npx github:…` runs code straight from a repo. To know which code, pin a release tag: `npx github:nosy-hq/nosy#v0.16.0 install`. Every path in detail: [docs/INSTALL.md](docs/INSTALL.md).
+`npx github:…` runs code straight from a repo. To know which code, pin a release tag: `npx github:nosy-hq/nosy#v0.17.0 install`. Every path in detail: [docs/INSTALL.md](docs/INSTALL.md).
 
 </details>
 
@@ -113,11 +113,11 @@ Nosy is one skill folder (`skill/`, the open Agent Skills format) plus small dep
 | `/nosy:bet · /nosy:score` | Optional: record a bet, settle it against git later. |
 | `/nosy:doctor` | Renames old files and keys in a `pm/` written by an older Nosy (`--fix`). |
 
-Most commands have a terminal twin that runs with no model, for example `npx github:nosy-hq/nosy peek` (see [docs/CLI-CONTRACT.md](docs/CLI-CONTRACT.md) for which, and for the ones that are agent only). `npx github:nosy-hq/nosy rival-demand` has no slash command: it lists what the users of your open-source rivals ask for most, from their public issues and Discussions.
+Most commands have a terminal twin that runs with no model, for example `npx github:nosy-hq/nosy peek` (see [docs/CLI-CONTRACT.md](docs/CLI-CONTRACT.md) for which, and for the ones that are agent only). `npx github:nosy-hq/nosy rival-demand` has no slash command: it lists what the users of your open-source rivals ask for most, from their public issues and Discussions. `npx github:nosy-hq/nosy todo` has no slash command either: it is the list of what only a person can do, or said they would (an account, a payment, a submission under your name). Your agent files an item instead of leaving it in a chat that ends, the first line of your next session says what still waits, and the page shows it as "Waiting on people". It is not a task tracker: no due dates, no estimates. The items are files under `pm/todo/` in your repo, so a teammate's agent sees the same list.
 
 </details>
 
-**1 skill · 17 commands · 81 scripts · 4 hooks · 16 named rules.** Plain, dependency-free Node: the counting runs in your terminal, in CI or as an MCP server, with no model and no API key. Your agent adds the judgment. Everything Nosy remembers lives in a `pm/` folder in your repo.
+**1 skill · 17 commands · 82 scripts · 4 hooks · 16 named rules.** Plain, dependency-free Node: the counting runs in your terminal, in CI or as an MCP server, with no model and no API key. Your agent adds the judgment. Everything Nosy remembers lives in a `pm/` folder in your repo.
 
 ## If it broke
 
@@ -131,6 +131,17 @@ Most commands have a terminal twin that runs with no model, for example `npx git
 - **Writes.** Nosy writes to your `pm/` folder, plus a few named files: temporary files, a first-run marker, the skill folders `nosy install` copies and files you name with a flag. The optional weekly GitHub Action commits and pushes `pm/state/` and the decision page only if you set `commit: "true"`.
 - **Sends.** Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed, and GitHub through your own `gh`, including a read-only lookup of the `#N` issues your agent's answer cites (`NOSY_CITE_GH=0` turns that off), and, when you run `nosy rival-demand`, the public issues and Discussions of the open-source rivals you name. `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes). Both stop on a secret or personal data unless you pass `--allow-sensitive`. The model call is your agent's.
 - **No telemetry.** No analytics, usage pings, crash reports or update checks.
+
+**What the plugin's hooks do on their own.** Installing the plugin adds five hooks. They run on your machine, read local files and git, and print a short note to your agent. None of them sends your code, history or documents anywhere, and each has an off switch in the plugin's settings.
+
+| Hook | Runs when | What it does | Network |
+|---|---|---|---|
+| `psst-summary` | A session starts | Prints one line from `pm/state/lowhanging.json`, if it exists | None |
+| `after-commit` | A commit, merge, pull, cherry-pick or `gh pr merge` finishes | Says which matrix gap the change may close and the next command; keeps the last commit id in one small temp file | None |
+| `never-check` | A `git commit` or `gh pr create` finishes | Compares what went in with the "never" rules in `pm/sources.json`; never blocks | None |
+| `cite-check` | The agent finishes an answer or writes a Markdown file, in a repo with `pm/sources.json` | Checks every `file:line`, quote, commit and `#N` it cites | A read-only lookup of each cited `#N` through your `gh`, only if `sources.json` names a repo. `NOSY_CITE_GH=0` turns it off |
+
+Everything else that touches the network is a command you run: `watch`, `sweep` and `weekly` (a plain GET of the rival pages you listed), `notify` (to the Slack or Discord webhook you pass; its message includes up to five merged and three close-to-merge PR titles, and `--dry-run` prints it first) and `publish` (to the Cloud address you configured). The table of every path is in [docs/DATA.md](docs/DATA.md).
 
 The exact list, and what masking does not cover: [docs/DATA.md](docs/DATA.md).
 

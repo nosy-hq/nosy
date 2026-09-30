@@ -11,12 +11,21 @@ import { termPattern, fold, find, branchFacts } from "../tools/facts.mjs";
 const F = path.join(Tool, "facts.mjs"), dirs = [];
 after(() => dirs.forEach(clean));
 
+// Every object id in the repo, loose or packed (a repack changes the files, not this set).
+// Compared before and after a run: "facts.mjs wrote no new object". Never fetches from a promisor remote.
+const objectIds = dir => new Set(execFileSync("git", ["-C", dir, "cat-file", "--batch-all-objects", "--batch-check=%(objectname)"], { encoding: "utf8", env: { ...process.env, GIT_NO_LAZY_FETCH: "1" } }).split("\n").filter(Boolean));
+const added = (before, after) => [...after].filter(id => !before.has(id));
+// A clone that never runs gc/maintenance on its own.
+const cloneQuiet = (filter, root, clone) => { execFileSync("git", ["clone", "-q", "-c", "gc.auto=0", "-c", "maintenance.auto=false", "--no-local", `--filter=${filter}`, "--no-checkout", `file://${root}`, clone]); };
+
 function repo() {
   const root = temporary("nosy-facts-"); dirs.push(root);
   const git = (who, date, ...a) => execFileSync("git", ["-C", root, ...a], { encoding: "utf8", env: { ...process.env, GIT_AUTHOR_NAME: who, GIT_AUTHOR_EMAIL: "x@x", GIT_COMMITTER_NAME: who, GIT_COMMITTER_EMAIL: "x@x", GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } }).trim();
   const put = (f, s) => { fs.mkdirSync(path.dirname(path.join(root, f)), { recursive: true }); fs.writeFileSync(path.join(root, f), s); };
   const commit = (who, date, msg) => { git(who, date, "add", "-A"); git(who, date, "commit", "-q", "-m", msg); };
   git("t", "2026-08-01T10:00:00+03:00", "init", "-q", "-b", "main");
+  // No background gc/maintenance: it could repack or prune objects while a test counts them.
+  git("t", "2026-08-01T10:00:00+03:00", "config", "gc.auto", "0"); git("t", "2026-08-01T10:00:00+03:00", "config", "maintenance.auto", "false");
   put("apps/api/a.go", "package a\n"); put("docs/x.md", "Bilirkişi raporu burada.\n"); commit("Selim", "2026-08-01T10:00:00+03:00", "init");
   // Squashed: the branch's change reached main as another commit; a merge would change nothing.
   git("t", "2026-09-20T10:00:00+03:00", "checkout", "-q", "-b", "squashed");
@@ -107,11 +116,10 @@ test("unreadable sources.json or unknown command: exit 1", () => {
 
 test("big repos: only recent branches, capped; nothing written to the repo; a blobless clone is compared by blob id without fetching", () => {
   const r = repo();
-  const count = dir => { let n = 0; const walk = d => { for (const e of fs.readdirSync(d, { withFileTypes: true })) e.isDirectory() ? walk(path.join(d, e.name)) : n++; }; walk(dir); return n; };
-  const before = count(path.join(r.root, ".git", "objects"));
+  const before = objectIds(r.root);
   const out = run(F, [r.pm, "build", "--now", "2026-09-29", "--no-gh", "--branch-days", "7", "--max-branches", "5"]);
   assert.equal(out.code, 0, out.error);
-  assert.equal(count(path.join(r.root, ".git", "objects")), before, "merge-tree wrote nothing into the repo");
+  assert.deepEqual(added(before, objectIds(r.root)), [], "merge-tree wrote nothing into the repo");
   const B = JSON.parse(fs.readFileSync(path.join(r.pm, "state", "facts", "branches.json"), "utf8"));
   assert.deepEqual([B.scope.checked, B.scope.recent, B.scope.total, B.scope.partial, B.scope.farAhead], [2, 1, 3, false, 1], "the branch with a commit in the last 7 days, plus the older unmerged one furthest ahead");
   assert.deepEqual(B.branches.map(b => b.name).sort(), ["real", "squashed"]);
@@ -120,13 +128,13 @@ test("big repos: only recent branches, capped; nothing written to the repo; a bl
   execFileSync("git", ["-C", r.root, "config", "uploadpack.allowFilter", "true"]);
   const bare = temporary("nosy-facts-partial-"); dirs.push(bare);
   const clone = path.join(bare, "c");
-  execFileSync("git", ["clone", "-q", "--no-local", "--filter=blob:none", "--no-checkout", `file://${r.root}`, clone]);
+  cloneQuiet("blob:none", r.root, clone);
   execFileSync("git", ["-C", clone, "update-ref", "refs/heads/main", "origin/main"]);
   const pm2 = path.join(bare, "pm"); fs.mkdirSync(pm2); fs.writeFileSync(path.join(pm2, "sources.json"), JSON.stringify({ repo: clone, ref: "main" }));
-  const b2 = count(path.join(clone, ".git", "objects"));
+  const b2 = objectIds(clone);
   const out2 = run(F, [pm2, "build", "--now", "2026-09-29", "--no-gh"]);
   assert.equal(out2.code, 0, out2.error);
-  assert.equal(count(path.join(clone, ".git", "objects")), b2, "no lazy fetch into the partial clone");
+  assert.deepEqual(added(b2, objectIds(clone)), [], "no lazy fetch into the partial clone");
   const B2 = JSON.parse(fs.readFileSync(path.join(pm2, "state", "facts", "branches.json"), "utf8"));
   assert.equal(B2.scope.partial, true);
   const real = B2.branches.find(b => /real$/.test(b.name));
@@ -148,14 +156,13 @@ test("a treeless clone: missing trees are never fetched; those branches are repo
   execFileSync("git", ["-C", r.root, "config", "uploadpack.allowFilter", "true"]);
   const dir = temporary("nosy-facts-treeless-"); dirs.push(dir);
   const clone = path.join(dir, "c");
-  execFileSync("git", ["clone", "-q", "--no-local", "--filter=tree:0", "--no-checkout", `file://${r.root}`, clone]);
+  cloneQuiet("tree:0", r.root, clone);
   execFileSync("git", ["-C", clone, "update-ref", "refs/heads/main", "origin/main"]);
   const pm = path.join(dir, "pm"); fs.mkdirSync(pm); fs.writeFileSync(path.join(pm, "sources.json"), JSON.stringify({ repo: clone, ref: "main" }));
-  const packs = () => fs.readdirSync(path.join(clone, ".git", "objects", "pack")).length;
-  const before = packs();
+  const before = objectIds(clone);
   const out = run(F, [pm, "build", "--now", "2026-09-29", "--no-gh"]);
   assert.equal(out.code, 0, out.error);
-  assert.equal(packs(), before, "no lazy fetch: no new pack written");
+  assert.deepEqual(added(before, objectIds(clone)), [], "no lazy fetch: no new object written");
   const B = JSON.parse(fs.readFileSync(path.join(pm, "state", "facts", "branches.json"), "utf8"));
   assert.ok(B.scope.notLocal >= 1, JSON.stringify(B.scope));
   assert.match(fs.readFileSync(path.join(pm, "state", "facts.md"), "utf8"), /trees aren't in this clone/);

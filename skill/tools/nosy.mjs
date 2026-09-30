@@ -3,7 +3,7 @@
 // from every agent, from CI (GitHub Action), and from the MCP server; the judgment call still belongs to the agent.
 // Counting happens in the script, judgment in the agent, memory in pm/.
 // Usage: node nosy.mjs <command> [--pm <pm folder>] [...]      (via npx: `npx nosy <command>`)
-// Commands: next (the default), facts, find, sweep, cite-check, team-next, fields, receipts, refute, decision, nudge, install, update, uninstall, doctor, setup, check, explain, shipped, peek, inventory, gates, metrics, frontyard, signals, watch, rival-demand, psst, bet, score, canwe, notes, page, weekly, notify, publish, mcp, help.
+// Commands: next (the default), facts, find, sweep, cite-check, team-next, fields, receipts, refute, decision, nudge, install, update, uninstall, doctor, setup, check, explain, shipped, peek, inventory, gates, metrics, frontyard, signals, watch, rival-demand, psst, bet, score, todo, canwe, notes, page, weekly, notify, publish, mcp, help.
 // No dependencies; uses git and (if present) gh. The commands that write outward are `notify` (only to the given webhook) and `publish` (opt-in: counts and structure only, to a Nosy Cloud you configured, after the privacy scan); `watch` only reads public rival pages (plain GET).
 import fs from "node:fs";
 import path from "node:path";
@@ -171,6 +171,15 @@ const Commands = {
     return sourceRequired({ repo: false }) && script("bet.mjs", [pm, ...process.argv.slice(3).filter((a, i, all) => a !== "--pm" && all[i - 1] !== "--pm")]);
   },
   score: () => sourceRequired() && script("score.mjs", [pm, ...args.filter(a => a === "--include-backfill"), "--json", path.join(pm, "state", "score.json")]),
+  // Todo: what only a person can do, or said they would do (todo.mjs). No arguments (or `list`) lists what waits; `add`, `done`,
+  // `drop`, `show` change one item's file under pm/todo/. Nothing is sent anywhere, and no copy of the titles goes into pm/state/
+  // (the Action commits that folder); `list --json <file>` writes one where you point it.
+  todo: () => {
+    if (!sourceRequired({ repo: false })) return;
+    const a = process.argv.slice(3).filter((x, i, all) => x !== "--pm" && all[i - 1] !== "--pm");
+    const act = !a.length || a[0].startsWith("--") ? ["list", ...a] : a;
+    return script("todo.mjs", [pm, ...act]);
+  },
   canwe: () => {
     if (!args.length) { console.error('Usage: nosy canwe "<question>"'); process.exitCode = 1; return; }
     return sourceRequired() && script("canwe.mjs", [pm, ...args]);
@@ -329,6 +338,7 @@ Model-free counts (judgment stays with the agent; these just gather evidence):
   nosy rival-demand [--repos o/r,…]   what your open-source rivals' users ask for, by votes (issues + Discussions) → pm/state/rival-demand.json
   nosy bet place "<what>" --why "…" --estimate S|M|L   place a bet; prints the id to put in the commit/PR (Bet: nb-…)
   nosy score               settle bets from git (landed, reverted, patched, partial) → pm/state/score.json
+  nosy todo [list|add|done|drop|show]   what only a person can do, or said they would: add "<what>" --who ali --why "…" --blocks "…" · done <id> (files under pm/todo/; nothing is sent)
   nosy shipped [7d]        decisions that shipped (explicit links) + work that landed by reference, + recent (merged / close)
   nosy weekly [--short]    inventory → shipped → psst → score (if pm/bets/) → rival watch → page; --short: shipped → score → page
   nosy notify [--slack url] [--discord url] [--dry-run] [--allow-sensitive]   this week's "Psst…" summary (a secret or personal data stops it)

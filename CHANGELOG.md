@@ -2,6 +2,12 @@
 
 Versions match `package.json` and `.claude-plugin/plugin.json`. Dates are when the version was committed. Versions before 0.10.0 were pre-release and aren't listed.
 
+## 0.17.0 (2026-09-30)
+- New `nosy todo`: a list of what only a person can do, or said they would (an account, a payment, a submission under their name, a token, a sign-off). `add "<what>" --who <name> --why "…" --blocks "…"`, `list`, `done <id>`, `drop <id> --reason "…"`, `show <id>`. One file per item under `pm/todo/`, so a teammate's new item never conflicts with yours and every agent sees the same list. No due dates, no estimates.
+- The skill tells your agent to file such a step instead of leaving it in the chat, to keep going with the rest, and never to do a listed item itself or close one on a guess. The `nosy_todo` MCP tool does the same for Cursor, Claude Desktop and other clients.
+- The first line of every session says what still waits on a person (the session-start hook; off with the same switch as the opening summary). The page's first screen shows a "Waiting on people" tile and list.
+- `nosy publish` carries only how many things wait on people and for how long, never a title or a name. `docs/DATA.md` lists the new files.
+
 ## 0.16.0 (2026-09-30)
 - New `nosy rival-demand`: what the users of your open-source rivals ask for most. It reads the public issues and Discussions of the rival repos you name (`--repos`, `rivalRepos` in `sources.json`, or the GitHub links in `pm/rivals/*.md`) and lists titles, vote counts and links. Never bodies, never people.
 - It links an ask to a row of your matrix by words, lists asks that look alike at several rivals, and lists acronyms (MCP, SSO) that come up at several. These are hints made of words: open an ask before you quote it. An open ask is not proof a rival lacks the feature.

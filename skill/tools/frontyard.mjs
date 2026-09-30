@@ -1,5 +1,5 @@
 // Frontyard (owner's ask): shipped features ↔ landing page. "You built this, let's add it to the page."
-// Usage: node frontyard.mjs <pm folder> [--page <file>] [--day 60] [--json <file>]   (reads pm/sources.json)
+// Usage: node frontyard.mjs <pm folder> [--page <file>] [--site <folder of saved pages>] [--day 60] [--json <file>]   (reads pm/sources.json)
 // Reads: sources.json → repo, ref, frontyard: {
 //   path: "README.md" | ["apps/web/app/page.tsx", …]   page lives in the repo (text and last-change date come from git)
 //   url: "https://…"                                   page isn't in the repo; the script never hits the network — an agent fetches it and passes --page
@@ -166,7 +166,7 @@ const globRe = g => new RegExp("^" + g.split("**").map(p => p.split("*").map(s =
 const WHOLE_FILE = y => !/:\d+$/.test(y.source);
 const nameExists = (name, pageA) => { const a = smallAscii(name); return [a, a.replace(/[-_]/g, " "), a.replace(/[-_ ]/g, "")].some(v => v.length >= 3 && matchRe(v).test(pageA)); };
 
-function works(pm, { pageFileOf, dayArg } = {}) {
+function works(pm, { pageFileOf, dayArg, siteDirOf } = {}) {
   const K = readSources(pm);
   langOfLoad(K); // sources.json's `language`
   const V = K.frontyard || {}, day = +(dayArg || V.day || 60);
@@ -186,15 +186,31 @@ function works(pm, { pageFileOf, dayArg } = {}) {
     source = { type: "repo", path: paths, last_change: last, day_before: last ? Math.round((Date.now() - Date.parse(last)) / 864e5) : null };
   }
   if (!raw.trim()) return { ...empty, page_missing: true, url: V.url || null };
-  const pageA = smallAscii(raw);
   const Glossary = { ...DEFAULT_GLOSSARY, ...Object.fromEntries(Object.entries(K.glossary || {}).map(([a, b]) => [a, [...(DEFAULT_GLOSSARY[a] || []), ...[].concat(b)]])) };
-  // Is the root or one of its translations on the page; returns the match as "root→translation" (so the
-  // report shows why it matched).
+  // The matchers for one page's text. Is the root or one of its translations on the page; returns the match as
+  // "root→translation" (so the report shows why it matched).
   // A plural acronym ("PRDs", "APIs") is on the page as its singular: "prds" → a whole-word "prd" (
   // Nosy's README says "A PRD your agents can build from" and frontyard called "Writing PRDs / specs" missing).
-  const pageRoot = k => { if (k.length >= 4 && matchRe(k).test(pageA)) return k; if (k.length === 4 && k.endsWith("s") && new RegExp(`(?<![\\p{L}\\p{N}])${k.slice(0, 3)}(?![\\p{L}\\p{N}])`, "u").test(pageA)) return `${k}→${k.slice(0, 3)}`; const c = [...translations(k, Glossary), ...synonyms(k)].find(t => t.length >= 3 && matchRe(t).test(pageA)); return c ? `${k}→${c}` : null; };
-  // Field name: the full name is on the page, or at least half of its parts (itself or a translation) are ("decisions-read" → decision + reads).
-  const areaPage = name => { if (nameExists(name, pageA)) return true; const p = smallAscii(name).split(/[-_ ]+/).filter(x => x.length >= 4).map(root); return p.length > 0 && p.filter(pageRoot).length >= Math.ceil(p.length / 2); };
+  const matchersFor = pageA => {
+    const pageRoot = k => { if (k.length >= 4 && matchRe(k).test(pageA)) return k; if (k.length === 4 && k.endsWith("s") && new RegExp(`(?<![\\p{L}\\p{N}])${k.slice(0, 3)}(?![\\p{L}\\p{N}])`, "u").test(pageA)) return `${k}→${k.slice(0, 3)}`; const c = [...translations(k, Glossary), ...synonyms(k)].find(t => t.length >= 3 && matchRe(t).test(pageA)); return c ? `${k}→${c}` : null; };
+    // Field name: the full name is on the page, or at least half of its parts (itself or a translation) are ("decisions-read" → decision + reads).
+    const areaPage = name => { if (nameExists(name, pageA)) return true; const p = smallAscii(name).split(/[-_ ]+/).filter(x => x.length >= 4).map(root); return p.length > 0 && p.filter(pageRoot).length >= Math.ceil(p.length / 2); };
+    return { pageRoot, areaPage };
+  };
+  const pageA = smallAscii(raw);
+  const { pageRoot, areaPage } = matchersFor(pageA);
+  // the rest of the site. `--site <dir>` / `frontyard.site`: a folder of saved pages (docs, pricing,
+  // changelog, privacy…), one file per page. The landing page stays the thing compared; the site says where else a
+  // missing thing is, so "not on the landing" and "nowhere on the site" are different answers.
+  const siteDir = siteDirOf || V.site, site = [];
+  if (siteDir && fs.existsSync(siteDir)) {
+    const landing = pageFileOf && fs.existsSync(pageFileOf) ? fs.realpathSync(pageFileOf) : null;
+    for (const f of fs.readdirSync(siteDir).filter(f => /\.(html?|md|txt)$/i.test(f)).sort()) {
+      const full = path.join(siteDir, f); if (landing && fs.realpathSync(full) === landing) continue;
+      const text = pageTextOf(fs.readFileSync(full, "utf8"), f), A = smallAscii(text);
+      site.push({ name: f.replace(/\.[^.]+$/, ""), text, A, m: matchersFor(A) });
+    }
+  }
 
   // --- surface: things whose name should appear on the page (commands, CLI subcommands, pages) ---
   const allFiles = tryGit("ls-tree", "-r", "--name-only", K.ref).split("\n").filter(Boolean);
@@ -208,6 +224,7 @@ function works(pm, { pageFileOf, dayArg } = {}) {
   const surfaceMap = new Map();
   for (const y of surface) { if (!surfaceMap.has(y.name)) surfaceMap.set(y.name, { name: y.name, source: y.source, files: new Set() }); if (WHOLE_FILE(y)) surfaceMap.get(y.name).files.add(y.source); }
   const surfaceSingular = [...surfaceMap.values()].map(y => ({ name: y.name, source: y.source, files: [...y.files], page: nameExists(y.name, pageA) }));
+  for (const y of surfaceSingular) if (!y.page && site.length) y.elsewhere = site.filter(p => nameExists(y.name, p.A)).map(p => p.name).slice(0, 5);
 
   // --- shipped features: non-maintenance commits from the last N days, grouped by field ---
   // frontend app dir(s) this run knows about (sources.json inventory.frontend, else
@@ -269,7 +286,9 @@ function works(pm, { pageFileOf, dayArg } = {}) {
     const stakeholder = ks.filter(k => !surfaceRoot.has(k)).length, coverage = stakeholder ? matching.length / stakeholder : 0;
     const status = nameOnPage || coverage >= 0.5 ? "page" : coverage >= 0.25 ? "partial" : "missing";
     const last = A.commits.map(c => c.date).sort((a, b) => Date.parse(a) - Date.parse(b)).at(-1);
-    result.push({ area: A.area, visible: A.visible, commit_count: A.commits.length, last, status, name_page: nameOnPage, words: ks, matching, example: A.commits.slice(0, 3),
+    // Not on the landing: is it somewhere else on the site (its name, or at least half its distinguishing words)?
+    const elsewhere = status === "page" || !site.length ? null : site.filter(p => { const ms = ks.filter(k => !surfaceRoot.has(k)).map(p.m.pageRoot).filter(Boolean), n = ks.filter(k => !surfaceRoot.has(k)).length; return p.m.areaPage(A.area) || (n && ms.length / n >= 0.5); }).map(p => p.name).slice(0, 5);
+    result.push({ area: A.area, visible: A.visible, commit_count: A.commits.length, last, status, name_page: nameOnPage, words: ks, matching, example: A.commits.slice(0, 3), ...(elsewhere ? { elsewhere } : {}),
       ...(source.last_change && Date.parse(last) > Date.parse(source.last_change) ? { page_after: true } : {}) });
   }
   // A visible field whose name is on the page but that changed again after the page's last change: is the description still current?
@@ -345,13 +364,44 @@ function works(pm, { pageFileOf, dayArg } = {}) {
     rival = { active: active.length, threshold: E, steps: list };
   }
 
+  // numbers the page states ("17 commands", "43 products") against what the code has.
+  // A different number is only flagged when it is within half of the real count (a stale total, not "3 commands worth running").
+  // frontyard.counts: [{ noun: "commands?", glob: "commands/*.md" }, { noun: "products", matrix: true, minus: 1 }, { noun, file, pattern }]
+  const NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20 };
+  const pages = [{ name: "landing", text: raw }, ...site];
+  const counts = [];
+  for (const C of V.counts || []) {
+    if (!C?.noun) continue;
+    let truth = null, how = "";
+    if (C.glob) { const r = globRe(C.glob); truth = allFiles.filter(f => r.test(f)).length; how = C.glob; }
+    else if (C.matrix && MO) { truth = MO.products.length; how = "matrix products"; }
+    else if (C.file && C.pattern) { truth = [...tryGit("show", `${K.ref}:${C.file}`).matchAll(new RegExp(C.pattern, "gm"))].length; how = `${C.file} /${C.pattern}/`; }
+    if (truth == null) continue; truth -= C.minus || 0;
+    const re = new RegExp(`(?<![\\p{L}\\p{N}.])(?!0)(\\d+|${Object.keys(NUM).join("|")})\\s+(?:[\\p{L}-]+\\s+){0,2}?(?:${C.noun})(?![\\p{L}\\p{N}])`, "giu"), said = [];
+    for (const p of pages) for (const m of p.text.matchAll(re)) { const n = /^\d+$/.test(m[1]) ? +m[1] : NUM[m[1].toLowerCase()]; if (!said.some(x => x.page === p.name && x.n === n)) { if (n !== truth && Math.abs(n - truth) > truth / 2) continue; said.push({ page: p.name, text: m[0].replace(/\s+/g, " "), n, ok: n === truth }); } }
+    counts.push({ noun: C.noun, truth, how, said });
+  }
+  // a line the page says that the code has made false. frontyard.contradicts: [{ say: "No AI model", find: "openrouter" }]:
+  // `say` is a phrase (regex, any case) that must stay true on the page, `find` a word that must not be in the code (this repo and every `also` repo).
+  const contradictions = [];
+  for (const C of V.contradicts || []) {
+    if (!C?.say || !C?.find) continue;
+    const sayRe = new RegExp(C.say, "i"), where = pages.filter(p => sayRe.test(p.text)).map(p => p.name); if (!where.length) continue;
+    const hits = [];
+    for (const R of [{ repo: K.repo, ref: K.ref }, ...[].concat(V.also || []).filter(A => A?.repo).map(A => ({ repo: path.resolve(K.repo, A.repo), ref: A.ref || "HEAD" }))]) {
+      try { for (const l of execFileSync("git", ["-C", R.repo, "grep", "-n", "-i", "-I", "-E", C.find, R.ref, "--", ".", ":(exclude)*.md", ":(exclude)*.lock", ":(exclude)*lock.json", ":(exclude)*.example", ":(exclude)test/*", ":(exclude)*.test.*"], { encoding: "utf8", maxBuffer: 64 << 20, stdio: ["ignore", "pipe", "ignore"] }).split("\n").filter(Boolean).slice(0, 3)) hits.push(`${path.basename(R.repo)}:${l.replace(/^[^:]*:/, "").slice(0, 120)}`); } catch {}
+    }
+    if (hits.length) contradictions.push({ say: C.say, find: C.find, pages: where, hits: hits.slice(0, 4) });
+  }
+
   const missing = result.filter(a => a.status === "missing" && a.visible), visibleFields = result.filter(a => a.visible);
-  return { ...empty, page_missing: false, source, fields: result, surface: surfaceSingular, claims, phrases, structuralPromises, phrasesNote, price, rival,
+  return { ...empty, page_missing: false, source, fields: result, surface: surfaceSingular, claims, phrases, structuralPromises, phrasesNote, price, rival, ...(site.length ? { site: site.map(p => p.name) } : {}), counts, contradictions,
     summary: { area: visibleFields.length, ic: result.length - visibleFields.length, page: visibleFields.filter(a => a.status === "page").length, partial: visibleFields.filter(a => a.status === "partial").length, missing: missing.length,
       current_mi: result.filter(a => a.current_mi).length + surfaceSingular.filter(y => y.page_after).length,
       rival_distinguish_missing: rival ? rival.steps.filter(a => a.type === "distinguish" && a.status !== "page").length : 0,
       rival_desk_missing: rival ? rival.steps.filter(a => a.type === "desk" && a.status !== "page").length : 0,
-      surface_missing: surfaceSingular.filter(y => !y.page).length, page_after_missing: missing.filter(a => a.page_after).length } };
+      surface_missing: surfaceSingular.filter(y => !y.page).length, count_wrong: counts.reduce((a, c) => a + c.said.filter(x => !x.ok).length, 0), contradicted: contradictions.length,
+      site_pages: site.length, nowhere_on_site: site.length ? result.filter(a => a.visible && a.status === "missing" && !(a.elsewhere || []).length).length : null, page_after_missing: missing.filter(a => a.page_after).length } };
 }
 
 function formatMd(R) {
@@ -372,6 +422,17 @@ function formatMd(R) {
     if (distinguishing.length) o += `## Your edge isn't on the page — you have it, most rivals don't\n\n| Step | In rivals | On page | Rival page spotlights it |\n|---|---|---|---|\n${distinguishing.map(sat).join("\n")}\n\n`;
     if (deskStakes.length) o += `## Table stakes, not on the page — most rivals have it, so do you\n\nCustomers look for this when comparing; if it's not on the page, they assume you don't have it.\n\n| Step | In rivals | On page | Rival page spotlights it |\n|---|---|---|---|\n${deskStakes.map(sat).join("\n")}\n\n`;
     if (!d.length && R.rival.steps.length) o += `Rival footing: all ${R.rival.steps.length} distinguishing/table-stakes step(s) are on the page.\n\n`;
+  }
+  if (R.contradictions?.length) o += `## The page says it, the code says otherwise\n\n${R.contradictions.map(c => `- "${c.say}" (${c.pages.join(", ")}) — but the code has \`${c.find}\`: ${c.hits.join(" · ")}`).join("\n")}\n\n`;
+  const wrongCounts = (R.counts || []).flatMap(c => c.said.filter(x => !x.ok).map(x => ({ ...x, c })));
+  if (wrongCounts.length) o += `## Numbers on the page that don't match the code\n\n${wrongCounts.map(x => `- ${x.page}: "${x.text}" — the code has ${x.c.truth} (${x.c.how})`).join("\n")}\n\n`;
+  if (R.site?.length) {
+    const inDocs = R.fields.filter(a => a.visible && a.status !== "page" && a.elsewhere?.length), nowhere = R.fields.filter(a => a.visible && a.status === "missing" && !(a.elsewhere || []).length);
+    o += `## The rest of the site (${R.site.length} pages)\n\n`;
+    if (inDocs.length) o += `Not on the landing, but elsewhere on the site:\n\n${inDocs.map(a => `- ${a.area} → ${a.elsewhere.join(", ")}`).join("\n")}\n\n`;
+    o += nowhere.length ? `Nowhere on the site:\n\n${nowhere.map(a => `- ${a.area} — ${a.example[0].h} ${a.example[0].text.slice(0, 80)}`).join("\n")}\n\n` : `Every shipped field missing from the landing is somewhere on the site.\n\n`;
+    const names = R.surface.filter(y => !y.page && !y.elsewhere?.length);
+    if (names.length) o += `Names not on any page of the site: ${names.map(y => `\`${y.name}\``).join(", ")}.\n\n`;
   }
   if (R.claims.length) o += `## On the page, no trace in code — needs a look\n\nNone of the line's distinguishing words appear in code (outside docs). The page may be ahead of the product, or the wording differs:\n\n${R.claims.slice(0, 12).map(x => `- ${x.line}`).join("\n")}\n\n`;
   if (R.phrases.length || (R.structuralPromises || []).length || R.phrasesNote) {
@@ -394,8 +455,8 @@ function formatMd(R) {
 
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2), takeArg = f => { const i = argv.indexOf(f); return i >= 0 ? argv.splice(i, 2)[1] : null; };
-  const jsonOut = takeArg("--json"), pageFileOf = takeArg("--page"), dayArg = takeArg("--day");
-  const R = works(argv[0] || "pm", { pageFileOf, dayArg });
+  const jsonOut = takeArg("--json"), pageFileOf = takeArg("--page"), dayArg = takeArg("--day"), siteDirOf = takeArg("--site");
+  const R = works(argv[0] || "pm", { pageFileOf, dayArg, siteDirOf });
   process.stdout.write(formatMd(R));
   if (jsonOut) fs.writeFileSync((fs.mkdirSync(path.dirname(jsonOut), { recursive: true }), jsonOut), JSON.stringify(R, null, 1));
 }

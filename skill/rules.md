@@ -13,6 +13,10 @@
 - "Exists" means it's on main. An open PR is shown with separate wording.
 - When you write commits or a PR for work that has a bet (`pm/bets/`), put `Bet: <id>` in the commit message and the PR body, and you may use the id in the branch name. That line is the only thing `score` settles on: no text similarity, ever.
 
+## People, not agents
+- What only a person can do (an account, a payment, a submission under their name, a token, a sign-off) or what the owner said they would do goes on `pm/todo/` (`todo.mjs`), with who, why and what waits on it. The agent keeps going with the rest and does not do a listed item itself.
+- An item is closed when the person says so or the result is visible, never on a guess. It is not a task tracker: no due dates, no estimates, no assignments by Nosy. Nothing in `pm/todo/` is sent anywhere; `publish` carries only how many wait and for how long.
+
 ## Writing externally
 - Push, opening a PR, issue/comment, message, email: never without the owner explicitly asking.
 - PRD and issue drafts stay as files under `pm/`.

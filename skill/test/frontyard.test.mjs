@@ -191,3 +191,27 @@ test("frontyard.also: a feature that shipped in another repo of the same product
     assert.equal(F.fields.find(x => x.area === "deploy guard")?.visible, false, "a script is internal there too");
   } finally { fs.writeFileSync(file, was); }
 });
+
+// the rest of the site, numbers the page states, lines the code has made false.
+test("site folder, counts and contradictions: where else a missing thing is, a stale number, a claim the code broke", () => {
+  const pm2 = path.join(root, "pm2"), site = path.join(root, "site"); fs.mkdirSync(path.join(pm2, "state"), { recursive: true }); fs.mkdirSync(site, { recursive: true });
+  fs.writeFileSync(path.join(site, "docs.html"), "<html><body><h1>Docs</h1><p>Public share links: send a read-only link to anyone.</p></body></html>");
+  fs.writeFileSync(path.join(site, "privacy.html"), "<html><body><p>No AI model reads your data.</p><p>We ship 3 commands today.</p></body></html>");
+  fs.mkdirSync(path.join(repo, "src", "ai"), { recursive: true }); fs.writeFileSync(path.join(repo, "src", "ai", "client.ts"), "const base = 'https://openrouter.ai/api';\n");
+  execFileSync("git", ["-C", repo, "add", "-A"]); execFileSync("git", ["-C", repo, "commit", "-q", "-m", "chore: ai client"]);
+  fs.writeFileSync(path.join(pm2, "sources.json"), JSON.stringify({ repo, ref: "main", frontyard: { path: "README.md", day: 30, site, surface: [{ glob: "commands/*.md" }],
+    counts: [{ noun: "commands?", glob: "commands/*.md" }], contradicts: [{ say: "No AI model", find: "openrouter" }] } }));
+  const j = path.join(pm2, "state", "frontyard.json"), r = run(path.join(Tool, "frontyard.mjs"), [pm2, "--json", j]); assert.equal(r.code, 0, r.error);
+  const X = JSON.parse(fs.readFileSync(j, "utf8"));
+  assert.deepEqual(X.site.sort(), ["docs", "privacy"]);
+  assert.ok(X.fields.find(a => a.area === "share").elsewhere?.includes("docs"), "share is on the docs page, not on the landing");
+  assert.equal(X.surface.find(y => y.name === "share").page, false);
+  assert.ok(X.surface.find(y => y.name === "share").elsewhere?.includes("docs"));
+  assert.equal(X.counts[0].truth, 2);
+  assert.ok(X.counts[0].said.some(x => x.page === "privacy" && x.n === 3 && !x.ok), "3 commands is stale next to 2");
+  assert.equal(X.contradictions.length, 1);
+  assert.deepEqual(X.contradictions[0].pages, ["privacy"]);
+  assert.match(X.contradictions[0].hits.join(" "), /src\/ai\/client\.ts/);
+  assert.match(r.output, /The page says it, the code says otherwise/);
+  assert.match(r.output, /Numbers on the page that don't match the code/);
+});

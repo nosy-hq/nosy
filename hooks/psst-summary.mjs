@@ -52,7 +52,7 @@ async function main() {
     if (M.claimFirstRun()) hello = M.render(M.status({ cwd }), { prefix: "/nosy:" });
   } catch {}
 
-  // Not moved in: stay quiet (bar the first-run lines). Nosy shouldn't nag in every repo the owner opens.
+  // Not moved in: stay quiet (bar the first-run lines and a to-do list that exists). Nosy shouldn't nag in every repo the owner opens.
   let whisper = null;
   if (fs.existsSync(path.join(pm, "sources.json"))) {
     try {
@@ -66,11 +66,26 @@ async function main() {
     }
   }
 
+  // What waits on a person (skill/tools/todo.mjs, pm/todo/): said at every start, because the point is that it isn't forgotten.
+  // Local files only. Nothing to say when nothing is open.
+  let waiting = null;
+  try {
+    if (fs.existsSync(path.join(pm, "todo"))) {
+      const { todoSummary, todoLine } = await import(path.join(here, "..", "skill", "tools", "todo.mjs"));
+      const { nosyCommand } = await import(path.join(here, "..", "skill", "tools", "hints.mjs"));
+      const said = todoLine(todoSummary(pm));
+      if (said) waiting = `Psst… ${said}. These are for a person, not for you. \`${nosyCommand("todo")}\` lists them, \`${nosyCommand("todo done <id>")}\` closes one.`;
+    }
+  } catch {
+    // stay silent; never block SessionStart
+  }
+  const say = [whisper, waiting].filter(Boolean).join("\n");
+
   if (hello) {
     // systemMessage is what the owner sees; the agent gets the whisper (if any) as context, as before.
     process.stdout.write(JSON.stringify({ systemMessage: hello,
-      hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: whisper ? `${whisper}\n` : "Nosy's first-run lines were shown to the owner; no need to repeat them." } }));
-  } else if (whisper) process.stdout.write(whisper + "\n");
+      hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: say ? `${say}\n` : "Nosy's first-run lines were shown to the owner; no need to repeat them." } }));
+  } else if (say) process.stdout.write(say + "\n");
 }
 
 main();

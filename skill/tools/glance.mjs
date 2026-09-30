@@ -9,6 +9,7 @@
 import fs from "node:fs"; import path from "node:path";
 import { nextDecision } from "./next-decision.mjs";
 import { thresholds } from "./thresholds.mjs";
+import { todoSummary } from "./todo.mjs";
 
 const readJson = f => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
 export const cut = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); if (s.length <= n) return s; const i = s.lastIndexOf(" ", n - 1); return s.slice(0, i > n / 2 ? i : n - 1).replace(/[\s,;:(—-]+$/, "") + "…"; };
@@ -65,12 +66,18 @@ export function glance(pm, { M = readJson(path.join(pm, "matrix.json")), nextPic
     if (!G.lanes.some(l => l.total)) delete G.lanes;
   }
 
+  // What only a person can do (pm/todo/, todo.mjs). refsOnly (what `nosy publish` sends) carries the count and the age, never a title or a name.
+  const P = todoSummary(pm);
+  if (P.open) G.todo = { open: P.open, oldestDays: P.oldestDays, people: P.people.length,
+    items: refsOnly ? [] : P.items.slice(0, 4).map(i => ({ title: cut(i.title, 70), who: cut(i.who, 20), days: i.days })), more: refsOnly ? 0 : Math.max(0, P.open - 4) };
+
   const checkedWins = F?.items?.length ?? null;
   G.tiles = [
     G.only && { key: "good", label: "Only we have", value: G.only.length, unit: `/ ${steps.length} steps`, note: G.only.length ? "no active rival has these" : "every step has a rival" },
     G.behind && { key: "warn", label: "We're behind", value: G.behind.length, unit: "steps", note: cut(G.behind.map(s => stepLabel(s.name)).join(", "), 60) || "nowhere" },
     checkedWins != null && { key: "", label: "Cheap wins, checked", value: checkedWins, unit: "items", note: F?.dropped?.length ? `${F.dropped.length} dropped by the refuter` : "psst's list after the refuter" },
     G.lanes && { key: "you", label: "Waiting on you", value: G.lanes[1].total, unit: "", note: cut(G.lanes[1].items.map(i => i.title).join(" · "), 60) || "nothing" },
+    G.todo && { key: "people", label: "Waiting on people", value: G.todo.open, unit: G.todo.open === 1 ? "thing" : "things", note: G.todo.oldestDays ? `the oldest for ${G.todo.oldestDays} day${G.todo.oldestDays === 1 ? "" : "s"}` : "all added today" },
   ].filter(Boolean);
 
   // What shipped: the shipped record's groups (one per request/issue ref), biggest first.
@@ -99,6 +106,7 @@ export function renderGlance(G, { esc }) {
     row.push(`<section class="gl-panel" aria-labelledby="gl-st"><div><h3 id="gl-st">Where we stand</h3><p class="sub">Steps covered out of ${esc(s.steps)} (partial counts half) · ${esc(s.rivals)} active rival${s.rivals === 1 ? "" : "s"}</p></div><div class="gl-bars">${bar(s.me.name, s.me.score, true)}${s.top.map(t => bar(t.name, t.score)).join("")}</div><div class="gl-strip" role="img" aria-label="${esc(s.steps)} steps: ${G.only.length} only we have, ${G.behind.length} behind">${s.strip.map(x => `<span class="${x.kind}${x.us === "p" ? " part" : ""}" title="${esc(`${x.no}. ${x.name}: ${x.kind === "only" ? "only we have it" : x.kind === "behind" ? `${x.rivalsWithIt} rival${x.rivalsWithIt === 1 ? " has" : "s have"} it, we don't fully` : "shared"}`)}"></span>`).join("")}</div><div class="gl-legend"><span><i class="only"></i>only we have</span><span><i class="behind"></i>behind</span><span><i></i>shared</span></div>${G.only.length ? `<div class="gl-tags">${G.only.map(x => `<span>${esc(stepLabel(x.name))}</span>`).join("")}</div>` : ""}</section>`); }
   if (G.lanes) row.push(`<section class="gl-panel" aria-labelledby="gl-rm"><div><h3 id="gl-rm">Roadmap</h3><p class="sub">From the checked list; reasons are under Waves</p></div><div class="gl-lanes">${G.lanes.map(l => `<div class="gl-lane ${l.key}"><div class="h"><b>${esc(l.name)}</b><span>${esc(l.total)}</span></div>${l.items.length ? l.items.map(i => `<div class="gl-card">${esc(i.title)}<span class="m">${i.size ? `<b>${esc(i.size)}</b>` : ""}${esc(i.meta || "")}</span></div>`).join("") : `<div class="gl-card empty">nothing here</div>`}${l.total > l.items.length ? `<span class="more">+${esc(l.total - l.items.length)} more</span>` : ""}</div>`).join("")}</div></section>`);
   if (row.length) parts.push(`<div class="gl-row${row.length === 1 ? " one" : ""}">${row.join("")}</div>`);
+  if (G.todo?.items?.length) parts.push(`<section class="gl-panel" aria-labelledby="gl-td"><div><h3 id="gl-td">Waiting on people</h3><p class="sub">Only a person can do these; nobody else touches them. Close one with nosy todo done &lt;id&gt;.</p></div><div class="gl-todo">${G.todo.items.map(i => `<div class="gl-card"><span><b>${esc(i.who)}</b> ${esc(i.title)}</span><span class="m">${i.days ? `${esc(i.days)} day${i.days === 1 ? "" : "s"}` : "today"}</span></div>`).join("")}${G.todo.more ? `<span class="more">+${esc(G.todo.more)} more: nosy todo</span>` : ""}</div></section>`);
   if (G.shipped || G.roundup) { const s = G.shipped;
     parts.push(`<section class="gl-panel" aria-labelledby="gl-sh"><h3 id="gl-sh">Shipped${s?.since ? ` since ${esc(s.since)}` : " lately"}</h3><div class="gl-shipped">${s ? `<div class="count">${esc(s.refs)}<small>requests touched${s.commits != null ? `<br>${esc(s.commits)} commits` : ""}</small></div><div class="gl-tags">${s.tags.map(t => `<span>${esc(t)}</span>`).join("")}</div>` : ""}${G.roundup ? `<p class="ask"><b>Landing page:</b> ${esc(G.roundup)} Run <code>/nosy:frontyard</code>.</p>` : ""}</div></section>`); }
   return `<div class="glance">${parts.join("")}</div>`;
@@ -122,7 +130,7 @@ export const GLANCE_CSS = `
 .gl-tile .v{font:400 40px/1 var(--display);font-variant-numeric:tabular-nums}
 .gl-tile .v small{font:500 14px/1 var(--mono);color:var(--muted);margin-left:5px}
 .gl-tile .note{font-size:13px;color:var(--muted)}
-.gl-tile.good .v{color:var(--ok)}.gl-tile.warn .v{color:var(--part)}.gl-tile.you .v{color:var(--mag)}
+.gl-tile.good .v{color:var(--ok)}.gl-tile.warn .v{color:var(--part)}.gl-tile.you .v,.gl-tile.people .v{color:var(--mag)}
 .gl-row{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:12px}.gl-row.one{grid-template-columns:minmax(0,1fr)}
 .gl-panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:17px;display:grid;gap:13px;align-content:start;min-width:0}
 .gl-panel h3{font-size:19px}.gl-panel .sub{font-size:13px;color:var(--muted);margin-top:3px}
@@ -147,6 +155,7 @@ export const GLANCE_CSS = `
 .gl-card{background:var(--soft);border-radius:7px;padding:9px 10px;font-size:13.5px;line-height:1.35;display:grid;gap:5px}
 .gl-card .m{display:flex;gap:6px;align-items:center;font:500 11.5px/1.2 var(--mono);color:var(--muted)}
 .gl-card .m b{font-weight:600;padding:2px 5px;border-radius:3px;background:var(--ink);color:var(--paper)}
+.gl-todo{display:grid;gap:8px}.gl-todo .gl-card b{font-weight:600}.gl-todo .more{font:500 11.5px/1 var(--mono);color:var(--muted)}
 .gl-card.empty{color:var(--muted);background:transparent;border:1px dashed var(--line)}
 .gl-lane.off .gl-card{color:var(--muted)}.gl-lane .more{font:500 11.5px/1 var(--mono);color:var(--muted)}
 .gl-shipped{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px 18px;align-items:center}

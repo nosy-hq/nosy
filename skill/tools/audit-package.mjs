@@ -104,7 +104,8 @@ else {
 function commandsOfExtractReadme(text) {
   if (!text) return null;
   const names = new Set();
-  for (const m of text.matchAll(/\/nosy:([a-z][a-z-]*)/g)) names.add(m[1]);
+  // `/nosy:nosy` is the top-level skill in the plugin, not a command file.
+  for (const m of text.matchAll(/\/nosy:([a-z][a-z-]*)/g)) if (m[1] !== "nosy") names.add(m[1]);
   return names;
 }
 function commandsOfExtractFolder(rel) {

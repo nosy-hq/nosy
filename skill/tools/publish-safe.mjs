@@ -67,6 +67,8 @@ export function safeGlance(G) {
   const out = JSON.parse(JSON.stringify(G));
   if (out.decision) { out.decision.title = withoutIssueTitle(out.decision.title); }
   if (out.lanes) for (const l of out.lanes) for (const i of l.items || []) i.title = withoutIssueTitle(i.title);
+  // The people's to-do list (pm/todo/) leaves as a count and an age, never a title or a name.
+  if (out.todo) out.todo = { open: out.todo.open, oldestDays: out.todo.oldestDays, people: out.todo.people, items: [], more: 0 };
   const you = out.lanes?.find(l => l.key === "you"), tile = out.tiles?.find(t => t.key === "you");
   if (you && tile) tile.note = cut(you.items.map(i => i.title).join(" · "), 60) || "nothing";
   return out;
@@ -101,7 +103,7 @@ export const PayloadKeys = {
   "pm/history/runs.jsonl": "one line per run: time, label, ref, last commit id, counts",
   "pm/summary.md": "the first section of your summary (the section the dashboard shows)",
   "pm/state/watch.json": "rival names and the public page URLs you listed, with their change state",
-  "pm/state/glance.json": "computed: next decision (title, size, checks), four numbers, where we stand, roadmap lanes, shipped (counts and references)",
+  "pm/state/glance.json": "computed: next decision (title, size, checks), four numbers, where we stand, roadmap lanes, shipped (counts and references), how many things wait on people and for how long (no titles, no names)",
   "pm/state/rival-facts.json": "computed: each rival's price line, from your rival files",
   "pm/state/rival-demand.json": "computed, only if you ran `nosy rival-demand`: titles, vote counts and links of open issues and Discussions on your open-source rivals' own public trackers (their public data, not yours), and which rivals share an ask",
   "pm/state/demand.json": "computed: counts per goal from your matrix and psst items, sources by format, hidden counts; no quotes, no customer names",

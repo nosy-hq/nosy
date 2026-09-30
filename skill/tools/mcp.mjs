@@ -1,7 +1,7 @@
 // Nosy MCP server (stdio, one JSON-RPC 2.0 message per line). No dependencies. Exposes Nosy's model-free counts
 // as tools to any client that can connect to MCP: Claude Desktop, Cursor, Zed, VS Code, ChatGPT desktop…
 // Run with: `node mcp.mjs` or `nosy mcp`. pm folder: the tool argument `pm`, else NOSY_PM, else ./pm.
-// Tools read your repo and write under pm/ (mostly pm/state/); the one exception is nosy_publish, which by itself only
+// Tools read your repo and write under pm/ (mostly pm/state/; nosy_todo writes pm/todo/); the one exception is nosy_publish, which by itself only
 // shows what it would send (a dry run). It sends counts and structure to your configured Nosy Cloud only when the call
 // carries confirm: true, after the owner asked (see publish.mjs). No push, issue, or message.
 import path from "node:path";
@@ -34,6 +34,11 @@ const Tools = [
   { name: "nosy_ledger", description: "The canwe answer ledger: was this question asked before, what's changed since. All answers if no question is given.",
     inputSchema: { type: "object", properties: { question: { type: "string" }, ...pmArg } },
     cmd: a => a.question ? ["ledger.mjs", a.pm, "find", a.question] : ["ledger.mjs", a.pm, "list"] },
+  { name: "nosy_todo", description: "What only a person can do, or said they would (pm/todo/). action \"list\" (default) shows what waits, oldest first; \"add\" files one when you reach a step you can't take (an account, a payment, a submission under someone's name, a token, a sign-off) so it isn't lost when the chat ends; \"done\" closes one, only after the person says it is done or you can see it is. Never do a listed item yourself.",
+    inputSchema: { type: "object", properties: { ...pmArg, action: { type: "string", enum: ["list", "add", "done", "drop"], description: "default list" }, text: { type: "string", description: "add: what the person has to do, one line" }, who: { type: "string", description: "add: the person's own name; default owner. list: only this person's items" }, why: { type: "string", description: "add: why only a person can do it" }, blocks: { type: "string", description: "add: what waits on it" }, link: { type: "string", description: "add: a URL or reference" }, id: { type: "string", description: "done, drop: the item's id, or a part of it that names one" }, note: { type: "string", description: "done: how it went" }, reason: { type: "string", description: "drop: why it is no longer needed" } } },
+    cmd: a => ["todo.mjs", a.pm, a.action || "list", ...(a.action === "add" ? [a.text || ""] : a.action === "done" || a.action === "drop" ? [a.id || ""] : []),
+      ...(a.who ? ["--who", a.who] : []), ...(a.action === "add" ? [...(a.why ? ["--why", a.why] : []), ...(a.blocks ? ["--blocks", a.blocks] : []), ...(a.link ? ["--link", a.link] : [])] : []),
+      ...(a.action === "done" && a.note ? ["--note", a.note] : []), ...(a.action === "drop" && a.reason ? ["--reason", a.reason] : [])] },
   { name: "nosy_publish", description: "Send counts and structure of pm/ (matrix, status, next, changes, run history, summary; no commit subjects, author names, PR or issue titles, no customer quotes) to the Nosy Cloud dashboard configured for this project, straight from disk after a privacy scan that stops on secrets and personal data. Without confirm: true it only lists what would be sent (a dry run): show that list to the owner first. With confirm: true it sends; call it only after the owner said yes. Needs cloud.url in pm/sources.json (or NOSY_CLOUD_URL) and NOSY_CLOUD_TOKEN in the server's environment.",
     inputSchema: { type: "object", properties: { project: { type: "string", description: "project name on Nosy Cloud (default: the repo folder's name)" }, confirm: { type: "boolean", description: "true only after the owner approved the list from the dry run" }, dry_run: { type: "boolean", description: "force a dry run even with confirm" }, ...pmArg } },
     cmd: a => ["publish.mjs", a.pm, ...(a.project ? ["--project", a.project] : []), ...(a.dry_run || !a.confirm ? ["--dry-run"] : ["--yes"])], openWorld: true },
@@ -42,7 +47,7 @@ const Tools = [
 // Before running a tool: does the pm folder read, and does the repo it names? A client starts this server from any folder
 // (Claude Desktop's is often "/"), so a missing pm/ or a relative repo is the usual first failure. That is a JSON-RPC error
 // carrying the fix in one line, not a stack trace as the tool's text. Tools that read no repo (the ledger) skip the repo half.
-const NoRepo = new Set(["nosy_ledger", "nosy_publish"]);
+const NoRepo = new Set(["nosy_ledger", "nosy_publish", "nosy_todo"]);
 function problem(name, pm) {
   let bad = sourcesProblem(pm);
   if (!bad && !NoRepo.has(name)) { try { bad = repoProblem(readSources(pm)); } catch (e) { bad = `couldn't read ${pm}/sources.json: ${String(e.message).split("\n")[0]}`; } }

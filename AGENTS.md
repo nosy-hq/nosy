@@ -40,6 +40,7 @@ Full text: `<skill>/rules.md`. They apply to every command.
 4. The result goes to a durable page or file; the chat gets a summary.
 5. Dispatch web research to a separate, cheap sub-task when your agent has one; otherwise do it yourself in sequence. Use only web search and page-read tools; never a paid scraper.
 6. If you notice a gap in Nosy itself, note it in `pm/log.md` as a "tool gap" (what you did by hand, what repeated, what was hard). Nothing is sent anywhere; the user can report it upstream.
+7. What only a person can do (an account, a payment, a submission under their name, a token, a sign-off) or what the user said they would do goes on the list, not in the chat: `node <skill>/tools/todo.mjs pm add "<what>" --who <name> --why "<why only a person can>" --blocks "<what waits on it>"`. Keep going with the rest, never do a listed item yourself, and close one (`todo.mjs pm done <id>`) only when the person says it's done or you can see it is.
 
 ## If your agent lacks a Claude Code feature
 

@@ -4,7 +4,7 @@
 
 That line needs a list you can check. This is the list.
 
-It was checked against version 0.15.1 (30 Sep 2026): every script, hook, agent, command file and the GitHub Action read, and the scripts run with their network, process and file activity logged. Version 0.16.0 adds `rival-demand`, read and logged the same way: it starts `gh` and nothing else. If Nosy does something that isn't written here, that is a bug in this file or in Nosy. Please report it.
+It was checked against version 0.15.1 (30 Sep 2026): every script, hook, agent, command file and the GitHub Action read, and the scripts run with their network, process and file activity logged. Version 0.17.0 adds `nosy todo` (files under `pm/todo/`, local only, no network, nothing in the `publish` payload but a count), and version 0.16.0 added `rival-demand`, read and logged the same way: it starts `gh` and nothing else. If Nosy does something that isn't written here, that is a bug in this file or in Nosy. Please report it.
 
 ## The short version
 
@@ -54,6 +54,7 @@ Under `pm/` (your product folder):
 | `pm/history/` | Run history (`runs.jsonl`), diff snapshots, and `pm/history/watch/`: text of the public rival pages, kept on your machine only. Git-ignore it if you commit `pm/`. |
 | `pm/page.html`, `pm/scoreboard.html` | The decision page and the scoreboard. |
 | `pm/bets/`, `pm/canwe/`, `pm/design/`, `pm/learned.json` | Bets, the "can we?" answer ledger, design-check approvals, your "noise / knowingly / important" calls. |
+| `pm/todo/` | What only a person can do, or said they would (`nosy todo add`, or your agent through the skill or the `nosy_todo` MCP tool): one `.md` file per item with the words you or your agent gave (what, who, why, what waits on it, a link). Yours to edit or delete: commit the folder to share the list with your team, or git-ignore it to keep it yours. No copy of it goes into `pm/state/`, which the Action commits. Nothing in it is sent anywhere. |
 | `pm/rivals/`, `pm/frontyard/`, `pm/prd/` | Written by your agent when you run `neighbors`, `frontyard`, `spill`. |
 
 Outside `pm/`:
@@ -87,7 +88,22 @@ By the plugin's own code:
 
 `nosy publish` and `nosy notify` run the privacy scan first (`skill/tools/privacy-scan.mjs`). The scan stops the send on **secrets** (cloud keys, API keys, tokens, private keys, passwords in connection strings) and on **personal data**: e-mail addresses, phone numbers (Turkish, international, US, UK), IBANs of any country, card numbers, Turkish ID numbers, and names: the ones in `pm/private.json` plus the display names of the people who wrote your commits. Notes about your machine (a home-directory path, a private IP address, an internal host name) are listed in the scan's report but don't stop a send. To send anyway, after reading the report: `--allow-sensitive`.
 
+Nothing under `pm/todo/` is sent: no command reads it to send it. The page shows the titles and names on your own machine; `nosy publish` carries only how many items wait on people and for how long.
+
 The pages Nosy builds (`pm/page.html`, the scoreboard) make no network request when you open them: they use your system's fonts and load nothing from anywhere.
+
+### What the plugin's hooks do
+
+Installing the plugin adds five hooks (`hooks/hooks.json`). They run on your machine, read local files and git, and print a short note to your agent. None of them sends your code, history or documents anywhere. Each can be turned off in the plugin's settings or with an environment variable.
+
+| Hook | Runs when | What it does | Network | Switch off |
+|---|---|---|---|---|
+| `psst-summary` | A session starts | Prints one line from `pm/state/lowhanging.json`, if it exists. | None | "Turn off the opening summary", or `NOSY_NO_PSST=1` |
+| `after-commit` | A `git commit`, `merge`, `pull`, `cherry-pick` or `gh pr merge` finishes | Says which matrix gap the change may close and the next command. Remembers the last commit it spoke about in one small file in your temp folder (`NOSY_NUDGE_DIR` moves it). | None | "Turn off the after-commit nudge", or `NOSY_NO_NUDGE=1` |
+| `never-check` | A `git commit` or `gh pr create` finishes | Compares what went in with the "never" rules in `pm/sources.json` and tells the agent on a match. Never blocks or undoes anything. | None | "Turn off the never-rule check", or `NOSY_NO_NEVER_CHECK=1` |
+| `cite-check` | The agent finishes an answer, or writes a Markdown or text file, in a repo that has `pm/sources.json` | Checks every `file:line`, quote, commit and `#N` in the text against your repo and asks the agent to fix the ones that don't hold up. Asks once per answer. | One read-only GitHub lookup per cited `#N`, through your `gh`, and only if `sources.json` names an `issue.repo`. It sends the issue number to GitHub and nothing else. | "Turn off the reference check", or `NOSY_NO_CITE_CHECK=1`. `NOSY_CITE_GH=0` keeps the check but skips the GitHub lookup. |
+
+The hooks write nothing to your repo. Apart from `HOME`, `NOSY_PM` and their own switches, they read no environment variables and no credentials. They don't change your permission settings and don't run downloaded code.
 
 ### What `nosy publish` sends
 
@@ -102,7 +118,7 @@ Up to these files, with your token. Each local file that holds words from your g
 | `pm/history/runs.jsonl` | One line per run: time, label, ref, last commit id, counts. |
 | `pm/summary.md` | The first section only (the part the dashboard shows). Free text you or your agent wrote; the privacy scan runs on it. |
 | `pm/state/watch.json` | Rival names and the public page addresses you listed, with their change state. |
-| `pm/state/glance.json` (computed) | The next decision (title, size, checks), four numbers, where we stand by step, roadmap lanes, and shipped as counts and references. |
+| `pm/state/glance.json` (computed) | The next decision (title, size, checks), four numbers, where we stand by step, roadmap lanes, shipped as counts and references, and how many things wait on people and for how long (`pm/todo/`: no titles, no names). |
 | `pm/state/rival-facts.json` (computed) | Each rival's price line from your rival files. |
 | `pm/state/rival-demand.json` (computed) | Only if you ran `nosy rival-demand`: titles, vote counts and links of open issues and Discussions on your open-source rivals' own public trackers (their public data, not yours), and which rivals share an ask. |
 | `pm/state/demand.json` (computed) | Counts per goal for goals matched to a matrix row or a psst item, sources by format, and counts for the rest; no quotes, no customer names, no unmatched themes. |
