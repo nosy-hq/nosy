@@ -8,7 +8,7 @@ It was checked against version 0.15.1 (30 Sep 2026): every script, hook, agent, 
 
 ## The short version
 
-- **No telemetry.** No analytics, usage pings, crash reports, update checks or install IDs. Nosy has no dependencies (`package.json` lists none), so no third-party code runs inside it either.
+- **No telemetry.** No analytics, usage pings, crash reports or install IDs. The one call you didn't start yourself is a once-a-day read of a public version file so the plugin can say when a newer Nosy is out (one plain GET, nothing about you in it, `NOSY_NO_UPDATE_CHECK=1` turns it off; see the network table below). Nosy has no dependencies (`package.json` lists none), so no third-party code runs inside it either.
 - **Reads.** Nosy reads your code, git history, GitHub issues and PRs including their text (titles, bodies, comments and author logins, through your own `gh`), your decision and roadmap docs, and public web pages. Bodies and comments are cut at 4,000 characters and saved in `pm/state/facts/github.json`. Support and interview exports are read only if you drop them into `pm/signal/`, with personal data masked.
 - **Writes.** Nosy writes to your `pm/` folder, plus a few named files: temporary files, a first-run marker, the skill folders `nosy install` copies and files you name with a flag. The optional weekly GitHub Action commits and pushes `pm/state/` and the decision page only if you set `commit: "true"`. The full list is under "What Nosy writes".
 - **Sends.** Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed, and GitHub through your own `gh`, including a read-only lookup of the `#N` issues your agent's answer cites (`NOSY_CITE_GH=0` turns that off), and, when you run `nosy rival-demand`, the public issues and Discussions of the open-source rivals you name. `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes). `publish` and `notify` stop on a secret or personal data unless you pass `--allow-sensitive`. Every path is in the table under "What leaves your machine".
@@ -63,7 +63,8 @@ Outside `pm/`:
 |---|---|---|
 | OS temp folder | `nosy-nudge-<hash>.json` (the last commit id the after-commit hook saw, and what it last said). Short-lived folders `nosy-publish-*`, `nosy-news-*`, `nosy-facts-obj-*`, deleted after use. | Automatic (the hook), or while a command runs. |
 | Plugin data folder (`CLAUDE_PLUGIN_DATA`, else the temp folder) | `nosy-loaded.json`: version and time of the first session, so the first-run lines show once. Local only. | Once, at the first session after install. |
-| Agent skill folders | `nosy install` copies `skill/` to `.claude/skills/nosy`, `.agents/skills/nosy` and similar in the project, or in your home folder with `--global`. It never touches settings or hooks. | Only when you run `nosy install`. |
+| `.git/hooks/post-commit`, `.git/hooks/post-merge` (or your `core.hooksPath`) | `nosy git-hooks install` adds a marked block that prints the never-rule check and the after-commit nudge. A hook you already had is kept and the block added to it; `nosy git-hooks uninstall` removes only the block. The hook runs two local scripts and prints; it sends nothing. | Only when you run `nosy git-hooks install`. |
+| Agent skill folders | `nosy install` copies `skill/` to `.claude/skills/nosy`, `.agents/skills/nosy` and similar in the project, or in your home folder with `--global`. It never touches settings or hooks, unless you pass `--git-hooks` (next row); `nosy uninstall` takes those blocks out again. | Only when you run `nosy install`. |
 | Your repo's `.git` | `overheard --diff --fetch` creates `refs/nosy/pr-N`. | Only with both flags. |
 | Files you name | `--json <file>` and `--mask <file>` write where you point them. | Only when you pass them. |
 | Your branch | The GitHub Action's `commit: true` commits generated `pm/` files and pushes. | Only when you set it. |
@@ -80,6 +81,7 @@ By the plugin's own code:
 | `nosy watch`, `nosy sweep`, and `nosy weekly` (which includes watch when `pm/rivals/` exists) | The public rival URLs you listed | A plain GET with a `Nosy … (public pages only)` user agent. No cookies, no body, nothing from your repo. The site sees your IP address. | When you run them. `NOSY_OFFLINE=1` skips the watch step of `weekly`. |
 | GitHub reads | GitHub, through your `gh` | Read-only calls: `pr list`, `pr view`, `pr diff`, `issue list`, `repo view`, `auth status`, `api` reads and GraphQL queries. What goes out is the repo name, PR and issue numbers, and search terms such as a bet id. No code. | Commands that read issues or PRs, for example `shipped`, `facts`, `psst`, `signals`, `recent`, `score`, `peek`, `weekly`. `--no-gh` on `facts`; no `gh` installed also works. |
 | `nosy rival-demand` | GitHub, through your `gh`. Without `gh` it calls `api.github.com` directly, with `GH_TOKEN` or `GITHUB_TOKEN` if you set one. | Read-only issue searches and GraphQL Discussion queries on the public repos of the rivals you name (`--repos`, `rivalRepos` in `sources.json`, or the GitHub links in `pm/rivals/*.md`). What goes out is those repo names and a search phrase. No code, nothing from your repo. What comes back (titles, vote counts, links) is written to `pm/state/rival-demand.json`. | Only when you run it. |
+| Update notice (hook) | `raw.githubusercontent.com/nosy-hq/nosy/main/.claude-plugin/plugin.json` | One plain GET of a public file, nothing in it about you or your repo. The answer is one version number. | Automatic, at most once a day, at session start (Claude Code), and when you type `/nosy` with no command (every agent). Off: `NOSY_NO_UPDATE_CHECK=1`, or "Turn off the update notice". |
 | Reference check (hook) | GitHub, through your `gh` | `gh api repos/<issue.repo>/issues/<N>` for each `#N` in your agent's answer or file. | Automatic, when `sources.json` has `issue.repo`. Off: `NOSY_CITE_GH=0`, or turn the hook off. |
 | `overheard --diff --fetch` | Your own git remote | `git fetch origin pull/<N>/head`. | Only with both flags. |
 | `nosy notify` | The Slack or Discord webhook you give it | One text message (`{"text": …}`): commit and PR counts, up to five merged PR titles, three close-to-merge PR titles, bet names, three cheap-win titles, five announceable titles, and your page URL if `NOSY_PAGE_URL` is set. Run `nosy notify --dry-run` to see it first. | Only when you pass a webhook. |
@@ -94,16 +96,16 @@ The pages Nosy builds (`pm/page.html`, the scoreboard) make no network request w
 
 ### What the plugin's hooks do
 
-Installing the plugin adds five hooks (`hooks/hooks.json`). They run on your machine, read local files and git, and print a short note to your agent. None of them sends your code, history or documents anywhere. Each can be turned off in the plugin's settings or with an environment variable.
+Installing the plugin adds four hooks (`hooks/hooks.json`, seven registrations). They run on your machine, read local files and git, and print a short note to your agent. None of them sends your code, history or documents anywhere. Each can be turned off in the plugin's settings or with an environment variable. Two of them reach the network on their own, and only for what the Network column says.
 
 | Hook | Runs when | What it does | Network | Switch off |
 |---|---|---|---|---|
-| `psst-summary` | A session starts | Prints one line from `pm/state/lowhanging.json`, if it exists. | None | "Turn off the opening summary", or `NOSY_NO_PSST=1` |
+| `psst-summary` | A session starts | Prints one line from `pm/state/lowhanging.json`, if it exists, and, when a newer Nosy is out, one line saying so and how to update (at most once a day). | The update notice: one plain GET, at most once a day, of `https://raw.githubusercontent.com/nosy-hq/nosy/main/.claude-plugin/plugin.json` (a public file; 2 second limit). No query string, body, cookie or identifier, and no version of yours: GitHub sees an address asking for a public file, as with `git clone`. The answer is one version number, kept with the time in `nosy-update.json` in the plugin's data folder (or your temp folder). Offline or blocked: silent. The summary itself: none. | "Turn off the opening summary", or `NOSY_NO_PSST=1` (the whole hook). Only the notice: "Turn off the update notice", or `NOSY_NO_UPDATE_CHECK=1` |
 | `after-commit` | A `git commit`, `merge`, `pull`, `cherry-pick` or `gh pr merge` finishes | Says which matrix gap the change may close and the next command. Remembers the last commit it spoke about in one small file in your temp folder (`NOSY_NUDGE_DIR` moves it). | None | "Turn off the after-commit nudge", or `NOSY_NO_NUDGE=1` |
 | `never-check` | A `git commit` or `gh pr create` finishes | Compares what went in with the "never" rules in `pm/sources.json` and tells the agent on a match. Never blocks or undoes anything. | None | "Turn off the never-rule check", or `NOSY_NO_NEVER_CHECK=1` |
 | `cite-check` | The agent finishes an answer, or writes a Markdown or text file, in a repo that has `pm/sources.json` | Checks every `file:line`, quote, commit and `#N` in the text against your repo and asks the agent to fix the ones that don't hold up. Asks once per answer. | One read-only GitHub lookup per cited `#N`, through your `gh`, and only if `sources.json` names an `issue.repo`. It sends the issue number to GitHub and nothing else. | "Turn off the reference check", or `NOSY_NO_CITE_CHECK=1`. `NOSY_CITE_GH=0` keeps the check but skips the GitHub lookup. |
 
-The hooks write nothing to your repo. Apart from `HOME`, `NOSY_PM` and their own switches, they read no environment variables and no credentials. They don't change your permission settings and don't run downloaded code.
+The hooks write nothing to your repo (the update notice keeps one small file, `nosy-update.json`, in the plugin's data or temp folder). Apart from `HOME`, `NOSY_PM`, `NOSY_STATE_DIR` and their own switches, they read no environment variables and no credentials. They don't change your permission settings and don't run downloaded code.
 
 ### What `nosy publish` sends
 
@@ -147,7 +149,7 @@ The MCP server (`nosy mcp`) talks over stdio, opens no port, and the plugin does
 
 ## Telemetry
 
-None. No script, hook, agent, command file, Action step or dependency sends usage, errors, versions or identifiers anywhere. ("Analytics" in the code means detecting analytics events in *your* product, `scan-metrics.mjs`.) The only network calls are the rows above. Each is something you ran or configured, except the reference-check hook's read-only GitHub lookups.
+None. No script, hook, agent, command file, Action step or dependency sends usage, errors, versions or identifiers anywhere. ("Analytics" in the code means detecting analytics events in *your* product, `scan-metrics.mjs`.) The only network calls are the rows above. Each is something you ran or configured, except two: the reference-check hook's read-only GitHub lookups, and the session-start hook's once-a-day read of the public version file (the request carries no version or identifier of yours, so GitHub learns only that some address fetched a public file; `NOSY_NO_UPDATE_CHECK=1` removes it).
 
 ## Limits
 
@@ -202,7 +204,7 @@ Child `node` processes inherit `NODE_OPTIONS`, so the scripts Nosy starts are tr
 
 ## Where to check
 
-- Network calls: `skill/tools/watch-rivals.mjs`, `skill/tools/rival-sweep.mjs`, `skill/tools/rival-demand.mjs`, `skill/tools/news.mjs`, `skill/tools/publish.mjs`
+- Network calls: `skill/tools/watch-rivals.mjs`, `skill/tools/rival-sweep.mjs`, `skill/tools/rival-demand.mjs`, `skill/tools/news.mjs`, `skill/tools/publish.mjs`, `skill/tools/update-check.mjs` (the session-start hook's version read)
 - `gh` reads: `skill/tools/rival-demand.mjs`, `skill/tools/facts.mjs`, `skill/tools/shipped-record.mjs`, `skill/tools/recent.mjs`, `skill/tools/collect-status.mjs`, `skill/tools/collect-signals.mjs`, `skill/tools/preread.mjs`, `skill/tools/cite-check.mjs`
 - `git fetch`: `skill/tools/preread.mjs`, `skill/commands/peek.md`
 - What `publish` sends: `skill/tools/publish.mjs` (the `Files` list), `skill/tools/publish-safe.mjs` (what is cut from each file), `skill/tools/glance.mjs`, `skill/tools/rival-facts.mjs`, `skill/tools/demand-facts.mjs`

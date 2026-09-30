@@ -63,7 +63,7 @@ export const invoke = (env = process.env) => (env.CLAUDE_PLUGIN_ROOT ? "/nosy:no
 export function render(L, { prefix = "/nosy:", nextStep = true, moveIn = `${prefix}move-in` } = {}) {
   const on = L.hooks.filter(h => h.on).map(h => h.name), off = L.hooks.filter(h => !h.on);
   const hooks = !L.hooksInstalled
-    ? "Hooks: none, this is the skill without the plugin (the plugin adds them: /plugin install nosy@nosy)."
+    ? "Hooks: none, this is the skill without the plugin. Any agent: `nosy git-hooks install` adds the after-commit nudge and never-rule check as git hooks (Claude Code: /plugin install nosy@nosy adds all four hooks)."
     : `Hooks on: ${on.join(", ") || "none"}.${off.length ? ` Off: ${off.map(h => `${h.name} (${h.off})`).join(", ")}.` : ""}`;
   const at = { ready: "pm/ found: Nosy has moved in here.",
     none: nextStep ? `No pm/ here yet: run ${moveIn} to set Nosy up for this repo.` : "No pm/ here yet: Nosy hasn't moved in.",

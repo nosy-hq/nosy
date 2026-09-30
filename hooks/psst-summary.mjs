@@ -4,8 +4,12 @@
 // Its only job: if pm/ exists in the working folder, print the first pick of
 // skill/tools/next.mjs as one "Psst…" line (what to run next and why), or print
 // nothing when nothing is stale. It used to whisper only psst's list; now it's
-// whatever next.mjs ranks first, psst included. Reads pm/ and runs a few local `git log` calls; no
-// network, no gh, never writes to the project. Any failure stays silent: never block SessionStart.
+// whatever next.mjs ranks first, psst included. Reads pm/ and runs a few local `git log` calls; no gh,
+// never writes to the project. Any failure stays silent: never block SessionStart.
+//
+// One network call, and only this one (docs/DATA.md): skill/tools/update-check.mjs asks GitHub once a day for the public file
+// .claude-plugin/plugin.json and says one line when a newer Nosy is out, because a plugin installed from GitHub is not updated
+// for you. No version, identifier or repo data is sent. Off: NOSY_NO_UPDATE_CHECK=1 or the plugin option "Turn off the update notice".
 // The file keeps its name so hooks.json and existing installs don't change.
 //
 // One exception to "quiet where there is no pm/": the FIRST session after install says three lines once
@@ -81,10 +85,21 @@ async function main() {
   }
   const say = [whisper, waiting].filter(Boolean).join("\n");
 
-  if (hello) {
+  // A newer Nosy is out: said to the owner (not the agent), at most once a day. Asks the network at most once a day; silent on any failure.
+  let update = null;
+  try {
+    const { updateNotice } = await import(path.join(here, "..", "skill", "tools", "update-check.mjs"));
+    update = await updateNotice({ plugin: true }); // this hook only exists in the plugin
+  } catch {
+    // stay silent; never block SessionStart
+  }
+
+  const toOwner = [hello, update].filter(Boolean).join("\n");
+  if (toOwner) {
     // systemMessage is what the owner sees; the agent gets the whisper (if any) as context, as before.
-    process.stdout.write(JSON.stringify({ systemMessage: hello,
-      hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: say ? `${say}\n` : "Nosy's first-run lines were shown to the owner; no need to repeat them." } }));
+    const fallback = hello ? "Nosy's first-run lines were shown to the owner; no need to repeat them." : "The owner was told a newer Nosy is out; no need to repeat it.";
+    process.stdout.write(JSON.stringify({ systemMessage: toOwner,
+      hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: say ? `${say}\n` : fallback } }));
   } else if (say) process.stdout.write(say + "\n");
 }
 

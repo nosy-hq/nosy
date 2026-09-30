@@ -118,7 +118,7 @@ export async function check({ cwd = process.cwd(), pm: pmArg, env = process.env,
 
   // 6. Hooks: the file, valid JSON, every script it names present and parseable; which are switched off.
   const hooksFile = path.join(root, "hooks", "hooks.json");
-  if (!fs.existsSync(hooksFile)) add("note", "no hooks here (the skill without the plugin): no opening summary, after-commit nudge or checks by themselves", "/plugin install nosy@nosy adds them");
+  if (!fs.existsSync(hooksFile)) add("note", "no hooks here (the skill without the plugin): no opening summary, after-commit nudge or checks by themselves", "Claude Code: /plugin install nosy@nosy adds them. Any agent: `nosy git-hooks install` adds the after-commit nudge and the never-rule check as git hooks");
   else {
     const hj = readJson(hooksFile);
     if (hj.error || !hj.value?.hooks) add("fail", `hooks/hooks.json isn't valid: ${hj.error || "no \"hooks\" key"}`, REINSTALL);

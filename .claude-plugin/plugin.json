@@ -1,7 +1,7 @@
 {
   "name": "nosy",
   "displayName": "Nosy",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "description": "Nosy about your product. Never your data. The nosy product manager that lives inside your coding agent: looks at the backend, git and roadmap first, then rivals; doesn't do code review, makes product decisions.",
   "author": {
     "name": "Nosy HQ"
@@ -24,6 +24,12 @@
       "type": "boolean",
       "title": "Turn off the opening summary",
       "description": "Stops the SessionStart hook from printing a one-line \"Psst…\" summary from pm/state/lowhanging.json. Commands and the skill are unaffected.",
+      "default": false
+    },
+    "disable_update_check": {
+      "type": "boolean",
+      "title": "Turn off the update notice",
+      "description": "Stops the session-start hook from asking GitHub, once a day, which Nosy version is the newest (one GET of the public file .claude-plugin/plugin.json, nothing sent about you or your repo) and from saying so when yours is older. Commands and the skill are unaffected.",
       "default": false
     },
     "disable_commit_nudge": {

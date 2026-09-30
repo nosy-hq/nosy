@@ -1,12 +1,13 @@
 // install: puts Nosy's skill where each coding agent in a project reads skills, in one command
 // (`npx github:nosy-hq/nosy install`). Idea from Impeccable's `npx impeccable install`: half of the issues on
 // Caveman and Ponytail were setup (pm/inspiration-skill-products.md), and every agent reads skills from its own folder.
-//   nosy install   [--dir <project>] [--providers claude,codex,…] [--global] [--dry-run]
+//   nosy install   [--dir <project>] [--providers claude,codex,…] [--global] [--dry-run] [--git-hooks]
 //   nosy update    re-copies every install this tool made (found by its marker file)
 //   nosy uninstall [--providers …]   removes only folders this tool made; never one it didn't write
 // What it writes: a copy of skill/ (without skill/test/) at <agent folder>/skills/nosy/, plus a marker file
 // (.nosy-install.json: version, the source label "github:nosy-hq/nosy", when) inside it. A copy, not a link: the npx cache is temporary, and a
-// cloud session reads what's committed. It never touches settings files, hooks or anything outside those folders.
+// cloud session reads what's committed. It never touches settings files, hooks or anything outside those folders, except with
+// --git-hooks: then it also writes the after-commit nudge and never-rule check as git hooks (git-hooks.mjs), and `uninstall` removes them.
 // Claude Code's hooks and /nosy:<command> commands come with the plugin; install says so and prints the command.
 // Uninstall leaves nothing of Nosy's behind except pm/ (yours): it removes the copies, the agent folders install itself created
 // (the marker lists them; an agent folder that was already there is never touched), and the small memo files the hooks keep in the
@@ -132,6 +133,7 @@ export function render(P, { dry = false } = {}) {
   const done = P.steps.filter(s => s.copy);
   if (done.length && !dry && P.action !== "uninstall") {
     lines.push("", "Next: open your agent in this project and type " + [...new Set(done.map(s => PROVIDERS[s.provider].invoke))].join(" · ") + ". It sets Nosy up (`move-in`) the first time.");
+    if (!P.gitHooks && done.some(s => s.provider !== "claude")) lines.push("This agent has no hooks of its own: in this repo, `nosy install --git-hooks` (or later `nosy git-hooks install`) adds the after-commit nudge and the never-rule check as plain git hooks (their output comes back in `git commit`, whatever agent runs it). Say \"Nosy, what's loaded\" (or type " + [...new Set(done.filter(s => s.provider !== "claude").map(s => PROVIDERS[s.provider].invoke))].join(" · ") + ") for the version and whether a newer one is out.");
     if (done.some(s => s.provider === "claude")) lines.push("Claude Code: the plugin adds /nosy:<command> commands and the hooks (session start, after-commit): `/plugin marketplace add nosy-hq/nosy` then `/plugin install nosy@nosy`.");
     // Nothing puts `nosy` on PATH: name the command that really runs, from the copy just written (npx's cache is temporary).
     const first = done.find(s => s.provider === "claude") || done[0], tool = path.join(first.target, "tools", "nosy.mjs");
@@ -151,10 +153,34 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
   const flag = k => { const i = argv.indexOf(k); if (i >= 0) argv.splice(i, 1); return i >= 0; };
   const action = ["install", "update", "uninstall"].includes(argv[0]) ? argv.shift() : "install";
   const dir = path.resolve(take("--dir") || process.cwd()), providers = (take("--providers") || "").split(",").map(s => s.trim()).filter(Boolean);
-  const dry = flag("--dry-run"), global = flag("--global");
+  const dry = flag("--dry-run"), global = flag("--global"), withGitHooks = flag("--git-hooks");
   if (!fs.existsSync(dir)) { console.error(`No folder at ${dir}. Check the path given to --dir (or run this from the project's folder).`); process.exit(1); }
   const P = plan(dir, { providers, global, action });
   if (P.error) { console.error(P.error); process.exit(1); }
   try { if (!dry) apply(P); } catch (e) { console.error(`Couldn't write: ${e.message}. ${advice(e.message) || "Check that you can write to that folder; `--dry-run` shows what would be written."}`); process.exit(1); }
+  P.gitHooks = withGitHooks;
   console.log(render(P, { dry }));
+  // --git-hooks: also the after-commit nudge and never-rule check as plain git hooks (git-hooks.mjs), for agents with no hooks of their own.
+  // Opt-in, never implied: the install itself touches no hook. They call the copy just written (the npx cache is temporary).
+  // `uninstall` takes our blocks out again, since install put them there; it never touches a hook block that isn't ours.
+  try {
+    const G = await import("./git-hooks.mjs");
+    const where = !global ? (() => { try { return G.locate(dir); } catch { return null; } })() : null;
+    if (P.action === "uninstall" && where && !dry) {
+      const steps = G.plan("uninstall", where);
+      G.apply(steps);
+      for (const s of steps.filter(x => x.write !== null && x.write !== undefined)) console.log(`  ✓ git hook ${path.relative(where.root, s.file)}: ${s.state.replace("would remove", "removed")}`);
+    } else if (withGitHooks && P.action !== "uninstall") {
+      const copy = P.steps.find(s => s.copy && !P.global);
+      if (global) console.log("Git hooks are per repository: run `nosy git-hooks install` inside the repo (not with --global).");
+      else if (!where) console.log("Git hooks skipped: this folder is not a git repository.");
+      else if (!copy) console.log("Git hooks skipped: no skill copy was made here for them to call.");
+      else {
+        const steps = G.plan("install", { ...where, tools: path.join(fs.existsSync(copy.target) ? fs.realpathSync(copy.target) : copy.target, "tools") }); // real path: git reports the repo root resolved (a /var → /private/var link would otherwise look like "outside the repo")
+        if (!dry) G.apply(steps);
+        for (const s of steps) console.log(`  ✓ git hook ${path.relative(where.root, s.file)}: ${dry ? s.state : s.state.replace("would create", "created").replace("would add our block to your existing hook", "added our block to your existing hook")}`);
+        if (steps.some(s => s.refuse)) process.exitCode = 1;
+      }
+    }
+  } catch (e) { console.error(`Git hooks: ${e.message}`); process.exitCode = 1; }
 }

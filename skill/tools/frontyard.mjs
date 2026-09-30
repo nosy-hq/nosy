@@ -1,5 +1,5 @@
 // Frontyard (owner's ask): shipped features ↔ landing page. "You built this, let's add it to the page."
-// Usage: node frontyard.mjs <pm folder> [--page <file>] [--site <folder of saved pages>] [--day 60] [--json <file>]   (reads pm/sources.json)
+// Usage: node frontyard.mjs <pm folder> [--page <file>] [--site <folder of saved pages>] [--product <folder of saved product pages>] [--day 60] [--json <file>]   (reads pm/sources.json)
 // Reads: sources.json → repo, ref, frontyard: {
 //   path: "README.md" | ["apps/web/app/page.tsx", …]   page lives in the repo (text and last-change date come from git)
 //   url: "https://…"                                   page isn't in the repo; the script never hits the network — an agent fetches it and passes --page
@@ -166,7 +166,7 @@ const globRe = g => new RegExp("^" + g.split("**").map(p => p.split("*").map(s =
 const WHOLE_FILE = y => !/:\d+$/.test(y.source);
 const nameExists = (name, pageA) => { const a = smallAscii(name); return [a, a.replace(/[-_]/g, " "), a.replace(/[-_ ]/g, "")].some(v => v.length >= 3 && matchRe(v).test(pageA)); };
 
-function works(pm, { pageFileOf, dayArg, siteDirOf } = {}) {
+function works(pm, { pageFileOf, dayArg, siteDirOf, productDirOf } = {}) {
   const K = readSources(pm);
   langOfLoad(K); // sources.json's `language`
   const V = K.frontyard || {}, day = +(dayArg || V.day || 60);
@@ -194,7 +194,7 @@ function works(pm, { pageFileOf, dayArg, siteDirOf } = {}) {
   const matchersFor = pageA => {
     const pageRoot = k => { if (k.length >= 4 && matchRe(k).test(pageA)) return k; if (k.length === 4 && k.endsWith("s") && new RegExp(`(?<![\\p{L}\\p{N}])${k.slice(0, 3)}(?![\\p{L}\\p{N}])`, "u").test(pageA)) return `${k}→${k.slice(0, 3)}`; const c = [...translations(k, Glossary), ...synonyms(k)].find(t => t.length >= 3 && matchRe(t).test(pageA)); return c ? `${k}→${c}` : null; };
     // Field name: the full name is on the page, or at least half of its parts (itself or a translation) are ("decisions-read" → decision + reads).
-    const areaPage = name => { if (nameExists(name, pageA)) return true; const p = smallAscii(name).split(/[-_ ]+/).filter(x => x.length >= 4).map(root); return p.length > 0 && p.filter(pageRoot).length >= Math.ceil(p.length / 2); };
+    const areaPage = name => { if (nameExists(name, pageA)) return true; const p = smallAscii(name).split(/[-_ ]+/).filter(x => x.length >= 4).map(root); return p.length > 0 && p.filter(pageRoot).length >= (p.length <= 2 ? p.length : Math.ceil(p.length / 2)); }; // a two-word name needs both words ("repo pulse" was on the page because "repo" is)
     return { pageRoot, areaPage };
   };
   const pageA = smallAscii(raw);
@@ -214,10 +214,20 @@ function works(pm, { pageFileOf, dayArg, siteDirOf } = {}) {
 
   // --- surface: things whose name should appear on the page (commands, CLI subcommands, pages) ---
   const allFiles = tryGit("ls-tree", "-r", "--name-only", K.ref).split("\n").filter(Boolean);
+  // main can be ahead of what people can install. `frontyard.released: "0.16.0"` names the last public
+  // version; its release commit is the one whose subject starts with it. Counts and version stamps are checked against that
+  // commit, and a field whose commits are all newer is "on main, not released", which the page must not describe yet.
+  const pkgAt = ref => { try { return JSON.parse(tryGit("show", `${ref}:package.json`)).version || null; } catch { return null; } };
+  const relVer = V.released ? String(V.released).replace(/^v/, "") : null;
+  const relRef = relVer ? (tryGit("log", "-1", "--format=%H", "-E", `--grep=^v?${relVer.replace(/\./g, "\\.")}([: ]|$)`, K.ref).trim() || null) : null;
+  const relSet = relRef ? new Set(tryGit("rev-list", relRef).split("\n").filter(Boolean)) : null;
+  const isReleased = h => !relSet || [...relSet].some(x => x.startsWith(h));
+  const countRef = relRef || K.ref, countFiles = relRef ? tryGit("ls-tree", "-r", "--name-only", relRef).split("\n").filter(Boolean) : allFiles;
+  const mainVer = pkgAt(K.ref), aheadCount = relRef ? +(tryGit("rev-list", "--count", `${relRef}..${K.ref}`).trim() || 0) : 0;
   const surface = [];
   for (const Y of V.surface || []) {
-    if (Y.glob) { const r = globRe(Y.glob); for (const f of allFiles.filter(f => r.test(f))) surface.push({ name: path.basename(f).replace(/\.[^.]+$/, ""), source: f }); }
-    if (Y.file && Y.pattern) { const r = new RegExp(Y.pattern, "gm"), t = tryGit("show", `${K.ref}:${Y.file}`); for (const m of t.matchAll(r)) surface.push({ name: m[1], source: `${Y.file}:${t.slice(0, m.index).split("\n").length}` }); }
+    if (Y.glob) { const r = globRe(Y.glob); for (const f of countFiles.filter(f => r.test(f))) surface.push({ name: path.basename(f).replace(/\.[^.]+$/, ""), source: f }); }
+    if (Y.file && Y.pattern) { const r = new RegExp(Y.pattern, "gm"), t = tryGit("show", `${countRef}:${Y.file}`); for (const m of t.matchAll(r)) surface.push({ name: m[1], source: `${Y.file}:${t.slice(0, m.index).split("\n").length}` }); }
   }
   const surfaceFile = new Set(surface.map(y => y.source.replace(/:\d+$/, "")));
   // The same name can come from more than one file (commands/psst.md + skill/commands/psst.md): all of them are that surface item's files.
@@ -239,6 +249,8 @@ function works(pm, { pageFileOf, dayArg, siteDirOf } = {}) {
   // knows the frontend app dir(s) — it's inside one of them or outside every monorepo container altogether (a
   // repo with no apps/packages/clients split, like Nosy's own, keeps its old behavior unchanged).
   const isUserFacingFile = (f, surfaceFile) => surfaceFile.has(f) || (!structuralNonFrontend(f) && (!frontendDirs.length || inFrontendDir(f) || !MONOREPO_CONTAINER_RE.test(f)));
+  const visible0 = (title, files, surfaceFile) => (/^(feat|feature)\b/i.test(title) || files.some(d => Screen.test(d) || surfaceFile.has(d)))
+    && (!files.length || files.some(d => isUserFacingFile(d, surfaceFile)));
   const LOG_ARGS = ["log", "--no-merges", `--since=${day}.days`, "--name-only", "--format=@@%h%x09%cI%x09%s"];
   // `frontyard.also`: other repos of the same product (a hosted app next to the plugin, an API next to the web app):
   // [{ repo, ref, surface: [{ glob }] }]. Their commits count as features too; a file matching the repo's own
@@ -250,6 +262,7 @@ function works(pm, { pageFileOf, dayArg, siteDirOf } = {}) {
     const ref = A.ref || "HEAD", res = (A.surface || []).filter(y => y.glob).map(y => globRe(y.glob));
     logs.push({ log: at([...LOG_ARGS, ref]), surf: new Set(at(["ls-tree", "-r", "--name-only", ref]).split("\n").filter(f => res.some(r => r.test(f)))) });
   }
+  const ignoreAreas = [].concat(V.ignoreAreas || []).map(x => new RegExp(x, "i")), ignoredAreas = new Set();
   const fields = new Map();
   for (const { log, surf: surfaceFile, own } of logs) for (const block of log.split("@@").filter(Boolean)) {
     const [head, ...fileLines] = block.split("\n"), [h, date, ...topic] = head.split("\t"), title = topic.join("\t");
@@ -258,18 +271,22 @@ function works(pm, { pageFileOf, dayArg, siteDirOf } = {}) {
     // A docs/test-only commit is not a feature — but a surface file (e.g. a command's doc) counts as product even if it's a doc.
     if (files.length && !files.some(d => surfaceFile.has(d)) && files.every(d => /\.(md|txt)$/i.test(d) || /(^|\/)(tests?|__tests__)\//.test(d) || /\.(test|spec)\./.test(d))) continue; // docs/test only
     if (source.type === "repo" && files.length && files.every(d => paths.includes(d))) continue; // the page's own change
-    const { area, text } = commitArea(title, files);
+    const { area: area0, text } = commitArea(title, files);
     if (own) for (const y of surfaceSingular) if (y.files.some(d => files.includes(d))) (y.changed ||= []).push({ h, date, text: text.slice(0, 140) });
+    // a wide commit with no "area:" prefix ("Small writer and dashboard polish: …" over 18 files) had no
+    // area and vanished from the report. A user-visible one is named by the clause before its colon.
+    let area = area0;
+    if ((!area || area.length < 3) && visible0(title, files, surfaceFile)) area = title.split(/:| — | - /)[0].trim().toLowerCase().split(/\s+/).slice(0, 4).join(" ");
     if (!area || area.length < 3) continue;
+    if (ignoreAreas.some(r => r.test(area))) { ignoredAreas.add(area); continue; } // frontyard.ignoreAreas: work the page isn't expected to cover (an old language, a rename)
     // A change the user can see: touches a surface file (command, page) or a screen file, or is a feat: commit —
     // AND at least one of those files is actually user-facing (not a backend/infra/shared/
     // tooling package elsewhere in the monorepo). Work that only touches internal scripts, or a non-frontend
     // app/package, is counted separately (in Nosy itself, script names like "inventory" never reach the customer;
     // in a Twenty-style monorepo, neither does packages/twenty-server or packages/twenty-docker).
-    const visible = (/^(feat|feature)\b/i.test(title) || files.some(d => Screen.test(d) || surfaceFile.has(d)))
-      && (!files.length || files.some(d => isUserFacingFile(d, surfaceFile)));
+    const visible = visible0(title, files, surfaceFile);
     if (!fields.has(area)) fields.set(area, { area, commits: [], visible: false });
-    const A = fields.get(area); A.commits.push({ h, date, text: text.slice(0, 140) }); if (visible) A.visible = true;
+    const A = fields.get(area); A.commits.push({ h, date, text: text.slice(0, 140), own: !!own }); if (visible) A.visible = true;
   }
   const surfaceRoot = new Set(surfaceSingular.flatMap(y => [root(smallAscii(y.name)), smallAscii(y.name)]));
   // Distinctive words: appear in a field's commit titles, rare across all titles (idf).
@@ -286,9 +303,10 @@ function works(pm, { pageFileOf, dayArg, siteDirOf } = {}) {
     const stakeholder = ks.filter(k => !surfaceRoot.has(k)).length, coverage = stakeholder ? matching.length / stakeholder : 0;
     const status = nameOnPage || coverage >= 0.5 ? "page" : coverage >= 0.25 ? "partial" : "missing";
     const last = A.commits.map(c => c.date).sort((a, b) => Date.parse(a) - Date.parse(b)).at(-1);
+    const unreleased = !!relSet && A.commits.length > 0 && A.commits.every(c => c.own && !isReleased(c.h)); // commits of this repo only; a hosted sibling has no release
     // Not on the landing: is it somewhere else on the site (its name, or at least half its distinguishing words)?
     const elsewhere = status === "page" || !site.length ? null : site.filter(p => { const ms = ks.filter(k => !surfaceRoot.has(k)).map(p.m.pageRoot).filter(Boolean), n = ks.filter(k => !surfaceRoot.has(k)).length; return p.m.areaPage(A.area) || (n && ms.length / n >= 0.5); }).map(p => p.name).slice(0, 5);
-    result.push({ area: A.area, visible: A.visible, commit_count: A.commits.length, last, status, name_page: nameOnPage, words: ks, matching, example: A.commits.slice(0, 3), ...(elsewhere ? { elsewhere } : {}),
+    result.push({ area: A.area, visible: A.visible, commit_count: A.commits.length, last, status, name_page: nameOnPage, words: ks, matching, example: A.commits.slice(0, 3), ...(unreleased ? { unreleased: true } : {}), ...(elsewhere ? { elsewhere } : {}),
       ...(source.last_change && Date.parse(last) > Date.parse(source.last_change) ? { page_after: true } : {}) });
   }
   // A visible field whose name is on the page but that changed again after the page's last change: is the description still current?
@@ -368,14 +386,24 @@ function works(pm, { pageFileOf, dayArg, siteDirOf } = {}) {
   // A different number is only flagged when it is within half of the real count (a stale total, not "3 commands worth running").
   // frontyard.counts: [{ noun: "commands?", glob: "commands/*.md" }, { noun: "products", matrix: true, minus: 1 }, { noun, file, pattern }]
   const NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20 };
-  const pages = [{ name: "landing", text: raw }, ...site];
+  // the backyard. `frontyard.inside`: docs the team and its agents read, not the public page (README, AGENTS.md,
+  // CLAUDE.md, docs/*.md, onboarding notes): paths or globs, read from the repo at the integration branch. They get the same checks as
+  // the page (counts, version stamps, lines the code made false) plus: a path or command the doc names that no longer exists, and how
+  // much shipped since the doc was last touched. A stale doc is a context bug: the next agent or teammate believes it.
+  const insideDocs = [];
+  for (const spec of [].concat(V.inside || [])) {
+    const g = typeof spec === "string" ? spec : spec?.glob || spec?.path; if (!g) continue;
+    const list = /[*?]/.test(g) ? allFiles.filter(f => globRe(g).test(f)) : [g];
+    for (const f of list) if (!insideDocs.some(d => d.path === f)) { const text = tryGit("show", `${K.ref}:${f}`); if (text.trim()) insideDocs.push({ path: f, text }); }
+  }
+  const pages = [{ name: "landing", text: raw }, ...site, ...insideDocs.map(d => ({ name: `inside:${d.path}`, text: d.text }))];
   const counts = [];
   for (const C of V.counts || []) {
     if (!C?.noun) continue;
     let truth = null, how = "";
-    if (C.glob) { const r = globRe(C.glob); truth = allFiles.filter(f => r.test(f)).length; how = C.glob; }
+    if (C.glob) { const r = globRe(C.glob); truth = countFiles.filter(f => r.test(f)).length; how = C.glob; }
     else if (C.matrix && MO) { truth = MO.products.length; how = "matrix products"; }
-    else if (C.file && C.pattern) { truth = [...tryGit("show", `${K.ref}:${C.file}`).matchAll(new RegExp(C.pattern, "gm"))].length; how = `${C.file} /${C.pattern}/`; }
+    else if (C.file && C.pattern) { truth = [...tryGit("show", `${countRef}:${C.file}`).matchAll(new RegExp(C.pattern, "gm"))].length; how = `${C.file} /${C.pattern}/`; }
     if (truth == null) continue; truth -= C.minus || 0;
     const re = new RegExp(`(?<![\\p{L}\\p{N}.])(?!0)(\\d+|${Object.keys(NUM).join("|")})\\s+(?:[\\p{L}-]+\\s+){0,2}?(?:${C.noun})(?![\\p{L}\\p{N}])`, "giu"), said = [];
     for (const p of pages) for (const m of p.text.matchAll(re)) { const n = /^\d+$/.test(m[1]) ? +m[1] : NUM[m[1].toLowerCase()]; if (!said.some(x => x.page === p.name && x.n === n)) { if (n !== truth && Math.abs(n - truth) > truth / 2) continue; said.push({ page: p.name, text: m[0].replace(/\s+/g, " "), n, ok: n === truth }); } }
@@ -394,13 +422,99 @@ function works(pm, { pageFileOf, dayArg, siteDirOf } = {}) {
     if (hits.length) contradictions.push({ say: C.say, find: C.find, pages: where, hits: hits.slice(0, 4) });
   }
 
-  const missing = result.filter(a => a.status === "missing" && a.visible), visibleFields = result.filter(a => a.visible);
-  return { ...empty, page_missing: false, source, fields: result, surface: surfaceSingular, claims, phrases, structuralPromises, phrasesNote, price, rival, ...(site.length ? { site: site.map(p => p.name) } : {}), counts, contradictions,
+  // who the code talks to. A line that sets a model ("WRITER_MODEL = \"zeta/zeta-small-1\"") names a
+  // vendor; if the site has pages and none of them names that vendor, say so (a privacy page that lists the processors is the
+  // usual place). `frontyard.vendors.ignore`: vendor names to skip. `frontyard.vendors: false` turns it off.
+  const vendors = [];
+  if (site.length && V.vendors !== false) {
+    const skip = new Set([...(V.vendors?.ignore || []), "github", "node", "npm", "types", "cloudflare"].map(x => x.toLowerCase()));
+    const seen = new Map();
+    for (const R of [{ repo: K.repo, ref: K.ref }, ...[].concat(V.also || []).filter(A => A?.repo).map(A => ({ repo: path.resolve(K.repo, A.repo), ref: A.ref || "HEAD" }))]) {
+      let out = ""; try { out = execFileSync("git", ["-C", R.repo, "grep", "-n", "-I", "-i", "-E", "model[A-Za-z_]*[\"'`: =]+[\"'`][a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9._-]*[\"'`]", R.ref, "--", ".", ":(exclude)*.md", ":(exclude)*lock.json", ":(exclude)test/*", ":(exclude)*.test.*", ":(exclude)*.example"], { encoding: "utf8", maxBuffer: 64 << 20, stdio: ["ignore", "pipe", "ignore"] }); } catch {}
+      for (const l of out.split("\n").filter(Boolean)) { const m = l.match(/[\"'`]([a-z0-9][a-z0-9-]*)\/([a-z0-9][a-z0-9._-]*)[\"'`]/i); if (!m) continue; const v = m[1].toLowerCase(); if (skip.has(v) || seen.has(v)) continue; seen.set(v, { vendor: v, model: `${m[1]}/${m[2]}`, at: `${path.basename(R.repo)}:${l.replace(/^[^:]*:/, "").slice(0, 100)}` }); }
+    }
+    for (const x of seen.values()) { const where = pages.filter(p => new RegExp(`(?<![\\p{L}\\p{N}])${x.vendor.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "iu").test(p.text)).map(p => p.name); if (!where.length) vendors.push(x); }
+  }
+
+  // the product itself. `--product <dir>` / `frontyard.product`: saved pages of the public sample or demo of the
+  // running product (one file per page). Commits say what changed in the code; this says what a visitor sees. UI labels the product
+  // shows (a tab, a button, a note: anything that repeats across its pages, or is a button or a note/pill/badge) that no page of
+  // the landing or the site names. It is how "written by a small model" and a "Wrong?" button stay visible to Nosy when a commit title hides them.
+  const productDir = productDirOf || V.product, productLabels = [];
+  if (productDir && fs.existsSync(productDir)) {
+    const count = new Map(), keep = new Map();
+    const clean = h => h.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+    const pagesP = fs.readdirSync(productDir).filter(f => /\.html?$/i.test(f)).sort();
+    for (const f of pagesP) {
+      const h = fs.readFileSync(path.join(productDir, f), "utf8"), here = new Set();
+      const take = (t, strong, note) => { t = clean(t); if (t.length < 3 || t.length > (note ? 140 : 90) || !/\p{L}{3}/u.test(t)) return; if (note && /\d|\.(ts|tsx|js|md|sql)\b|\/|#/.test(t)) return; here.add(t); if (strong) keep.set(t, true); };
+      // Chrome, not content: a button, a link that isn't a data page (an area, a rival), a note. Headings and sample data are the product's content.
+      for (const m of h.matchAll(/<(a|button)\b([^>]*)>([\s\S]*?)<\/\1>/gi)) { if (m[1].toLowerCase() === "a" && /href="[^"]*\/(area|rival|rivals|p)\/[^"]*"/i.test(m[2])) continue; take(m[3], m[1].toLowerCase() === "button", false); }
+      for (const m of h.matchAll(/<(p|span|div|small|em|li)\b[^>]*class="[^"]*\b[\w-]*(?:note|pill|badge|chip|flag)\b[^"]*"[^>]*>([\s\S]*?)<\/\1>/gi)) take(m[2], true, true);
+      for (const t of here) count.set(t, (count.get(t) || 0) + 1);
+    }
+    const allText = pages.map(p => p.text.toLowerCase().replace(/\s+/g, " ")).join("\n");
+    for (const [t, n] of count) {
+      if (n < 2 && !keep.has(t)) continue;
+      if (/^(sign in|sample|guide|account|menu|skip to content|nosy cloud|privacy|terms|log ?out|copy|close|search)$/i.test(t)) continue;
+      if (allText.includes(t.toLowerCase().slice(0, 40))) continue; // the label itself, as written (not a word of it somewhere)
+      productLabels.push({ label: t, pages: n });
+    }
+    productLabels.sort((a, b) => b.pages - a.pages);
+  }
+
+  // what each inside doc names that is gone, and what shipped since it was touched.
+  const inside = [];
+  if (insideDocs.length) {
+    const fileSet = new Set(allFiles), baseSet = new Set(allFiles.map(f => path.basename(f))), topSet = new Set(allFiles.map(f => f.split("/")[0]));
+    const dirSet = new Set(allFiles.flatMap(f => { const q = f.split("/"); return q.slice(0, -1).map((_, i) => q.slice(0, i + 1).join("/")); }));
+    const insideIgnore = [].concat(V.insideIgnore || []).map(x => new RegExp(x));
+    const ph = { "<skill>": "skill", ...(V.placeholders || {}) }, cli = V.cli || (() => { try { return JSON.parse(tryGit("show", `${K.ref}:package.json`)).name; } catch { return null; } })();
+    // A command counts as existing when it is a surface name, the tool's own name, or a word in the files that define the surface
+    // (a CLI's dispatcher lists subcommands the surface pattern may not catch).
+    const names = new Set([...surfaceMap.keys(), "help", "version", ...(cli ? [cli] : [])]);
+    const defText = [...new Set((V.surface || []).filter(y => y.file).map(y => y.file))].map(f => tryGit("show", `${K.ref}:${f}`)).join("\n");
+    const known = w => names.has(w) || (defText && new RegExp(`(?<![\\w-])${w}(?![\\w-])`).test(defText));
+    for (const d of insideDocs) {
+      const missingPaths = new Set(), missingCmds = new Set();
+      for (const m of d.text.matchAll(/`([^`\n]{2,120})`/g)) {
+        let t = m[1].trim();
+        for (const [k, v] of Object.entries(ph)) t = t.split(k).join(v);
+        if (cli) { const c = t.match(new RegExp(`^(?:npx [\\w.:/-]+ |node [\\w./-]*/)?${cli.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\.mjs)? ([a-z][a-z-]*)\\b`)); if (c && names.size > 3 && !known(c[1])) missingCmds.add(`${cli} ${c[1]}`);
+          const sl = t.match(new RegExp(`^/${cli}:([a-z][a-z-]*)$`)); if (sl && names.size > 3 && !known(sl[1])) missingCmds.add(`/${cli}:${sl[1]}`); }
+        t = t.replace(/:\d+(?:-\d+)?$/, "").replace(/[.,;:)]+$/, "");
+        if (/[<>*{}$|=\s…]|^https?:|^[-@#~/]|^\.|^pm\/|node_modules|^owner\/|your|example|xxx|foo/i.test(t) || insideIgnore.some(r => r.test(t))) continue; // dot-dirs (.github, .cursor) are usually where the doc tells the reader to put files
+        const slash = /^[\w.@-]+(\/[\w.@-]+)+\/?$/.test(t), bare = /^[\w-]+\.(mjs|js|ts|tsx|py|go|rb|sh|yml|yaml|json)$/.test(t);
+        if (slash) { const u = t.replace(/\/$/, ""); const here = path.posix.join(path.posix.dirname(d.path), u); if (topSet.has(u.split("/")[0]) && !fileSet.has(u) && !dirSet.has(u) && !fileSet.has(here) && !dirSet.has(here)) missingPaths.add(t); }
+        else if (bare && /\.(mjs|js|ts|tsx|py|go|rb|sh|yml|yaml)$/.test(t) && !baseSet.has(t)) missingPaths.add(t);
+      }
+      const last = tryGit("log", "-1", "--format=%cI", K.ref, "--", d.path).trim() || null;
+      const since = last ? result.filter(a => a.visible && !a.unreleased && Date.parse(a.last) > Date.parse(last)) : [];
+      inside.push({ path: d.path, last_change: last, days_ago: last ? Math.round((Date.now() - Date.parse(last)) / 864e5) : null, missing_paths: [...missingPaths].slice(0, 12), missing_commands: [...missingCmds].slice(0, 12),
+        shipped_since: since.length, since_examples: since.slice(0, 4).map(a => ({ area: a.area, example: a.example[0]?.text?.slice(0, 80) })) });
+    }
+  }
+
+  // "version N.N.N" on a page older than the latest public release ("checked against version 0.15.0" left
+  // on the data page after 0.15.1). Changelogs and case studies state old versions on purpose: `frontyard.versionSkip` regexes
+  // (default changelog, case-studies) keep them out. A hint: a pin to an old tag may be deliberate.
+  const latestVer = relVer || mainVer, versionStamps = [];
+  const cmpV = (a, b) => { const x = a.split(".").map(Number), y = b.split(".").map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0); return 0; };
+  if (latestVer) {
+    const skipV = [].concat(V.versionSkip || ["changelog", "case-studies"]).map(x => new RegExp(x, "i"));
+    for (const p of pages) { if (skipV.some(r => r.test(p.name))) continue;
+      const seen = new Set();
+      for (const m of p.text.matchAll(/(?<![\w.])(?:version|v)\s?(\d+\.\d+\.\d+)(?![\d.])/gi)) { if (cmpV(m[1], latestVer) < 0 && !seen.has(m[1])) { seen.add(m[1]); versionStamps.push({ page: p.name, stamp: m[1], latest: latestVer, text: p.text.slice(Math.max(0, m.index - 40), m.index + m[0].length + 20).replace(/\s+/g, " ").trim() }); } } }
+  }
+  const release = relVer ? { released: relVer, main: mainVer, commits_ahead: aheadCount, found: !!relRef } : null;
+
+  const missing = result.filter(a => a.status === "missing" && a.visible && !a.unreleased), visibleFields = result.filter(a => a.visible && !a.unreleased);
+  return { ...empty, page_missing: false, source, fields: result, surface: surfaceSingular, claims, phrases, structuralPromises, phrasesNote, price, rival, ignored_areas: [...ignoredAreas], ...(site.length ? { site: site.map(p => p.name) } : {}), counts, contradictions, vendors, inside, release, version_stamps: versionStamps, unreleased: result.filter(a => a.unreleased && a.visible).map(a => ({ area: a.area, commit_count: a.commit_count, example: a.example[0] })), ...(productDir ? { product_labels: productLabels } : {}),
     summary: { area: visibleFields.length, ic: result.length - visibleFields.length, page: visibleFields.filter(a => a.status === "page").length, partial: visibleFields.filter(a => a.status === "partial").length, missing: missing.length,
       current_mi: result.filter(a => a.current_mi).length + surfaceSingular.filter(y => y.page_after).length,
       rival_distinguish_missing: rival ? rival.steps.filter(a => a.type === "distinguish" && a.status !== "page").length : 0,
       rival_desk_missing: rival ? rival.steps.filter(a => a.type === "desk" && a.status !== "page").length : 0,
-      surface_missing: surfaceSingular.filter(y => !y.page).length, count_wrong: counts.reduce((a, c) => a + c.said.filter(x => !x.ok).length, 0), contradicted: contradictions.length,
+      surface_missing: surfaceSingular.filter(y => !y.page).length, count_wrong: counts.reduce((a, c) => a + c.said.filter(x => !x.ok).length, 0), contradicted: contradictions.length, inside_docs: inside.length, inside_stale: inside.filter(x => x.missing_paths.length || x.missing_commands.length).length, version_stamps: versionStamps.length, product_unnamed: productLabels.length, vendors_unnamed: vendors.length,
       site_pages: site.length, nowhere_on_site: site.length ? result.filter(a => a.visible && a.status === "missing" && !(a.elsewhere || []).length).length : null, page_after_missing: missing.filter(a => a.page_after).length } };
 }
 
@@ -412,7 +526,7 @@ function formatMd(R) {
   o += `Of ${O.area} user-visible field(s), ${O.page} are on the page, ${O.partial} partly, **${O.missing} not at all.**${R.surface.length ? ` Surface has ${R.surface.length} name(s), ${O.surface_missing} not on the page.` : ""}\n\n`;
   const missingSurface = R.surface.filter(y => !y.page);
   if (missingSurface.length) o += `## Names missing from the page\n\n${missingSurface.map(y => `- \`${y.name}\` — ${y.source}`).join("\n")}\n\n`;
-  const missing = R.fields.filter(a => a.visible && a.status !== "page");
+  const missing = R.fields.filter(a => a.visible && a.status !== "page" && !a.unreleased);
   if (missing.length) { o += `## Shipped, not on the page — add these\n\n| Field | Shipped | Last | On page | Example |\n|---|---|---|---|---|\n`;
     for (const a of missing) o += `| ${a.area}${a.page_after ? " ⏱" : ""} | ${a.commit_count} | ${a.last.slice(0, 10)} | ${a.status === "partial" ? `partial (${a.matching.join(", ")})` : "missing"} | ${a.example[0].h} ${a.example[0].text.replace(/\|/g, "/").slice(0, 80)} |\n`;
     o += `\n⏱ = shipped after the page's last change.\n\n`; }
@@ -424,6 +538,11 @@ function formatMd(R) {
     if (!d.length && R.rival.steps.length) o += `Rival footing: all ${R.rival.steps.length} distinguishing/table-stakes step(s) are on the page.\n\n`;
   }
   if (R.contradictions?.length) o += `## The page says it, the code says otherwise\n\n${R.contradictions.map(c => `- "${c.say}" (${c.pages.join(", ")}) — but the code has \`${c.find}\`: ${c.hits.join(" · ")}`).join("\n")}\n\n`;
+  if (R.release?.released && R.release.main && R.release.released !== R.release.main) o += `## Main is ahead of the public release\n\nPublic: ${R.release.released}. Main: ${R.release.main}, ${R.release.commits_ahead} commit(s) later.${R.release.found ? "" : " (No commit starts with the public version: counts were read from main.)"} Counts above are read from the public release. What shipped only on main is listed here, not as missing from the page: a page must not describe what nobody can install yet.\n\n${(R.unreleased || []).map(x => `- ${x.area} (${x.commit_count}) — ${x.example.h} ${x.example.text.slice(0, 80)}`).join("\n") || "- (no user-visible field yet)"}\n\n`;
+  if (R.version_stamps?.length) o += `## Version stamps older than the latest release\n\n${R.version_stamps.slice(0, 15).map(x => `- ${x.page}: "…${x.text}…" (latest ${x.latest})`).join("\n")}\n\nA "checked against" line or an install pin may be old on purpose; a feature line is not.\n\n`;
+  if (R.inside?.length) o += `## Inside docs (the backyard)\n\nDocs the team and its agents read. A path or command a doc names that no longer exists is a context bug: the next agent or teammate believes it.\n\n| Doc | Last touched | Shipped since | Names that are gone |\n|---|---|---|---|\n${R.inside.map(x => `| ${x.path} | ${x.days_ago == null ? "?" : `${x.days_ago}d ago`} | ${x.shipped_since} | ${[...x.missing_paths.map(p => `\`${p}\``), ...x.missing_commands.map(c => `\`${c}\``)].join(", ") || "—"} |`).join("\n")}\n\n`;
+  if (R.product_labels?.length) o += `## Shown in the product, named on no page\n\nLabels, buttons and notes the running product shows a visitor (saved pages of its public sample), in how many of its pages, that no page of the landing or site names. Some are plain chrome; any that is a feature is a miss:\n\n${R.product_labels.slice(0, 25).map(x => `- ${x.label} (${x.pages} page${x.pages === 1 ? "" : "s"})`).join("\n")}\n\n`;
+  if (R.vendors?.length) o += `## Models the code calls that no page names\n\n${R.vendors.map(x => `- \`${x.model}\` — ${x.at}`).join("\n")}\n\nA privacy or data page that lists who handles the data should name these (or say why not).\n\n`;
   const wrongCounts = (R.counts || []).flatMap(c => c.said.filter(x => !x.ok).map(x => ({ ...x, c })));
   if (wrongCounts.length) o += `## Numbers on the page that don't match the code\n\n${wrongCounts.map(x => `- ${x.page}: "${x.text}" — the code has ${x.c.truth} (${x.c.how})`).join("\n")}\n\n`;
   if (R.site?.length) {
@@ -450,13 +569,14 @@ function formatMd(R) {
   // no page needed and no names printed — an internal/backend/infra/tooling area's own
   // name (a package, a script) isn't customer-facing information either; a count is enough for the report.
   if (internalFields.length) o += `\n${internalFields.length} internal-only area(s) not counted.\n`;
+  if (R.ignored_areas?.length) o += `${R.ignored_areas.length} area(s) skipped by frontyard.ignoreAreas: ${R.ignored_areas.slice(0, 12).join(", ")}.\n`;
   return o;
 }
 
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2), takeArg = f => { const i = argv.indexOf(f); return i >= 0 ? argv.splice(i, 2)[1] : null; };
-  const jsonOut = takeArg("--json"), pageFileOf = takeArg("--page"), dayArg = takeArg("--day"), siteDirOf = takeArg("--site");
-  const R = works(argv[0] || "pm", { pageFileOf, dayArg, siteDirOf });
+  const jsonOut = takeArg("--json"), pageFileOf = takeArg("--page"), dayArg = takeArg("--day"), siteDirOf = takeArg("--site"), productDirOf = takeArg("--product");
+  const R = works(argv[0] || "pm", { pageFileOf, dayArg, siteDirOf, productDirOf });
   process.stdout.write(formatMd(R));
   if (jsonOut) fs.writeFileSync((fs.mkdirSync(path.dirname(jsonOut), { recursive: true }), jsonOut), JSON.stringify(R, null, 1));
 }

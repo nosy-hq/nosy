@@ -16,6 +16,7 @@ import fs from "node:fs"; import path from "node:path"; import { execFileSync } 
 import { Maintenance, commitArea } from "./frontyard.mjs";
 import { nextDecision, render as renderDecision } from "./next-decision.mjs";
 import { status as loadedStatus, render as loadedRender } from "./loaded.mjs";
+import { updateNotice } from "./update-check.mjs";
 import { readSourcesSafe } from "./sources-file.mjs";
 import { nosyCommand } from "./hints.mjs";
 
@@ -195,5 +196,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
   if (jsonOut) { fs.mkdirSync(path.dirname(jsonOut), { recursive: true }); fs.writeFileSync(jsonOut, JSON.stringify(R, null, 1)); }
   // the top-level skill with no command (`/nosy:nosy` in the plugin, `/nosy` as a skill): first the three "is it loaded" lines (loaded.mjs), then the picks. Not with --json.
   if (!jsonOut) { try { console.log(loadedRender(loadedStatus(), { prefix: cli ? `${nosyCommand()} ` : prefix, nextStep: false, moveIn: cli ? nosyCommand("setup .") : undefined }) + "\n"); } catch {} }
+  // Every agent, plugin or not: a newer Nosy is out. The session-start hook says this in Claude Code only; Codex, Cursor and the rest have no hook, so the top-level skill says it when asked what is loaded.
+  if (!jsonOut) { try { const n = await updateNotice({ always: true }); if (n) console.log(n + "\n"); } catch {} }
   console.log(render(R, { prefix, cli }));
 }

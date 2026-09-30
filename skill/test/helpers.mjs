@@ -9,6 +9,9 @@ import { fileURLToPath } from "node:url";
 // Hints name the command that runs on THIS machine (hints.mjs nosyCommand); the suite pins it so its expectations read `nosy <command>`.
 // The resolution itself is tested in command-hint.test.mjs.
 process.env.NOSY_COMMAND ??= "nosy";
+// The session-start hook asks GitHub once a day which Nosy is newest (update-check.mjs). The suite never touches the network: off here,
+// and update-check.test.mjs switches it back on only with an injected fetch or a pre-filled cache.
+process.env.NOSY_NO_UPDATE_CHECK ??= "1";
 
 export const Tool = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "tools");
 

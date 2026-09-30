@@ -17,6 +17,17 @@ From the shell instead: `claude plugin marketplace add nosy-hq/nosy`, then `clau
 
 **If it broke.** `npx github:nosy-hq/nosy doctor --check` checks Node, git, gh, the skill files, the hooks and `pm/sources.json`. It reads local files only, writes nothing, and prints the fix next to every failing line. It exits 2 on a hard failure. Plain `nosy doctor` is a different job: with `--fix` it renames old file names and keys in a `pm/` written by an older Nosy.
 
+**Update.** Claude Code does not update a plugin from a GitHub marketplace for you, so you stay on the version you installed until you ask. In a session:
+
+```
+/plugin marketplace update nosy
+/plugin update nosy@nosy
+```
+
+Then start a **new session** (the running one keeps the old files), and `/nosy:nosy` prints the version now loaded. Your `pm/` folder is not touched. If `update` isn't recognised in your Claude Code, `/plugin uninstall nosy@nosy` and `/plugin install nosy@nosy` do the same. From the shell: `claude plugin marketplace update nosy`, then `claude plugin update nosy@nosy`. A plugin you added from a folder on your machine (`/plugin marketplace add <path-to-nosy>`) is a copy of that folder as it was when you installed it: `git pull` in the folder first, then the two commands above. To have Claude Code refresh the marketplace on its own, turn on auto-update for `nosy` in `/plugin` → **Marketplaces**. A skill copied by `nosy install` (Codex, Cursor, Gemini CLI and the rest, section g) is updated with `npx github:nosy-hq/nosy update`, in each project where you ran it (plain `nosy update` re-copies from the Nosy you already have, so it would change nothing).
+
+**Told when a newer one is out.** Claude Code: at session start the plugin asks GitHub, at most once a day, which version is the newest (one GET of the public file `.claude-plugin/plugin.json` in `nosy-hq/nosy`; nothing about you or your repo goes with it) and says one line when yours is older, at most once a day. Other agents have no hooks, so there the same line comes from the top-level skill: type `/nosy` (Codex: `$nosy`) with no command and it sits under the "Nosy X is loaded" lines whenever your copy is behind; the same once-a-day read, and `NOSY_NO_UPDATE_CHECK=1` turns it off there too. The plugin you have before this notice existed can't say it: update once by hand. Off: `NOSY_NO_UPDATE_CHECK=1` or "Turn off the update notice" in `/plugin configure nosy@nosy` (section f). What it sends, exactly: [DATA.md](DATA.md).
+
 **Uninstall.** `/plugin uninstall nosy@nosy`, then `/plugin marketplace remove nosy`. Your `pm/` folder stays; delete it by hand if you want it gone.
 
 **Requirements.** git and Node 18.17 or newer. The scripts use only Node's own modules, the global `fetch` and `readdirSync(…, { recursive })`; the last one sets the 18.17 floor. CI runs the tests on Node 18.17, 20 and 22. `gh` is optional: it adds issues and PRs to `peek`, `overheard` and `neighbors --gh`.
@@ -56,7 +67,7 @@ Nosy creates no schedule for you. The [GitHub Action](#j-github-action-weekly) r
 
 ## f) Turning off the hooks
 
-Each of the four hooks has a plugin option (`/plugin configure nosy@nosy`) and an environment variable. In Claude Code, the environment variable wins.
+Each of the four hooks has a plugin option (`/plugin configure nosy@nosy`) and an environment variable. In Claude Code, the environment variable wins. The update notice is part of the opening-summary hook and has a switch of its own: "Turn off the update notice" or `NOSY_NO_UPDATE_CHECK=1`. Turning off the opening summary (`NOSY_NO_PSST=1`) turns it off too.
 
 | Hook | What it does | Option | Env var |
 |---|---|---|---|
@@ -67,9 +78,9 @@ Each of the four hooks has a plugin option (`/plugin configure nosy@nosy`) and a
 
 After one `git commit`, two hooks may speak, in this order: the never-rule check (only on a match), then the nudge.
 
-The reference check is the one hook that reaches the network on its own: for each `#N` it runs a read-only `gh api repos/<issue.repo>/issues/<N>` through your own `gh`, when `pm/sources.json` names `issue.repo`. Without Claude Code: `nosy cite-check <answer.md> --gh`.
+Two hooks reach the network on their own. The reference check: for each `#N` it runs a read-only `gh api repos/<issue.repo>/issues/<N>` through your own `gh`, when `pm/sources.json` names `issue.repo`. Without Claude Code: `nosy cite-check <answer.md> --gh`. And the update notice (above): one GET a day of a public version file. Both have switches.
 
-**The never-rule check without Claude Code.** `nosy never-check` reads the staged changes (`--last-commit`, `--base <ref>` for a branch, `--worktree`) and exits 2 on a match. As a plain git hook it works in any agent, or none: put `node <path-to-nosy>/skill/tools/never-check.mjs pm` in `.git/hooks/pre-commit`. A git hook that exits non-zero does stop the commit; that is your choice to make. The plugin hook never does.
+**The never-rule check without Claude Code.** `nosy never-check` reads the staged changes (`--last-commit`, `--base <ref>` for a branch, `--worktree`) and exits 2 on a match. As a plain git hook it works in any agent, or none: `nosy git-hooks install` writes it (with the nudge) for you, or put `node <path-to-nosy>/skill/tools/never-check.mjs pm` in `.git/hooks/pre-commit`. A git hook that exits non-zero does stop the commit; that is your choice to make. The plugin hook never does.
 
 To turn off all of it: `/plugin disable nosy`.
 
@@ -92,6 +103,7 @@ npx github:nosy-hq/nosy#v0.17.0 install
 ```
 
 - `--providers claude,codex,cursor,gemini,copilot,opencode,kiro` chooses; `--dry-run` shows first; `--global` uses your user folder (Claude Code `~/.claude/skills`, Codex `~/.agents/skills`).
+- **What you don't get outside Claude Code, and what stands in for it.** Only Claude Code's plugin has hooks. In the other agents: the after-commit nudge and the never-rule check come from `nosy git-hooks install`, run once in the repo: `nosy install --git-hooks` does it together with the install (and `nosy uninstall` removes it again); it writes plain git hooks (`post-commit` and `post-merge`; a hook you already have is kept and ours is added to it, a hook that isn't a shell script is left alone), and what they print comes back in the result of `git commit` and `git pull`, whichever agent ran it, or a person. They only print, never fail a commit, send nothing, and run only where `pm/sources.json` exists. `nosy git-hooks status` shows them, `nosy git-hooks uninstall` removes only our block, `NOSY_NO_GIT_HOOKS=1` silences one run. The opening summary and the "newer Nosy is out" line are what `/nosy` (Codex: `$nosy`) with no command prints; the reference check is `nosy cite-check <answer.md> --gh`; the three sub-agents are spec files the skill tells your agent to follow itself (`agents/`).
 - `nosy update` refreshes every copy it made; `nosy uninstall` removes them. Both touch only folders with the marker, so a `nosy` folder you made yourself is never overwritten or removed.
 - It changes no settings file and adds no hooks; the Claude Code plugin ([a](#a-claude-code-terminal-desktop-vs-code-jetbrains-the-default)) adds `/nosy:<command>` and the hooks. It refuses to run inside Nosy's own repo. Exit 0 done or nothing to do, 1 couldn't run ([CLI-CONTRACT.md](CLI-CONTRACT.md)).
 - Without an Artifact tool, `tea` writes `pm/status-page.html`; without sub-agents, `neighbors` researches rivals in sequence; without a session-start hook, "Psst…" is said in the first message.

@@ -37,7 +37,7 @@ test("status: a skill copied without the plugin has no hooks, and says so", () =
   const L = status({ cwd: withPm(), env: {}, skill: path.join(skill, "skill") });
   assert.equal(L.commands, 3);
   assert.equal(L.hooksInstalled, false);
-  assert.match(render(L, { prefix: "/nosy " }), /Hooks: none, this is the skill without the plugin \(the plugin adds them: \/plugin install nosy@nosy\)\./);
+  assert.match(render(L, { prefix: "/nosy " }), /Hooks: none, this is the skill without the plugin\. Any agent: `nosy git-hooks install` adds the after-commit nudge and never-rule check as git hooks/);
 });
 
 test("a plugin has no bare /nosy: the top-level skill is /nosy:nosy there, /nosy in a skill-only install", () => {

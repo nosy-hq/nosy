@@ -100,7 +100,7 @@ if (dry) { if (!base) console.log("No target yet: set cloud.url in pm/sources.js
 
 if (!base) fail("no target configured, so nothing was sent. Set `cloud.url` in pm/sources.json (or NOSY_CLOUD_URL, or --url <address>). Nosy has no default address: publishing is opt-in. `nosy publish --dry-run` shows what would go.");
 const token = process.env.NOSY_CLOUD_TOKEN;
-if (!token) fail(`NOSY_CLOUD_TOKEN is not set. Make a token on ${base} (Connect Claude → Make a token) and export it; never commit it.`);
+if (!token) fail(`NOSY_CLOUD_TOKEN is not set. Make a token on ${base} (Connect your agent → Make a token) and export it; never commit it.`);
 if (!yes) {
   if (!process.stdin.isTTY) fail(`not sent: this needs your yes. Read the list above (or run --dry-run --full), then run again with --yes.`);
   const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
@@ -117,5 +117,5 @@ try {
   });
 } catch (e) { fail(`couldn't reach ${base}: ${netError(e)}. Nothing was sent; check your connection (or --url / NOSY_CLOUD_URL) and run it again.`); }
 const body = await res.json().catch(() => ({}));
-if (!res.ok) fail(`${base} answered ${res.status}: ${body.error || "no details"}.${res.status === 401 || res.status === 403 ? " The token was refused: make a new one on the site (Connect Claude → Make a token) and export NOSY_CLOUD_TOKEN again." : res.status >= 500 ? " The service is having trouble: nothing was changed, try again in a few minutes." : ""}`);
+if (!res.ok) fail(`${base} answered ${res.status}: ${body.error || "no details"}.${res.status === 401 || res.status === 403 ? " The token was refused: make a new one on the site (Connect your agent → Make a token) and export NOSY_CLOUD_TOKEN again." : res.status >= 500 ? " The service is having trouble: nothing was changed, try again in a few minutes." : ""}`);
 console.log(`Published. Dashboard: ${body.url}`);

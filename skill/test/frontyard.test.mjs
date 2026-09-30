@@ -215,3 +215,84 @@ test("site folder, counts and contradictions: where else a missing thing is, a s
   assert.match(r.output, /The page says it, the code says otherwise/);
   assert.match(r.output, /Numbers on the page that don't match the code/);
 });
+
+// a wide commit with no "area:" prefix is still a shipped field; a model vendor in the code that no page names is listed.
+test("a wide commit without an area prefix is a field; a model vendor no page names is flagged", () => {
+  const pm3 = path.join(root, "pm3"), site = path.join(root, "site3"); fs.mkdirSync(path.join(pm3, "state"), { recursive: true }); fs.mkdirSync(site, { recursive: true });
+  fs.writeFileSync(path.join(site, "privacy.html"), "<html><body><p>Hosting by Cloudflare and OpenRouter.</p></body></html>");
+  fs.writeFileSync(path.join(repo, "src", "ai", "writer.ts"), "export const WRITER_MODEL = 'zeta/zeta-small-1';\nexport const OTHER_MODEL = 'openrouter/auto';\n");
+  fs.mkdirSync(path.join(repo, "commands"), { recursive: true }); fs.writeFileSync(path.join(repo, "commands", "weekly.md"), "# weekly\n"); fs.writeFileSync(path.join(repo, "src", "reports", "Line.tsx"), "export const line = 1;\n");
+  execFileSync("git", ["-C", repo, "add", "-A"]); execFileSync("git", ["-C", repo, "commit", "-q", "-m", "Small writer and report polish: one-line sentences, caps"]);
+  fs.writeFileSync(path.join(pm3, "sources.json"), JSON.stringify({ repo, ref: "main", frontyard: { path: "README.md", day: 30, site, surface: [{ glob: "commands/*.md" }] } }));
+  const j = path.join(pm3, "state", "frontyard.json"), r = run(path.join(Tool, "frontyard.mjs"), [pm3, "--json", j]); assert.equal(r.code, 0, r.error);
+  const X = JSON.parse(fs.readFileSync(j, "utf8"));
+  assert.ok(X.fields.some(a => /^small writer/.test(a.area) && a.visible), "the wide commit is named by the clause before its colon");
+  assert.deepEqual(X.vendors.map(v => v.vendor), ["zeta"], "openrouter is named on a page, zeta is not");
+  assert.match(r.output, /Models the code calls that no page names/);
+});
+
+// what the running product shows a visitor that no page names.
+test("product pages: a button and a note no page names are listed; one the site names is not", () => {
+  const pm4 = path.join(root, "pm4"), site = path.join(root, "site4"), prod = path.join(root, "product4"); for (const d of [path.join(pm4, "state"), site, prod]) fs.mkdirSync(d, { recursive: true });
+  fs.writeFileSync(path.join(site, "docs.html"), "<html><body><p>Press Reload to see new numbers.</p></body></html>");
+  const page = extra => `<html><body><nav><a href="/demo/weekly">Weekly digest</a></nav><button>Reload</button><p class="model-note">Written by a small model from the numbers below.</p>${extra}</body></html>`;
+  fs.writeFileSync(path.join(prod, "a.html"), page('<button>Wrong?</button><a href="/demo/rival/x">Rival X</a>')); fs.writeFileSync(path.join(prod, "b.html"), page('<a href="/demo/rival/y">Rival Y</a>'));
+  fs.writeFileSync(path.join(pm4, "sources.json"), JSON.stringify({ repo, ref: "main", frontyard: { path: "README.md", day: 30, site, product: prod, surface: [{ glob: "commands/*.md" }] } }));
+  const j = path.join(pm4, "state", "frontyard.json"), r = run(path.join(Tool, "frontyard.mjs"), [pm4, "--json", j]); assert.equal(r.code, 0, r.error);
+  const labels = JSON.parse(fs.readFileSync(j, "utf8")).product_labels.map(x => x.label);
+  assert.ok(labels.includes("Weekly digest") && labels.includes("Wrong?") && labels.some(l => /^Written by a small model/.test(l)));
+  assert.ok(!labels.includes("Reload"), "the site says Reload");
+  assert.ok(!labels.some(l => /Rival [XY]/.test(l)), "a link to a data page is content, not chrome");
+});
+
+// a two-word field name needs both words on the page; frontyard.ignoreAreas skips named areas.
+test("a two-word name needs both words; ignoreAreas skips an area", () => {
+  const pm5 = path.join(root, "pm5"); fs.mkdirSync(path.join(pm5, "state"), { recursive: true });
+  fs.writeFileSync(path.join(repo, "README.md"), "# Acme\n\nOur repo is open. The export feature exists. Share links too.\n");
+  fs.mkdirSync(path.join(repo, "src", "pulse"), { recursive: true }); fs.writeFileSync(path.join(repo, "src", "pulse", "Pulse.tsx"), "export const p = 1;\n");
+  execFileSync("git", ["-C", repo, "add", "-A"]); execFileSync("git", ["-C", repo, "commit", "-q", "-m", "feat(repo pulse): public pulse page"]);
+  fs.writeFileSync(path.join(pm5, "sources.json"), JSON.stringify({ repo, ref: "main", frontyard: { path: "README.md", day: 30, surface: [{ glob: "commands/*.md" }], ignoreAreas: ["^reports$"] } }));
+  const j = path.join(pm5, "state", "frontyard.json"), r = run(path.join(Tool, "frontyard.mjs"), [pm5, "--json", j]); assert.equal(r.code, 0, r.error);
+  const X = JSON.parse(fs.readFileSync(j, "utf8"));
+  assert.notEqual(X.fields.find(a => a.area === "repo pulse").status, "page", '"repo" is on the page, "pulse" is not');
+  assert.ok(!X.fields.some(a => a.area === "reports") && X.ignored_areas.includes("reports"));
+});
+
+// 183: what is only on main isn't "missing from the page"; old version stamps are listed.
+test("released: a field only on main is listed apart; an old version stamp on a page is flagged", () => {
+  const pm6 = path.join(root, "pm6"), site = path.join(root, "site6"); for (const d of [path.join(pm6, "state"), site]) fs.mkdirSync(d, { recursive: true });
+  const git = a => execFileSync("git", ["-C", repo, ...a], { encoding: "utf8" });
+  fs.writeFileSync(path.join(repo, "package.json"), JSON.stringify({ name: "acme", version: "0.1.0" })); git(["add", "-A"]); git(["commit", "-q", "-m", "0.1.0: first public release"]);
+  fs.mkdirSync(path.join(repo, "src", "zap"), { recursive: true }); fs.writeFileSync(path.join(repo, "src", "zap", "Zap.tsx"), "export const zap = 1;\n"); fs.writeFileSync(path.join(repo, "commands", "zap.md"), "# zap\n");
+  git(["add", "-A"]); git(["commit", "-q", "-m", "feat(zap): zap everything"]);
+  fs.writeFileSync(path.join(repo, "package.json"), JSON.stringify({ name: "acme", version: "0.2.0" })); git(["add", "-A"]); git(["commit", "-q", "-m", "0.2.0: zap"]);
+  fs.writeFileSync(path.join(site, "data.html"), "<html><body><p>It was checked against version 0.0.9 of Acme.</p></body></html>");
+  fs.writeFileSync(path.join(pm6, "sources.json"), JSON.stringify({ repo, ref: "main", frontyard: { path: "README.md", day: 30, site, released: "0.1.0", surface: [{ glob: "commands/*.md" }] } }));
+  const j = path.join(pm6, "state", "frontyard.json"), r = run(path.join(Tool, "frontyard.mjs"), [pm6, "--json", j]); assert.equal(r.code, 0, r.error);
+  const X = JSON.parse(fs.readFileSync(j, "utf8"));
+  assert.deepEqual([X.release.released, X.release.main, X.release.found], ["0.1.0", "0.2.0", true]);
+  assert.ok(X.release.commits_ahead >= 2);
+  assert.ok(X.unreleased.some(u => u.area === "zap"), "zap exists only on main");
+  assert.ok(!X.surface.some(y => y.name === "zap"), "the surface is read from the public release");
+  assert.ok(X.version_stamps.some(v => v.page === "data" && v.stamp === "0.0.9" && v.latest === "0.1.0"));
+  assert.match(r.output, /Main is ahead of the public release/);
+});
+
+// the backyard. Inside docs are checked for names that are gone and for what shipped since they were touched.
+test("inside docs: a missing path and a missing command are listed; an existing one and an external one are not; shipped-since counts", () => {
+  const pm7 = path.join(root, "pm7"); fs.mkdirSync(path.join(pm7, "state"), { recursive: true });
+  const git = a => execFileSync("git", ["-C", repo, ...a], { encoding: "utf8" });
+  fs.writeFileSync(path.join(repo, "AGENTS.md"), "# Agents\n\nRun `commands/zap.md` first. The old `src/zap/Gone.tsx` does the work. Install target: `.github/copilot-instructions.md`. Clone `acme-inc/tool`. Use `acme zap` or `acme vanish`, or `/acme:zap`.\n");
+  fs.mkdirSync(path.join(repo, "skill"), { recursive: true }); fs.writeFileSync(path.join(repo, "skill", "cli.mjs"), "const Commands = { zap: 1, export: 2 };\n");
+  git(["add", "-A"]); git(["commit", "-q", "-m", "docs: agents file"]);
+  const t = new Date(Date.now() + 3600e3).toISOString();
+  fs.mkdirSync(path.join(repo, "src", "later"), { recursive: true }); fs.writeFileSync(path.join(repo, "src", "later", "Later.tsx"), "export const l = 1;\n");
+  execFileSync("git", ["-C", repo, "add", "-A"]); execFileSync("git", ["-C", repo, "commit", "-q", "-m", "feat(later): a thing shipped after the doc"], { env: { ...process.env, GIT_AUTHOR_DATE: t, GIT_COMMITTER_DATE: t } });
+  fs.writeFileSync(path.join(pm7, "sources.json"), JSON.stringify({ repo, ref: "main", frontyard: { path: "README.md", day: 30, cli: "acme", inside: ["AGENTS.md"], surface: [{ glob: "commands/*.md" }, { file: "skill/cli.mjs", pattern: "^const Commands = \\{ (zap)" }] } }));
+  const j = path.join(pm7, "state", "frontyard.json"), r = run(path.join(Tool, "frontyard.mjs"), [pm7, "--json", j]); assert.equal(r.code, 0, r.error);
+  const d = JSON.parse(fs.readFileSync(j, "utf8")).inside.find(x => x.path === "AGENTS.md");
+  assert.deepEqual(d.missing_paths, ["src/zap/Gone.tsx"], "the real file, the dot-dir and the owner/repo are not flagged");
+  assert.deepEqual(d.missing_commands, ["acme vanish"], "acme zap exists (surface), /acme:zap exists");
+  assert.ok(d.shipped_since >= 1 && d.since_examples.some(e => e.area === "later"));
+  assert.match(r.output, /Inside docs \(the backyard\)/);
+});

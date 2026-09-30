@@ -34,7 +34,7 @@ const localize = text => {
   const prefix = nosyPrefix(); if (prefix === "nosy" || !text) return text;
   return text.replace(new RegExp("`nosy (" + [...Object.keys(Commands), "help"].join("|") + ")\\b([^`\\n]*)`", "g"), (_, c, rest) => "`" + prefix + " " + c + rest + "`");
 };
-const NoStateDir = new Set(["doctor.mjs", "health.mjs", "find-sources.mjs", "install.mjs", "explain.mjs", "next.mjs", "verify-setup.mjs"]);
+const NoStateDir = new Set(["doctor.mjs", "health.mjs", "find-sources.mjs", "install.mjs", "git-hooks.mjs", "explain.mjs", "next.mjs", "verify-setup.mjs"]);
 // Runs a script; prints its output or (silently) returns it. Never throws, returns the exit code instead.
 function script(name, a = [], { silent = false } = {}) {
   // A fresh repo has no pm/state yet: every step writes there (first-run `nosy inventory` / `nosy shipped` used to crash).
@@ -83,6 +83,8 @@ const Commands = {
   "cite-check": () => { const r = script("cite-check.mjs", [pm, ...process.argv.slice(3).filter((a, i, all) => a !== "--pm" && all[i - 1] !== "--pm")]); if (r.code === 2) process.exitCode = 2; return r; },
   // Puts the skill where each coding agent in the project reads skills (install.mjs); update / uninstall touch only
   // folders it wrote. Runs without pm/.
+  // The after-commit nudge and the never-rule check as git hooks, for agents without hooks of their own (git-hooks.mjs). Runs without pm/.
+  "git-hooks": () => script("git-hooks.mjs", process.argv.slice(3).filter((a, i, all) => a !== "--pm" && all[i - 1] !== "--pm").concat(["--pm", pm])),
   install: () => script("install.mjs", ["install", ...process.argv.slice(3)]),
   update: () => script("install.mjs", ["update", ...process.argv.slice(3)]),
   uninstall: () => script("install.mjs", ["uninstall", ...process.argv.slice(3)]),
@@ -310,7 +312,8 @@ Model-free counts (judgment stays with the agent; these just gather evidence):
   nosy sweep [--days 30] [--only slug,…]   each rival's dated release notes / news / blog entries in the window (sources.json rivals)
   nosy find <word> [more]  every place a word appears: whole repo (any case, Turkish letters either way) and every issue/PR (exit 2: nowhere)
   nosy cite-check <answer.md> [--gh]   every file:line, quote, commit and #ref in an answer checked (exit 2 when one doesn't hold)
-  nosy install [--providers claude,codex,cursor,…] [--global] [--dry-run]   the skill into each agent's folder here
+  nosy git-hooks <install|uninstall|status> [--dry-run]   the after-commit nudge and never-rule check as git hooks, for agents without hooks (Codex, Cursor…)
+  nosy install [--providers claude,codex,cursor,…] [--global] [--dry-run] [--git-hooks]   the skill into each agent's folder here (+ the git hooks)
   nosy update · nosy uninstall   refresh / remove only what install wrote
   nosy setup [repo]        writes a pm/sources.json proposal (the scripted part of move-in)
   nosy check               verifies the paths in sources.json against the repo
