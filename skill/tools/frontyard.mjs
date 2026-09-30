@@ -5,6 +5,7 @@
 //   url: "https://…"                                   page isn't in the repo; the script never hits the network — an agent fetches it and passes --page
 //   price: "apps/web/app/pricing/page.tsx"             if present, and pm/state/plan-gates.json exists, compared against code gates
 //   surface: [{ glob: "commands/*.md" }, { file: "src/cli.mjs", pattern: "^  mycli ([a-z-]+)" }]   names that should appear on the page
+//   also: [{ repo: "../other-repo", ref: "main", surface: [{ glob: "src/views/*.ts" }] }]   other repos of the same product: their commits count as shipped features
 //   day: 60 }
 // Produces three lists: (1) shipped, not on the page; (2) on the page, no trace in code (needs a look); (3) page is stale (shipped
 // since the page's last change). Never edits the page; only suggests. Reads public text or our own code ("Never your data").
@@ -221,9 +222,19 @@ function works(pm, { pageFileOf, dayArg } = {}) {
   // knows the frontend app dir(s) — it's inside one of them or outside every monorepo container altogether (a
   // repo with no apps/packages/clients split, like Nosy's own, keeps its old behavior unchanged).
   const isUserFacingFile = (f, surfaceFile) => surfaceFile.has(f) || (!structuralNonFrontend(f) && (!frontendDirs.length || inFrontendDir(f) || !MONOREPO_CONTAINER_RE.test(f)));
-  const log = tryGit("log", "--no-merges", `--since=${day}.days`, "--name-only", "--format=@@%h%x09%cI%x09%s", K.ref);
+  const LOG_ARGS = ["log", "--no-merges", `--since=${day}.days`, "--name-only", "--format=@@%h%x09%cI%x09%s"];
+  // `frontyard.also`: other repos of the same product (a hosted app next to the plugin, an API next to the web app):
+  // [{ repo, ref, surface: [{ glob }] }]. Their commits count as features too; a file matching the repo's own
+  // `surface` globs is user-facing there. The page is still compared against one place.
+  const logs = [{ log: tryGit(...LOG_ARGS, K.ref), surf: surfaceFile, own: true }];
+  for (const A of [].concat(V.also || [])) {
+    if (!A?.repo) continue;
+    const at = p => { try { return execFileSync("git", ["-C", path.resolve(K.repo, A.repo), ...p], { encoding: "utf8", maxBuffer: 256 << 20, stdio: ["ignore", "pipe", "ignore"] }); } catch { return ""; } };
+    const ref = A.ref || "HEAD", res = (A.surface || []).filter(y => y.glob).map(y => globRe(y.glob));
+    logs.push({ log: at([...LOG_ARGS, ref]), surf: new Set(at(["ls-tree", "-r", "--name-only", ref]).split("\n").filter(f => res.some(r => r.test(f)))) });
+  }
   const fields = new Map();
-  for (const block of log.split("@@").filter(Boolean)) {
+  for (const { log, surf: surfaceFile, own } of logs) for (const block of log.split("@@").filter(Boolean)) {
     const [head, ...fileLines] = block.split("\n"), [h, date, ...topic] = head.split("\t"), title = topic.join("\t");
     const files = fileLines.map(d => d.trim()).filter(Boolean);
     if (!title || Maintenance.test(title)) continue;
@@ -231,7 +242,7 @@ function works(pm, { pageFileOf, dayArg } = {}) {
     if (files.length && !files.some(d => surfaceFile.has(d)) && files.every(d => /\.(md|txt)$/i.test(d) || /(^|\/)(tests?|__tests__)\//.test(d) || /\.(test|spec)\./.test(d))) continue; // docs/test only
     if (source.type === "repo" && files.length && files.every(d => paths.includes(d))) continue; // the page's own change
     const { area, text } = commitArea(title, files);
-    for (const y of surfaceSingular) if (y.files.some(d => files.includes(d))) (y.changed ||= []).push({ h, date, text: text.slice(0, 140) });
+    if (own) for (const y of surfaceSingular) if (y.files.some(d => files.includes(d))) (y.changed ||= []).push({ h, date, text: text.slice(0, 140) });
     if (!area || area.length < 3) continue;
     // A change the user can see: touches a surface file (command, page) or a screen file, or is a feat: commit —
     // AND at least one of those files is actually user-facing (not a backend/infra/shared/

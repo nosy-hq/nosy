@@ -170,3 +170,24 @@ test("an Astro page's frontmatter and imports are code, not page copy (no 'Waitl
   assert.doesNotMatch(t, /import|Waitlist from|const title/);
   assert.match(t, /Ship faster/);
 });
+
+test("frontyard.also: a feature that shipped in another repo of the same product counts, and a non-surface file there does not", () => {
+  const other = path.join(root, "hosted");
+  fs.mkdirSync(path.join(other, "src", "views"), { recursive: true }); fs.mkdirSync(path.join(other, "scripts"), { recursive: true });
+  const git = a => execFileSync("git", ["-C", other, ...a], { encoding: "utf8" });
+  git(["init", "-q", "-b", "main"]); git(["config", "user.name", "T"]); git(["config", "user.email", "t@t.test"]);
+  fs.writeFileSync(path.join(other, "src", "views", "battlecard.ts"), "export const v = 1;\n");
+  git(["add", "-A"]); git(["commit", "-q", "-m", "Battlecard: one page per rival with pricing"]);
+  fs.writeFileSync(path.join(other, "scripts", "deploy.sh"), "echo hi\n");
+  git(["add", "-A"]); git(["commit", "-q", "-m", "Deploy guard: refuse unfinished work"]);
+  const file = path.join(pm, "sources.json"), was = fs.readFileSync(file, "utf8"), K = JSON.parse(was);
+  try {
+    fs.writeFileSync(file, JSON.stringify({ ...K, frontyard: { path: "README.md", day: 30, also: [{ repo: "../hosted", ref: "main", surface: [{ glob: "src/views/*.ts" }] }] } }));
+    const { R: F } = tara();
+    const card = F.fields.find(x => x.area === "battlecard");
+    assert.ok(card, "the other repo's commit becomes a field");
+    assert.equal(card.visible, true);
+    assert.equal(card.status, "missing");
+    assert.equal(F.fields.find(x => x.area === "deploy guard")?.visible, false, "a script is internal there too");
+  } finally { fs.writeFileSync(file, was); }
+});
