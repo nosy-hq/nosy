@@ -3,12 +3,15 @@
 Versions match `package.json` and `.claude-plugin/plugin.json`. Dates are when the version was committed. Versions before 0.10.0 were pre-release and aren't listed.
 
 ## 0.15.0 (2026-09-30)
-- Install confirmation: `/nosy` and the first session after an install say which version is loaded, how many commands it brought, which hooks are on, and whether the folder has a `pm/` (`loaded`).
-- `nosy doctor --check` checks the install itself (Node, git, gh, the skill's files, hooks, `pm/sources.json`); each problem carries its fix. Plain `nosy doctor` still fixes a `pm/` from an older Nosy.
-- Clearer errors: git or gh missing, gh signed out, no network, a folder that isn't a repo or a JSON typo now end in one line with the command that fixes it (`hints`).
-- Install and the GitHub Action fixes: the install target and the docs now name the same hosts (one-command install for Claude Code, Codex, Cursor, Gemini CLI, Copilot, OpenCode and Kiro; the skill folder can be copied into others), and the Action's own messages point at the right repo.
-- New docs: `docs/DATA.md` (what Nosy reads, writes and sends), `SECURITY.md`, `CONTRIBUTING.md`, issue and pull request templates.
-- Node 18.17 or newer is now the stated minimum everywhere, matching `package.json` (the scripts use recursive `readdirSync`).
+- Install check: `nosy --version` prints the version. `/nosy` and the first session after an install say which version is loaded, how many commands it brought, which hooks are on, and whether the folder has a `pm/`. `nosy doctor --check` checks the install itself (Node, git, gh, skill files, hooks, `pm/sources.json`) and prints a fix for each problem. Plain `nosy doctor` still fixes a `pm/` from an older Nosy.
+- Clearer errors: git or gh missing, gh signed out, no network, a folder that isn't a repo, a JSON typo. Each ends in one line with the command that fixes it.
+- Generated pages (`pm/page.html`, the scoreboard) escape all data and make no external requests.
+- `nosy publish` is opt-in and sends counts only: no commit subjects, author names, PR or issue titles, or quotes. Nothing is sent without a target you configured and a confirmation; `--dry-run` lists what would go.
+- Personal data (e-mail, phone, IBAN, card and ID numbers, names Nosy knows) now blocks `publish` and `notify` unless you pass `--allow-sensitive`. Masking covers international phone numbers and IBANs.
+- Fixes from real runs on public repos: `canwe` never contradicts its own evidence lines; the inventory reads Next.js and Django routes; `setup` picks frontend folders and the integration branch; `psst` skips component stories and shows requests that already have an open PR; demand counts name their window and say "related issues".
+- One-command install and the docs now name the same hosts (Claude Code, Codex, Cursor, Gemini CLI, Copilot, OpenCode, Kiro; other agents by copying the skill folder). The Action's messages point at the right repo.
+- New docs: `docs/DATA.md` (what Nosy reads, writes and sends), `docs/EVALS.md` (how it was tested, including where it lost), `docs/EXAMPLE.md` (a real run on a public repo), `SECURITY.md`, `CONTRIBUTING.md`, issue and pull request templates.
+- Node 18.17 or newer is the stated minimum everywhere, matching `package.json`. CI runs the tests on Node 18.17, 20 and 22.
 
 ## 0.14.4 (2026-09-29)
 - The reference check no longer raises false alarms.

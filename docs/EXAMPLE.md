@@ -1,15 +1,15 @@
 # A real run: Nosy on chatwoot/chatwoot
 
-This is what Nosy's counting scripts printed on a public repo on 30 September 2026. No model wrote any of it. Nothing was edited except that whole lines were removed; each gap is marked `[… N lines removed]` (N counts non-blank lines, so a blank line that disappears is not counted). Lines that name people (commit authors, issue authors) were removed too, so nothing here points at an individual. The `$` lines are the commands, not output.
+This is what Nosy's counting scripts printed on a public repo on 30 September 2026. No model wrote any of it. Nothing was edited except that whole lines were removed, each gap marked `[… N lines removed]` (N counts non-blank lines). Lines that name people (commit and issue authors) were removed too. The `$` lines are the commands, not output.
 
-We picked [Chatwoot](https://github.com/chatwoot/chatwoot) (MIT, open tracker, most commits tied to a PR number) because anyone can check every line below against the public repo. This is not a review of Chatwoot, and they have not seen it.
+We picked [Chatwoot](https://github.com/chatwoot/chatwoot) (MIT, open tracker, most commits tied to a PR number) so anyone can check every line against the public repo. This is not a review of Chatwoot, and its maintainers have not seen it.
 
 ## What it ran against
 
 - **Repo:** chatwoot/chatwoot, branch `develop`, commit `03702d176d6a9c94f421ffa10f472464f8ec198c` (29 Sep 2026), a shallow clone (`--depth 400`).
 - **Nosy:** 0.15.0, run on 30 Sep 2026.
-- **Issues and PRs** were read live with read-only `gh` calls, so those lines change when you rerun. The code, git and inventory lines only depend on the clone.
-- Nothing was written to the Chatwoot clone except an untracked `pm/` folder.
+- **Issues and PRs** were read live with read-only `gh` calls, so those lines change when you rerun. The code, git and inventory lines depend only on the clone.
+- The only thing written to the clone was an untracked `pm/` folder.
 
 ## The commands
 
@@ -24,9 +24,9 @@ node <nosy>/skill/tools/nosy.mjs psst
 node <nosy>/skill/tools/nosy.mjs canwe "retry failed webhooks"
 ```
 
-`setup` found the API spec (`swagger/swagger.json`) but left the frontend folder empty, so a person has to name it; without that edit all 156 endpoints land under "no screen", marked "should be checked". Every other line of `pm/sources.json` is as `setup` wrote it.
+`setup` found the API spec (`swagger/swagger.json`) but left the frontend folder empty, so a person named it; without that edit all 156 endpoints land under "no screen", marked "should be checked". Every other line of `pm/sources.json` is as `setup` wrote it.
 
-Two of these need an agent to be finished, and were not: `canwe` prints an evidence skeleton plus a guess, and the verdict is the agent's; `psst` prints an unchecked draft, and its refuter step (a model) was not run. Everything below is script output.
+Two commands need an agent to finish, and it was not run: `canwe` prints an evidence skeleton plus a guess, and the verdict is the agent's; `psst` prints an unchecked draft, and its refuter step (a model) was skipped.
 
 ## peek and shipped: what landed
 
@@ -152,18 +152,18 @@ The active-day median of 8 similar item(s) is 1 (p25-p75: 1-1 days), commit medi
 The agent gives the final verdict; this is only an evidence skeleton.
 ```
 
-In the code, the first thing to open is `app/jobs/agent_bots/webhook_job.rb`: it retries failed webhook calls (3 attempts) for one kind of webhook, agent bots. The plain `app/jobs/webhook_job.rb` has no retry. An open Chatwoot request (#15920) asks for the same on account and inbox webhooks. That is the half-built shape Nosy is meant to surface: something exists, for one case, and a request asks for the rest.
+The first file to open is `app/jobs/agent_bots/webhook_job.rb`: it retries failed webhook calls (3 attempts) for one kind of webhook, agent bots. The plain `app/jobs/webhook_job.rb` has no retry, and an open Chatwoot request (#15920) asks for the same on account and inbox webhooks. That is the shape Nosy is meant to surface: something exists for one case, and a request asks for the rest.
 
 ## How to read it
 
-Every line is something a script counted or matched in files, git history and public issues; the file:line lines are the part to check first, so open them. The size is the median of similar past changes in git, and the demand line counts related issues among the newest 200, so both are estimates and neither is a promise. The verdict line is a guess the agent is meant to overrule. This run does not prove that a change would take about a day, that 15 people asked for one thing, or that Chatwoot lacks a screen or a feature; it proves only what the scripts printed on that day.
+Every line is something a script counted or matched in files, git history and public issues. Open the `file:line` lines first. The size is the median of similar past changes in git, and the demand line counts related issues among the newest 200: both are estimates. The verdict line is a guess the agent is meant to overrule. This run does not show that the change would take about a day, that 15 people asked for one thing, or that Chatwoot lacks a screen or a feature. It shows only what the scripts printed that day.
 
 ## Where this run was wrong
 
-Listed because the point of a real run is that you can see this too.
+Listed so you can see them too.
 
 - **The verdict guess contradicted the code lines above it.** It said "Not now: no trace in the backend" because it only counted four `webhooks` endpoints from the API spec. The agent is supposed to read the code section first and overrule it. **Fixed since:** when the code section lists lines for the question, the guess now says "Partly there: exists in X; missing: Y" and names them.
 - **"no screen" was wrong for webhooks.** Chatwoot's dashboard has a client for them (`app/javascript/dashboard/api/webhooks.js`) that builds the URL from a shared base class, and the screen matcher does not read that. The same thing happened when we asked about canned responses and automation rules, which both have settings screens; 70 endpoints ended up as "should be checked". **Fixed since:** resource names given to a base API class, and frontend files or folders named for the endpoint, now count; with such a base class the report says "no screen found (frontend calls built dynamically aren't seen)".
-- **"asked 15 times by 11 customers" is a cluster, not one request.** It groups related webhook issues among the newest 200. Issue #15920 itself had no comments and no reactions when we looked. The count also moved between two runs on the same day (16 and 12 in an earlier run, 15 and 11 here); we did not chase why, but the window is the newest 200 issues, so it shifts as issues arrive. **Fixed since:** a cluster now reads "N related issues, M people", the window is printed next to the count, and the same input gives the same count.
-- **The size came from loosely similar changes.** The three similar items it listed (removed above, they name people) were all WhatsApp changes, not webhooks; the output does call the confidence "medium".
+- **"asked 15 times by 11 customers" is a cluster, not one request.** It groups related webhook issues among the newest 200. Issue #15920 itself had no comments and no reactions when we looked. The count also moved between two runs on the same day (16 and 12 in an earlier run, 15 and 11 here). We did not chase why; the window is the newest 200 issues, so it shifts as issues arrive. **Fixed since:** a cluster now reads "N related issues, M people", and the window is printed next to the count.
+- **The size came from loosely similar changes.** The three similar items it listed (removed above, they name people) were all WhatsApp changes, not webhooks. The output calls the confidence "medium".
 - **`psst` listed component stories as screens on mock data.** The `*.story.vue` files are Histoire previews for developers, not screens. It also ranked open requests that already have an open PR (for example #16065, with #16087 open) as cheap work; the refuter step exists to catch that and was not run. **Fixed since:** stories and specs are no longer screens, and an issue with an open PR is labelled "a PR is already open (#N)" and scores 0.

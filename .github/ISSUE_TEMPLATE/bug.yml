@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Run `/nosy:doctor` first and paste what it prints, even if it says there is nothing to fix. Don't paste customer data, keys or private repo contents.
+        Run `npx github:nosy-hq/nosy doctor --check` first and paste what it prints, even if everything looks fine. Don't paste customer data, keys or private repo contents.
   - type: input
     id: agent
     attributes:
@@ -17,7 +17,7 @@ body:
     id: nosy
     attributes:
       label: Nosy version
-      description: The version in `.claude-plugin/plugin.json` or `package.json`.
+      description: Output of `nosy --version`, or the version in `package.json`.
     validations:
       required: true
   - type: input
@@ -37,7 +37,7 @@ body:
   - type: textarea
     id: doctor
     attributes:
-      label: Output of /nosy:doctor
+      label: Output of `nosy doctor --check`
       render: text
     validations:
       required: true

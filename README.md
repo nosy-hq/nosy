@@ -4,7 +4,17 @@
 
 > Nosy about your product. Never your data.
 
-Nosy is a product manager that lives inside your coding agent. It goes through your backend, git history and roadmap, checks what your rivals shipped, and tells you what to build next: sized, placed on the roadmap, with a receipt for every claim.
+<p align="center">
+  <a href="https://github.com/nosy-hq/nosy/actions/workflows/test.yml"><img alt="tests" src="https://github.com/nosy-hq/nosy/actions/workflows/test.yml/badge.svg"></a>
+  <img alt="license: MIT" src="https://img.shields.io/badge/license-MIT-1B2240">
+  <img alt="Node 18.17+" src="https://img.shields.io/badge/node-18.17%2B-1B2240">
+</p>
+
+A product manager inside your coding agent. It goes through your backend, git history and roadmap first, then checks what your rivals shipped, and tells you what to build next: **sized, placed on the roadmap, with a receipt for every claim.**
+
+<p align="center"><img src="docs/assets/canwe.png" alt="A real run of nosy canwe on chatwoot/chatwoot: the code lines that already retry agent-bot webhooks, and a size of S from git history" width="860"></p>
+
+<p align="center"><sub>A real run on <a href="https://github.com/chatwoot/chatwoot">chatwoot/chatwoot</a>, lines removed. Nosy hands your agent the evidence; the verdict is your agent's. <a href="docs/EXAMPLE.md">Full run, and what it got wrong</a>.</sub></p>
 
 The plugin is free and MIT. Nosy Cloud (cloud.nosy.sh) is live and free for now: a shared record for your team. It never changes what the plugin does. [See a sample report](https://cloud.nosy.sh/demo) (made-up data).
 
@@ -17,62 +27,61 @@ In Claude Code:
 /plugin install nosy@nosy
 ```
 
-Send the two commands one at a time. `claude plugin list` should show `nosy@nosy` enabled. Then type `/nosy` in your repo. Needs git and Node 18.17 or newer.
+Send the two commands one at a time. `claude plugin list` should show `nosy@nosy` enabled. Then type `/nosy` in your repo. Needs git and Node 18.17 or newer. Not Claude Code? See [Other agents](#other-agents).
 
-`/nosy:move-in` runs once and reads your README, docs, decision files, git history and issues and PRs (through `gh`, if you have it). The counting runs on your machine with no model. Time and tokens depend on the size of your repo; we haven't measured a typical number yet.
+Run `/nosy:move-in` once: it reads your README, docs, decision files, git history and, through `gh` if you have it, issues and PRs. The counting runs on your machine with no model.
 
-Not Claude Code? See [Other agents](#other-agents).
+## Try these first
 
-## A real run
+| Type | You get |
+|---|---|
+| `/nosy` | The 2–3 commands worth running in *this* repo, each with the reason. |
+| `/nosy:peek` | What shipped, what didn't, what has no screen. |
+| `/nosy:canwe "can we do X?"` | The code that already exists, the size from git history, and how often it was asked for. |
+| `/nosy:psst` | What you could ship this week. Asked for + ready goes first. |
 
-On [chatwoot/chatwoot](https://github.com/chatwoot/chatwoot), 30 Sep 2026, lines trimmed:
+<p align="center"><img src="docs/assets/what-shipped.png" alt="The What shipped page Nosy generated for chatwoot/chatwoot: counts of merged and linked changes, and a list of what merged and what is close to merging" width="760"></p>
 
-```
-$ nosy canwe "retry failed webhooks"
+<p align="center"><sub>The page <code>nosy page --scoreboard</code> writes: what reached the branch, from git and explicit links only. Same repo, same day.</sub></p>
 
-In the code:
-app/jobs/agent_bots/webhook_job.rb:3
-  retry_on Webhooks::Trigger::RetryableError, wait: 3.seconds, attempts: 3
-lib/webhooks/trigger.rb:3
-  RETRYABLE_AGENT_BOT_STATUSES = [429, 500].freeze
+## Tested against a plain agent
 
-Size from history: S · confidence: medium
-```
+`psst` ("what could we ship this week?") against the same agent without Nosy, same repo, same question, blind. Judged by models, run by us:
 
-Retries already exist for one kind of webhook (agent bots). Nosy hands your agent these lines to check first; the verdict is your agent's. This shows Nosy's output only, with no plain-Claude comparison. The full run and what it got wrong: [docs/EXAMPLE.md](docs/EXAMPLE.md). How we tested it, including where it lost: [docs/EVALS.md](docs/EVALS.md).
+| Run | Nosy–plain (gradings) |
+|---|---|
+| 1 | **0–1**: plain won |
+| 2 | **1–2**: plain won |
+| 3 | **2–2**: a tie |
+| 4 | **5–1**: Nosy won, after we fixed what the losses showed |
 
-**1 skill · 17 commands · 80 scripts · 4 hooks · 16 named rules** (`nosy explain` lists the rules, and says which a script checks and which are instructions). The counting is plain, dependency-free Node: it runs in your terminal, in CI or as an MCP server, with no model and no API key. Your agent adds the judgment on top. Everything Nosy remembers lives in a `pm/` folder in your repo.
+Precision in run 4: 16 of 16 items held for Nosy, 18 of 28 for plain. The fixes came after the losses, so these runs are not independent, and two of three questions are one private app. Method, limits and every loss: [docs/EVALS.md](docs/EVALS.md).
 
 ## Other agents
 
 <details>
 <summary>Codex, Cursor, Gemini CLI, Copilot, OpenCode, Kiro, any MCP client, CI, terminal</summary>
 
-Nosy is one skill folder (`skill/`, the open Agent Skills format) plus small dependency-free Node scripts. The first row is the default.
+Nosy is one skill folder (`skill/`, the open Agent Skills format) plus small dependency-free Node scripts.
 
 | Where | How |
 |---|---|
 | **Claude Code** (default) | `/plugin marketplace add nosy-hq/nosy` then `/plugin install nosy@nosy` |
-| **Any coding agent, one command** | In your project: `npx github:nosy-hq/nosy install`. One-command install: Claude Code, Codex, Cursor, Gemini CLI, Copilot, OpenCode, Kiro. It finds the ones your project uses and puts the skill in each one's folder. `nosy update` / `nosy uninstall` touch only what it wrote. Then type `/nosy` (Codex: `$nosy`). |
-| **Windsurf, Roo, Junie…** | Works by copying the skill folder: `npx skills add nosy-hq/nosy` (or copy `skill/` into the agent's skills folder by hand), then ask "Nosy, psst" or `/nosy psst` |
+| **Any coding agent, one command** | In your project: `npx github:nosy-hq/nosy install`. It finds which of Claude Code, Codex, Cursor, Gemini CLI, Copilot, OpenCode and Kiro your project uses and copies the skill into each one's folder. `nosy update` and `nosy uninstall` touch only what it wrote. Then type `/nosy` (Codex: `$nosy`). |
+| **Windsurf, Roo, Junie…** | Copy the skill folder: `npx skills add nosy-hq/nosy`, or by hand into the agent's skills folder. Then ask "Nosy, psst" or `/nosy psst`. |
 | **Any MCP client** (Claude Desktop, Cursor, Zed, VS Code…) | `npx github:nosy-hq/nosy mcp` as a stdio server |
-| **GitHub Actions** (weekly, no model key) | `uses: nosy-hq/nosy@main`, see `docs/examples/nosy-weekly.yml` |
-| **Slack / Discord** | the Action (or `nosy notify`) posts the weekly "Psst…" to a webhook |
+| **GitHub Actions** (weekly, no model key) | `uses: nosy-hq/nosy@main`, see [`docs/examples/nosy-weekly.yml`](docs/examples/nosy-weekly.yml) |
+| **Slack / Discord** | The Action, or `nosy notify`, posts the weekly "Psst…" to a webhook. |
 | **Terminal, no agent** | `npx github:nosy-hq/nosy weekly` |
 
-`npx github:…` runs code straight from a repo. Pin a release tag to know which code you run: `npx github:nosy-hq/nosy#v0.15.0 install` (`docs/INSTALL.md`).
-
-Details for every path: `docs/INSTALL.md`.
+`npx github:…` runs code straight from a repo. To know which code, pin a release tag: `npx github:nosy-hq/nosy#v0.15.0 install`. Every path in detail: [docs/INSTALL.md](docs/INSTALL.md).
 
 </details>
 
-## Three directions, in order
-
-1. **Inside.** Your backend, git history and roadmap. What shipped, what's half-built, what has no screen.
-2. **Over the fence.** What rivals shipped, only as a reason to act. A public source in every cell; "announced" kept apart from "shipped".
-3. **Ahead.** "We can do this." Sized, placed in a wave, spec'd for your agents.
-
 ## Commands
+
+<details>
+<summary>All 17 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -92,25 +101,28 @@ Details for every path: `docs/INSTALL.md`.
 | `/nosy:frontyard` | Is your landing page behind the product, or ahead of it? |
 | `/nosy:stakeout` | The whole weekly loop, ending with what changed. |
 | `/nosy:bet · /nosy:score` | Optional: record a bet, settle it against git later. |
-| `/nosy:doctor` | Upgrading from an older Nosy: renames old files and keys (`--fix`). |
+| `/nosy:doctor` | Renames old files and keys in a `pm/` written by an older Nosy (`--fix`). |
 
-Every command also runs from the terminal with no model: `npx github:nosy-hq/nosy <command>` (the list: [docs/CLI-CONTRACT.md](docs/CLI-CONTRACT.md)).
+Every command also runs from the terminal with no model: `npx github:nosy-hq/nosy <command>` ([list](docs/CLI-CONTRACT.md)).
+
+</details>
+
+**1 skill · 17 commands · 80 scripts · 4 hooks · 16 named rules.** The counting is plain, dependency-free Node: it runs in your terminal, in CI or as an MCP server, with no model and no API key. Your agent adds the judgment. Everything Nosy remembers lives in a `pm/` folder in your repo. `nosy explain` lists the rules and says which a script checks and which are instructions.
 
 ## If it broke
 
 - **Install looks broken:** `npx github:nosy-hq/nosy doctor --check` checks Node, git, gh, the skill files and hooks, and prints the fix next to each failing line. Local, no network, writes nothing.
-- **Something looks old:** `/nosy:doctor` renames old file names and keys in a `pm/` written by an older Nosy.
 - **Still stuck:** open your agent in this repo and say: *"Read AGENTS.md and docs/INSTALL.md, install Nosy for me."*
 - **Uninstall:** `/plugin uninstall nosy@nosy` (other agents: `npx github:nosy-hq/nosy uninstall`). Your `pm/` folder stays; it's yours.
 
 ## What Nosy reads, what leaves your machine
 
-- **Reads.** Nosy reads your code, git history, GitHub issues and PRs including their text (titles, bodies, comments and author logins, through your own `gh`), your decision and roadmap docs, and public web pages. Bodies and comments are cut at 4,000 characters and saved in `pm/state/facts/github.json`. Support and interview exports are read only if you drop them into `pm/signal/`, with personal data masked.
-- **Writes.** Nosy writes to your `pm/` folder, plus a few named files: temporary files, a first-run marker, the skill folders `nosy install` copies and files you name with a flag. The optional weekly GitHub Action commits and pushes `pm/state/` and the decision page only if you set `commit: "true"`. Every path is listed in [`docs/DATA.md`](docs/DATA.md).
-- **Sends.** Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed, and GitHub through your own `gh`, including, after each agent answer, a read-only lookup of the `#N` issues the answer cites (turn that off with `NOSY_CITE_GH=0`, or turn the whole reference-check hook off with `NOSY_NO_CITE_CHECK=1`). `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes). `publish` and `notify` stop on a secret or personal data unless you pass `--allow-sensitive`. The model call is your agent's own.
+- **Reads.** Nosy reads your code, git history, GitHub issues and PRs including their text (titles, bodies, comments and author logins, through your own `gh`), your decision and roadmap docs, and public web pages.
+- **Writes.** Nosy writes to your `pm/` folder, plus a few named files: temporary files, a first-run marker, the skill folders `nosy install` copies and files you name with a flag. The optional weekly GitHub Action commits and pushes `pm/state/` and the decision page only if you set `commit: "true"`.
+- **Sends.** Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed, and GitHub through your own `gh`, including a read-only lookup of the `#N` issues your agent's answer cites (`NOSY_CITE_GH=0` turns that off). `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes). Both stop on a secret or personal data unless you pass `--allow-sensitive`. The model call is your agent's.
 - **No telemetry.** No analytics, usage pings, crash reports or update checks.
 
-The exact list: [`docs/DATA.md`](docs/DATA.md).
+The exact list, and what masking does not cover: [docs/DATA.md](docs/DATA.md).
 
 ## When to skip it
 
@@ -118,10 +130,10 @@ The exact list: [`docs/DATA.md`](docs/DATA.md).
 |---|---|
 | You want a **code reviewer** | No comments on style, bugs or code quality. Ever. |
 | You want a **competitor tracker** | Rivals are one input, checked second. It isn't an alert service. |
-| The project has **no git history**, or is brand new | Little to count. Rates on fewer than 10 rows are withheld, not shown low. |
-| You only have **claude.ai chat** | No repo access there, so the scripts don't run (`docs/INSTALL.md`, section e). |
+| The project has **no git history**, or is brand new | Little to count. Shipped rates on fewer than 10 rows read "too few to say". |
+| You only have **claude.ai chat** | No repo access there, so the scripts don't run ([details](docs/INSTALL.md#e-claudeai-chat-zip-upload)). |
 | You want it to **decide or act for you** | It suggests. It never edits your page, pushes, or opens issues unless you ask. |
 
 ## Status
 
-Early version, open source (MIT). No stability promise yet. Questions and bugs: [issues](https://github.com/nosy-hq/nosy/issues).
+Early version, open source (MIT). No stability promise yet. Questions and bugs: [issues](https://github.com/nosy-hq/nosy/issues). Also: [CHANGELOG](CHANGELOG.md), [SECURITY](SECURITY.md), [CONTRIBUTING](CONTRIBUTING.md).

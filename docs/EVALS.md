@@ -2,9 +2,9 @@
 
 > Nosy about your product. Never your data.
 
-These are the authors' own tests. We wrote the setup, ran it, and chose the grading rules. Nobody outside the project has checked them. Read the numbers with that in mind, and read the limits before the results.
+These are the authors' own tests. We wrote the setup, ran it and chose the grading rules. Nobody outside the project has checked them. Read the [limits](#limits) before the results.
 
-This page covers one command, `psst` ("what cheap, valuable work could we ship this week?"). We have run other comparisons and have not written them up here. Publishing one that is written up is a selection, so weigh it that way.
+This page covers one command, `psst` ("what cheap, valuable work could we ship this week?"). We have run other comparisons and not written them up. Showing only this one is a selection; weigh it that way.
 
 ## What we compared
 
@@ -13,7 +13,7 @@ Nosy's `psst` against the same kind of agent with no Nosy, on the same repo, ask
 - **Question, same words for both:** "Which at most 5 cheap and valuable pieces of work can we ship this week? For each, why it's cheap and the evidence (file:line)."
 - **Nosy arm:** a Sonnet agent ran `nosy psst`, read the receipts, wrote a draft, had it checked by the `nosy-refuter` agent in a fresh context, and answered from the checked list.
 - **Plain arm:** a fresh Sonnet agent with only the repo. No Nosy, no `pm/` folder.
-- Neither arm could see an issue tracker, because on the backtests it would leak the future.
+- Neither arm could see an issue tracker: for the questions dated in the past it would leak what happened next.
 
 ## Method
 
@@ -22,7 +22,7 @@ Nosy's `psst` against the same kind of agent with no Nosy, on the same repo, ask
 - **Blinding.** Answers went to the judges as written, not rewritten into one template, so style could have given the source away.
 - **Runs.** One answer per arm per question. Three questions, six gradings.
 - **Precision.** Each judge's "holds" marks over the items in that answer, summed over both judges. Nosy gave 8 items, plain 14, and each was marked twice, so the denominators are 16 and 28.
-- **Repo state.** Questions 1 and 2 are a private production web app, name withheld by its owner: question 1 as of 28 Sep 2026, question 2 as of 18 Sep 2026. Question 3 is the public [Twenty](https://github.com/twentyhq/twenty) repo at commit `b92731b355` (18 Sep 2026). For the two 18 Sep points, the answering agents got clones with every later commit and ref removed. The judges got the full history and also judged the next 10 days as hindsight: did it ship, and how big was it.
+- **Repos.** Questions 1 and 2 are a private production web app, name withheld: question 1 as of 28 Sep 2026, question 2 as of 18 Sep 2026. Question 3 is the public [Twenty](https://github.com/twentyhq/twenty) repo at commit `b92731b355` (18 Sep 2026). For the two 18 Sep questions, the answering agents got clones with every later commit and ref removed. The judges got the full history and also checked the next 10 days: did each item ship, and how big was it.
 - **When.** 28 and 29 Sep 2026, Nosy 0.14.x.
 
 ## Results
@@ -37,9 +37,9 @@ Nosy's `psst` against the same kind of agent with no Nosy, on the same repo, ask
 ### Where it lost
 
 - **Run 1: plain won.** Nosy's two picks were true but changed nothing today, because only one provider sets the flag they would switch on. "About 10 lines" was low: a later real commit doing it touched 13 files (+447/−62, with a new 294-line test). Plain's picks were a field the backend already carried in one struct but never passed on, and a screen already built and waiting for the backend. `psst` had no signal for either.
-- **Run 2: plain won 2 of 3.** Nosy recommended merging a branch that a later team decision had overruled. It called an item "data entry only" although the screen's own note said the fields didn't exist. It sized a cross-service change as one wire. The judges put accuracy first and marked these as wrong. The one Nosy win was the same pair of answers as a Nosy loss: with the order swapped, a different judge picked the other one.
+- **Run 2: plain won 2 of 3.** Nosy recommended merging a branch that a later team decision had overruled. It called an item "data entry only" although the screen's own note said the fields didn't exist. It sized a change across two services as one change. The judges put accuracy first and marked these as wrong. The one Nosy win was the same pair of answers as a Nosy loss: with the order swapped, a different judge picked the other one.
 - **Run 3: a tie, 2–2.** The three run-2 errors were gone. The remaining loss was one item built on fields whose own code comment says leaving them out was deliberate and cites a ticket. All four judges flagged it.
-- **Run 4, question 2: plain won with the Opus judge** (Sonnet: Nosy, low confidence). See the next section.
+- **Run 4, question 2: plain won with the Opus judge** (table below).
 
 ### What changed, in order
 
@@ -65,10 +65,10 @@ Each error from runs 2 and 3 is a named regression case in `skill/test/psst-rece
 - **Fixes came after the losses.** Everything in "What changed" was made after seeing a loss. Runs 2 to 4 are not independent of runs 1 to 3.
 - **Mostly one product.** Two of three questions are one private app. You can't inspect it. Only question 3 can be re-run by anyone.
 - **Small n.** Three questions, one answer per arm each. We don't know how much one answer varies from run to run. The run-2 flip shows the judging alone is noisy.
-- **Judged by our setup, by models.** We wrote the judge instructions, and the judges' reasons weigh accuracy first, then user value, which favours a short checked list over a long one. The judges are Claude models, like the answerers, and the refuter was built to check the way a strict judge would. No person re-checked a verdict.
+- **Judged by our setup, by models.** We wrote the judge instructions. The judges weigh accuracy first, then user value, which favours a short checked list over a long one. They are Claude models, like the answerers, and the refuter was built to check the way a strict judge would. No person re-checked a verdict.
 - **Fewer items help precision.** The question said "at most 5". Nosy gave 8 items over three questions, plain 14. A shorter list is easier to keep correct.
 - **Not cost-matched.** The Nosy arm ran extra scripts and an extra model pass. We didn't measure tokens or time, and we haven't run it with the refuter or the gate switched off.
-- **Hindsight is a proxy.** "Shipped within 10 days" mixes what the team was already doing with what was worth doing, and says nothing about whether it was cheap.
+- **"Shipped in 10 days" is a proxy.** It mixes what the team was already doing with what was worth doing, and says nothing about whether the work was cheap.
 - **Files we can't publish.** The answers and grades for the private app contain its code. Those for Twenty are public-repo material; they are not in this repo yet.
 
 ## Known misses
@@ -109,5 +109,3 @@ To judge: give both answers as A and B to a fresh agent that has the repo and it
 To check that each loss is guarded: `node --test skill/test/psst-receipts.test.mjs skill/test/psst-refute.test.mjs`.
 
 To challenge a result, open an issue with a repo, a commit and a question where plain does better. We will add it here, whichever way it goes.
-
-*Results from 28 and 29 Sep 2026. Page written 30 Sep 2026.*

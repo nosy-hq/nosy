@@ -2,7 +2,7 @@ blank_issues_enabled: false
 contact_links:
   - name: Install broke
     url: https://github.com/nosy-hq/nosy/blob/main/docs/INSTALL.md
-    about: Check docs/INSTALL.md first, then run /nosy:doctor and include its output in a bug report.
+    about: Read docs/INSTALL.md, then run `npx github:nosy-hq/nosy doctor --check` and include its output in a bug report.
   - name: Security problem
     url: https://github.com/nosy-hq/nosy/security/advisories/new
     about: Report vulnerabilities privately, not as a public issue.

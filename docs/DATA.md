@@ -4,16 +4,16 @@
 
 That line needs a list you can check. This is the list.
 
-It comes from reading every script, hook, agent, command file and the GitHub Action, and from running the scripts with their network, process and file activity logged. Audited on 30 Sep 2026: version 0.15.0. What the audit found about `nosy publish`, personal data, masking, printed secrets and web fonts has been fixed, and this file describes the code as fixed. If you find behavior that isn't written here, that is a bug in this file or in Nosy. Please report it.
+It was checked against version 0.15.0 (30 Sep 2026): every script, hook, agent, command file and the GitHub Action read, and the scripts run with their network, process and file activity logged. If Nosy does something that isn't written here, that is a bug in this file or in Nosy. Please report it.
 
 ## The short version
 
 - **No telemetry.** No analytics, usage pings, crash reports, update checks or install IDs. Nosy has no dependencies (`package.json` lists none), so no third-party code runs inside it either.
 - **Reads.** Nosy reads your code, git history, GitHub issues and PRs including their text (titles, bodies, comments and author logins, through your own `gh`), your decision and roadmap docs, and public web pages. Bodies and comments are cut at 4,000 characters and saved in `pm/state/facts/github.json`. Support and interview exports are read only if you drop them into `pm/signal/`, with personal data masked.
 - **Writes.** Nosy writes to your `pm/` folder, plus a few named files: temporary files, a first-run marker, the skill folders `nosy install` copies and files you name with a flag. The optional weekly GitHub Action commits and pushes `pm/state/` and the decision page only if you set `commit: "true"`. The full list is under "What Nosy writes".
-- **Sends.** Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed, and GitHub through your own `gh`, including, after each agent answer, a read-only lookup of the `#N` issues the answer cites (turn that off with `NOSY_CITE_GH=0`, or turn the whole reference-check hook off with `NOSY_NO_CITE_CHECK=1`). `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes). `publish` and `notify` stop on a secret or personal data unless you pass `--allow-sensitive`. Every path is in the table under "What leaves your machine".
+- **Sends.** Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed, and GitHub through your own `gh`, including a read-only lookup of the `#N` issues your agent's answer cites (`NOSY_CITE_GH=0` turns that off). `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes). `publish` and `notify` stop on a secret or personal data unless you pass `--allow-sensitive`. Every path is in the table under "What leaves your machine".
 - **Nosy reads your code through git.** It reads committed files, not your disk. Files git doesn't track, such as an ignored `.env`, are not opened.
-- **The model call is your agent's, not Nosy's.** Whatever Nosy prints to your agent, your agent's model sees.
+- **The model call is your agent's.** Whatever Nosy prints to your agent, your agent's model sees.
 
 ## What Nosy reads
 
@@ -26,7 +26,7 @@ It comes from reading every script, hook, agent, command file and the GitHub Act
 | Public web pages | Scripts: the rival pages you list in `pm/rivals/*.md` (`## Sources`) or in `sources.json` (`rivals`, `watch`), plus same-origin script files of pages that need JavaScript. Your agent: rival research (`neighbors`, `move-in`) and your landing page (`frontyard`), through its own web tools. | Public pages only, plain GET, no login. |
 | Files you drop in | Support, survey and interview exports in `pm/signal/` (or the folder `signal.path` names): csv, json, jsonl, md, txt. | See "Masking" below. Nosy never rewrites or copies a raw export. |
 | Your agent session (hooks) | The last answer your agent gave (from the transcript file the host hands the hook) and markdown or text files the agent just wrote, only when they contain a `file:line`, `#N` or commit hash to check. | Only in a repo that has `pm/sources.json`. Nothing is stored. |
-| Your Nosy install | `nosy doctor --check` reads `~/.claude/plugins/installed_plugins.json`, `~/.claude/settings.json` (only the `enabledPlugins` key is used), the skill folders (`.claude/skills/nosy`, `.agents/skills/nosy`, here and in your home folder), and runs `git --version` and `gh --version`. | Only when you run it. |
+| Your Nosy install | `nosy doctor --check` reads `~/.claude/plugins/installed_plugins.json`, the `enabledPlugins` key of `~/.claude/settings.json`, the skill folders (`.claude/skills/nosy`, `.agents/skills/nosy`, here and in your home folder), and runs `git --version` and `gh --version`. | Only when you run it. |
 
 Environment variables read: `NOSY_*` and `CLAUDE_PLUGIN_*` settings, and `HOME` (to expand `~` in a path). Nothing else. `gh` reads its own sign-in; Nosy never touches that token.
 
@@ -51,7 +51,7 @@ Under `pm/` (your product folder):
 |---|---|
 | `pm/sources.json`, `pm/matrix.json` | Setup. `setup --onTop` keeps a `.backup` copy before it overwrites an existing file; `learn suggest --apply` keeps a `.yedek` copy. |
 | `pm/state/` | Every counting command's output (`status.json`, `lowhanging.json`, `signals.json`, `facts.md`, `facts/`, `shipped.json`, `receipts.*`, `canwe-last.md`, and so on). |
-| `pm/history/` | Run history (`runs.jsonl`), diff snapshots, and `pm/history/watch/`: text of the public rival pages, kept on your machine only. Nosy's own repo git-ignores it; do the same in yours if you commit `pm/`. |
+| `pm/history/` | Run history (`runs.jsonl`), diff snapshots, and `pm/history/watch/`: text of the public rival pages, kept on your machine only. Git-ignore it if you commit `pm/`. |
 | `pm/page.html`, `pm/scoreboard.html` | The decision page and the scoreboard. |
 | `pm/bets/`, `pm/canwe/`, `pm/design/`, `pm/learned.json` | Bets, the "can we?" answer ledger, design-check approvals, your "noise / knowingly / important" calls. |
 | `pm/rivals/`, `pm/frontyard/`, `pm/prd/` | Written by your agent when you run `neighbors`, `frontyard`, `spill`. |
@@ -129,11 +129,11 @@ The MCP server (`nosy mcp`) talks over stdio, opens no port, and the plugin does
 
 ## Telemetry
 
-None. No script, hook, agent, command file, Action step or dependency sends usage, errors, versions or identifiers anywhere. The word "analytics" in the code is about detecting analytics events in *your* product (`scan-metrics.mjs`). The only network calls are the rows above, and each one is something you ran or configured, except the reference-check hook's read-only GitHub lookups (see its row above; off with `NOSY_CITE_GH=0`).
+None. No script, hook, agent, command file, Action step or dependency sends usage, errors, versions or identifiers anywhere. ("Analytics" in the code means detecting analytics events in *your* product, `scan-metrics.mjs`.) The only network calls are the rows above. Each is something you ran or configured, except the reference-check hook's read-only GitHub lookups.
 
 ## Limits
 
-Where this file can't promise more yet:
+Where this file can't promise more:
 
 - **Printed lines are redacted by pattern.** A committed secret in a file that looks like it holds secrets, or one the secret detector recognises, is hidden when `nosy find`, `canwe` or `psst` print the line. Other sensitive text in code (a name, an address, a secret in a shape the detector doesn't know) is printed as it is.
 - **Masking finds formats, not names** (see "Masking").
