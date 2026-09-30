@@ -1,0 +1,7 @@
+{
+  "record": { "event": ["kayit"], "product": ["kayit"] },
+  "activation": { "product": ["kurulum"] },
+  "revenue": { "event": ["abone", "odeme", "satin"], "product": ["odeme", "abonelik"] },
+  "invite": { "event": ["davet", "paylas"], "product": ["davet"] },
+  "cancel": { "event": ["abonelik.?iptal"], "product": ["abonelik-?iptal"] }
+}

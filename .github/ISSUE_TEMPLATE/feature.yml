@@ -1,0 +1,27 @@
+name: Feature request
+description: Something Nosy should do that it doesn't.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: Nosy makes product decisions. It doesn't review code, so requests for code review, linting or style checks will be closed.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to decide or find out?
+      description: The situation, not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: What happens today
+      description: Which command you ran, and what was missing or wrong in the answer.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you'd like instead
+    validations:
+      required: false

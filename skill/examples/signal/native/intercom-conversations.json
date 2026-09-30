@@ -1,0 +1,20 @@
+{
+ "type": "conversation.list",
+ "conversations": [
+  {
+   "id": "215", "created_at": 1790236800, "state": "closed",
+   "source": { "type": "conversation", "delivered_as": "customer_initiated", "subject": "",
+    "body": "<p>Hi team, we <b>really need a bulk export</b> of all shipments to CSV for our finance close.</p>",
+    "author": { "type": "user", "name": "Nora Price", "email": "nora.price@example.com" } },
+   "conversation_parts": { "type": "conversation_part.list", "conversation_parts": [
+    { "part_type": "comment", "body": "<p>Thanks Nora, logging this as a request.</p>", "author": { "type": "admin" } } ] }
+  },
+  {
+   "id": "216", "created_at": 1790323200, "state": "open",
+   "source": { "type": "conversation", "subject": "Scanner",
+    "body": "Our warehouse crew still types tracking numbers by hand, is barcode scanning on the roadmap?",
+    "author": { "type": "user", "name": "Omar Hale", "email": "omar.hale@example.com" } },
+   "conversation_parts": { "type": "conversation_part.list", "conversation_parts": [] }
+  }
+ ]
+}

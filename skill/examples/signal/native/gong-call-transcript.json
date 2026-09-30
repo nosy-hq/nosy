@@ -1,0 +1,9 @@
+{
+ "callTranscripts": [],
+ "calls": [
+  { "id": "7781", "started": "2026-09-25T14:00:00Z", "title": "Renewal call",
+    "sentences": [
+     { "speaker": "customer", "text": "The one thing we keep asking for is scanning barcodes at intake." },
+     { "speaker": "customer", "text": "Right now every tracking number is typed by hand and mistakes pile up." } ] }
+ ]
+}

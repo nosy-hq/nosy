@@ -1,0 +1,25 @@
+{
+ "type": "lowHanging",
+ "generated": "2026-09-28T09:00:00.000Z",
+ "ref": "origin/main",
+ "items": [
+  {
+   "score": 1.8,
+   "effort": "M",
+   "type": "Status may be stale",
+   "title": "§20 Example pending item",
+   "evidence": "src/example2.ts:5",
+   "detail": []
+  },
+  {
+   "score": 3,
+   "effort": "S",
+   "type": "Issue opened against us",
+   "title": "§30 Example new item",
+   "evidence": "#55 · bora · 2026-09-28",
+   "detail": [
+    "2 items"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "nosy",
+  "description": "Nosy's local plugin marketplace. One plugin (nosy), one-command install.",
+  "owner": {
+    "name": "Nosy HQ"
+  },
+  "plugins": [
+    {
+      "name": "nosy",
+      "source": "./",
+      "description": "Nosy about your product. Never your data. A nosy product manager: looks inside first (backend, git, roadmap), then at rivals."
+    }
+  ]
+}

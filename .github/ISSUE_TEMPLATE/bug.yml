@@ -1,0 +1,50 @@
+name: Bug
+description: Something Nosy did wrong, or failed to do.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Run `/nosy:doctor` first and paste what it prints, even if it says there is nothing to fix. Don't paste customer data, keys or private repo contents.
+  - type: input
+    id: agent
+    attributes:
+      label: Agent and version
+      description: For example Claude Code 2.x, Codex, Cursor, Gemini CLI.
+    validations:
+      required: true
+  - type: input
+    id: nosy
+    attributes:
+      label: Nosy version
+      description: The version in `.claude-plugin/plugin.json` or `package.json`.
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      description: Output of `node --version`.
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      description: For example macOS 15, Ubuntu 24.04, Windows 11.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of /nosy:doctor
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+      description: The command you ran and the smallest way to see it again.
+    validations:
+      required: true

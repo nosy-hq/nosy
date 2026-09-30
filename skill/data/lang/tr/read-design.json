@@ -1,0 +1,9 @@
+{
+  "goals": ["hedefler?", "amaçlar?"],
+  "nonGoals": ["hedef d[ıi]ş[ıi]", "şimdilik değil", "olmayan hedef"],
+  "principles": ["ilkeler?", "prensipler?"],
+  "scope": ["kapsam"],
+  "included": ["dahil"],
+  "excluded": ["hariç", "kapsam d[ıi]ş[ıi]"],
+  "deferred": ["ertelend[ıi]", "sonraya b[ıi]rak[ıi]ld[ıi]"]
+}

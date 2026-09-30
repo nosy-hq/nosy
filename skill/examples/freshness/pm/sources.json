@@ -1,0 +1,9 @@
+{
+ "repo": ".",
+ "ref": "HEAD",
+ "page": "status-page.html",
+ "freshness": {
+  "git": 3
+ },
+ "_note": "Synthetic example — for testing freshness.mjs's ✗/~ paths (skill/examples/freshness). 'repo' deliberately points at this worktree itself, not a real product; the lastMain values are real historical commit hashes, chosen purely to produce a commit-count difference. freshness.git=3, lowered so the real 9-commit difference shows ✗ (the default 20 would never trigger in this small repo)."
+}

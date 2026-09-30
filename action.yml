@@ -1,0 +1,89 @@
+name: Nosy weekly
+description: "Nosy about your product. Never your data. Model-free weekly loop: what shipped and against which decision, bets scored against it, the page, and an optional Psst… to Slack or Discord."
+author: Nosy
+branding:
+  icon: eye
+  color: yellow
+
+inputs:
+  pm:
+    description: Path to the product's pm/ folder (needs pm/sources.json; create it once with `nosy setup .`).
+    default: pm
+  since:
+    description: How far back peek reads (7d, 30d, YYYY-MM-DD or a git ref).
+    default: 7d
+  slack-webhook:
+    description: Slack incoming webhook URL (pass it from a secret). Empty = no Slack message.
+    default: ""
+  discord-webhook:
+    description: Discord webhook URL (pass it from a secret). Empty = no Discord message.
+    default: ""
+  page-url:
+    description: Public URL of the decision page (e.g. GitHub Pages), linked from the message.
+    default: ""
+  commit:
+    description: "true = commit pm/state/ and pm/page.html back to the current branch."
+    default: "false"
+
+outputs:
+  page:
+    description: Path of the generated decision page.
+    value: ${{ steps.weekly.outputs.page }}
+
+runs:
+  using: composite
+  steps:
+    - name: Nosy · point pm/sources.json at this checkout
+      shell: bash
+      env:
+        NOSY_PM: ${{ inputs.pm }}
+      run: |
+        # sources.json usually holds the absolute path from the owner's machine; in CI the repo is the workspace.
+        # This rewrite stays in the runner and is never committed (only pm/state and pm/page.html are).
+        node -e '
+          const fs = require("fs"), f = process.env.NOSY_PM + "/sources.json";
+          if (!fs.existsSync(f)) { console.error("Psst… " + f + " is missing. First, locally: npx github:nosy-hq/nosy setup ."); process.exit(1); }
+          let K; try { K = JSON.parse(fs.readFileSync(f, "utf8").replace(/^\uFEFF/, "")); } catch (e) { console.error("Psst… " + f + " is not valid JSON (" + String(e.message).split("\n")[0] + "). Fix that spot, or re-create it locally with: npx github:nosy-hq/nosy setup ."); process.exit(1); }
+          if (!K.repo || !fs.existsSync(K.repo)) { K.repo = process.cwd(); fs.writeFileSync(f, JSON.stringify(K, null, 1)); }'
+
+    - name: Nosy · weekly (shipped → score → page)
+      id: weekly
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        NOSY_PM: ${{ inputs.pm }}
+      run: |
+        # Exit contract (docs/CLI-CONTRACT.md): 0 clean · 2 something to look at · 1 a step couldn't run. Neither fails the job.
+        set +e; node "$GITHUB_ACTION_PATH/skill/tools/nosy.mjs" weekly --since "${{ inputs.since }}"; code=$?; set -e
+        [ "$code" = 2 ] && echo "::notice::Nosy: something needs a look (a bet reverted or overdue, a stale input); see the steps marked ! above"
+        [ "$code" = 1 ] && echo "::warning::Nosy: a step couldn't run, see the steps marked ✗ above"
+        echo "page=${{ inputs.pm }}/page.html" >> "$GITHUB_OUTPUT"
+        {
+          echo "## 👀 Nosy"
+          node "$GITHUB_ACTION_PATH/skill/tools/nosy.mjs" notify --dry-run 2>/dev/null
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Nosy · Psst… to Slack / Discord
+      if: inputs.slack-webhook != '' || inputs.discord-webhook != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        NOSY_PM: ${{ inputs.pm }}
+        NOSY_SLACK_WEBHOOK: ${{ inputs.slack-webhook }}
+        NOSY_DISCORD_WEBHOOK: ${{ inputs.discord-webhook }}
+        NOSY_PAGE_URL: ${{ inputs.page-url }}
+      run: node "$GITHUB_ACTION_PATH/skill/tools/nosy.mjs" notify
+
+    - name: Nosy · commit pm/state and the page
+      if: inputs.commit == 'true'
+      shell: bash
+      env:
+        NOSY_PM: ${{ inputs.pm }}
+      run: |
+        git config user.name "nosy[bot]"
+        git config user.email "nosy[bot]@users.noreply.github.com"
+        # Only what Nosy wrote (state/ and the page); a file that isn't there (a step that couldn't run) is skipped, not an error.
+        for p in state page.html; do
+          if [ -e "$NOSY_PM/$p" ]; then git add -- "$NOSY_PM/$p" || echo "::warning::Nosy: could not add $NOSY_PM/$p (ignored by .gitignore?)"; fi
+        done
+        git diff --cached --quiet || { git commit -m "nosy: weekly status and decision page" && git push; }

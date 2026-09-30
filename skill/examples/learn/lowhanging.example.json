@@ -1,0 +1,61 @@
+{
+ "type": "lowHanging",
+ "generated": "2026-09-28T09:00:00.000Z",
+ "ref": "origin/main",
+ "items": [
+  {
+   "score": 3,
+   "effort": "S",
+   "type": "Served, no screen",
+   "title": "§75 File-move screen",
+   "evidence": "apps/x/docs/BACKEND-NEEDS.md §75",
+   "detail": [
+    "not built yet"
+   ]
+  },
+  {
+   "score": 2.5,
+   "effort": "S",
+   "type": "Backend ready, not on screen",
+   "title": "Connection field · 2 fields",
+   "evidence": "apps/x/entities/connection/mapper.ts:12",
+   "detail": [
+    "12: no screen reads this field (23 Sep)"
+   ]
+  },
+  {
+   "score": 0.67,
+   "effort": "L",
+   "type": "Common among rivals, partial for us",
+   "title": "Word plugin",
+   "evidence": "Present in 3 rivals: Harvey, Legora, Spellbook",
+   "detail": []
+  },
+  {
+   "score": 2,
+   "effort": "S",
+   "type": "Status may be stale",
+   "title": "K180 screen counterpart",
+   "evidence": "abc1234 feat: stage-move UI",
+   "detail": [
+    "Decisions mentioned in the text: K180"
+   ]
+  },
+  {
+   "score": 1,
+   "effort": "L",
+   "type": "Matrix: backend ready",
+   "title": "is the old campaign page still there",
+   "evidence": "K999: needs checking",
+   "detail": []
+  },
+  {
+   "score": 1,
+   "effort": "L",
+   "type": "Matrix: backend ready",
+   "title": "Bulk export",
+   "evidence": "K190: no demand yet",
+   "detail": []
+  }
+ ]
+}

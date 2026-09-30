@@ -1,0 +1,25 @@
+# .github/workflows/nosy.yml — Nosy's weekly, model-free loop. No model key needed, no charge.
+# First, once, locally: `npx github:nosy-hq/nosy setup .` → commit pm/sources.json.
+name: Nosy
+on:
+  schedule:
+    - cron: "0 6 * * 1"   # every Monday 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write          # only needed for commit: "true"; read is enough otherwise
+  pull-requests: read
+  issues: read
+
+jobs:
+  nosy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # peek reads git history
+      - uses: nosy-hq/nosy@main
+        with:
+          slack-webhook: ${{ secrets.NOSY_SLACK_WEBHOOK }}      # optional
+          discord-webhook: ${{ secrets.NOSY_DISCORD_WEBHOOK }}  # optional
+          commit: "true"

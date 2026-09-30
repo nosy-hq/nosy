@@ -1,0 +1,30 @@
+{
+  "_comment": "Turkish-language support for find-stale.mjs: words a user's own product page may use, in Turkish, to say a PR is open/closed or that a decision item is still in flight. Not Nosy's own language — this only helps the scanner recognize Turkish status wording on the pages it scans.",
+  "open": [
+    "açık PR",
+    "PR'da",
+    "açıkta",
+    "inceleme bekliyor",
+    "birleşince",
+    "birleşmesi",
+    "CI çalışıyor",
+    "CI kuyrukta"
+  ],
+  "closed": [
+    "main'de",
+    "main'e",
+    "birleşti",
+    "eridi",
+    "kapandı",
+    "kapatıldı"
+  ],
+  "inFlight": [
+    "yolda",
+    "kod yok",
+    "henüz yok",
+    "backend yok",
+    "gelince",
+    "hazır olunca",
+    "karar verildi"
+  ]
+}

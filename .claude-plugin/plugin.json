@@ -1,0 +1,37 @@
+{
+  "name": "nosy",
+  "version": "0.15.0",
+  "description": "Nosy about your product. Never your data. The nosy product manager that lives inside your coding agent: looks at the backend, git and roadmap first, then rivals; doesn't do code review, makes product decisions.",
+  "author": {
+    "name": "Nosy HQ"
+  },
+  "skills": [
+    "./skill/"
+  ],
+  "userConfig": {
+    "disable_psst_hook": {
+      "type": "boolean",
+      "title": "Turn off the opening summary",
+      "description": "Stops the SessionStart hook from printing a one-line \"Psst…\" summary from pm/state/lowhanging.json. Commands and the skill are unaffected.",
+      "default": false
+    },
+    "disable_commit_nudge": {
+      "type": "boolean",
+      "title": "Turn off the after-commit nudge",
+      "description": "Stops the PostToolUse hook that, after a commit or merge, says which matrix gap it may close, the next product decision, and the next command. Commands and the skill are unaffected.",
+      "default": false
+    },
+    "disable_never_check": {
+      "type": "boolean",
+      "title": "Turn off the never-rule check",
+      "description": "Stops the PostToolUse hook that, after a git commit or gh pr create, checks what went in against pm/sources.json's never rules and tells the agent when one matches. It never blocks or undoes anything. Commands and the skill are unaffected.",
+      "default": false
+    },
+    "disable_cite_check": {
+      "type": "boolean",
+      "title": "Turn off the reference check",
+      "description": "Stops the hook that, when the agent finishes an answer or writes a markdown file in a repo with pm/sources.json, checks every file:line, quote, commit and #ref in it (skill/tools/cite-check.mjs) and sends it back to fix the ones that don't hold up. It asks once per answer, so it can't loop. Commands and the skill are unaffected.",
+      "default": false
+    }
+  }
+}

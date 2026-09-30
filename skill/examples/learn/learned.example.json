@@ -1,0 +1,77 @@
+{
+ "version": 1,
+ "rules": [
+  {
+   "id": "mute-b7054bbe",
+   "tip": "mute",
+   "key": "§75",
+   "type": "psst",
+   "reason": "The owner already knows, the file-move screen is on the roadmap for October",
+   "who": "Alex",
+   "date": "2026-09-14",
+   "end": "2026-10-12",
+   "match": 2,
+   "last_match": "2026-09-27T09:00:00.000Z"
+  },
+  {
+   "id": "knowingly-52920046",
+   "tip": "knowingly",
+   "key": "no screen reads",
+   "type": "psst",
+   "reason": "Deliberate: these fields won't be wired to a screen in v1",
+   "who": "Alex",
+   "date": "2026-09-10",
+   "end": null,
+   "match": 5,
+   "last_match": "2026-09-27T09:00:00.000Z"
+  },
+  {
+   "id": "important-b2741fe9",
+   "tip": "important",
+   "key": "K180",
+   "type": "all",
+   "reason": "Key decision; should show up at the top on every cycle",
+   "who": "Alex",
+   "date": "2026-09-10",
+   "end": null,
+   "match": 4,
+   "last_match": "2026-09-27T09:00:00.000Z"
+  },
+  {
+   "id": "mute-a876fbce",
+   "tip": "mute",
+   "key": "/Common among rivals/i",
+   "type": "psst",
+   "reason": "We already see this kind of comparison in the weekly scoop, don't want it repeated in psst",
+   "who": "Alex",
+   "date": "2026-09-20",
+   "end": null,
+   "match": 1,
+   "last_match": "2026-09-27T09:00:00.000Z"
+  },
+  {
+   "id": "mute-d7439abd",
+   "tip": "mute",
+   "key": "old campaign page",
+   "type": "psst",
+   "reason": "No longer applies, it was removed",
+   "who": "Alex",
+   "date": "2026-09-13",
+   "end": "2026-09-20",
+   "match": 3,
+   "last_match": "2026-09-19T09:00:00.000Z"
+  },
+  {
+   "id": "knowingly-ce2b4643",
+   "tip": "knowingly",
+   "key": "a weird phrase that will never be used",
+   "type": "all",
+   "reason": "Example: a rule that never matches and is older than 14 days gets flagged 'maybe remove'",
+   "who": "Alex",
+   "date": "2026-08-01",
+   "end": null,
+   "match": 0,
+   "last_match": null
+  }
+ ]
+}

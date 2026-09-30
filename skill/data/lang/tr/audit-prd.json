@@ -1,0 +1,8 @@
+{
+  "strong": ["müşteriler?", "rakip(ler)?", "rakipler[iı]m[iı]z", "herkes", "çok fazla", "\\bçok\\b"],
+  "vague": ["h[ıi]zl[ıi]", "kolay", "sezgisel", "sorunsuz", "kullan[ıi]c[ıi] dostu", "\\biyi\\b"],
+  "solution": ["ekle\\p{L}*", "\\bbuton\\p{L}*\\b", "\\bdüğme\\p{L}*\\b", "\\bsayfa\\p{L}*\\b", "\\bekran\\p{L}*\\b",
+    "uç nokta\\p{L}*", "\\btablo\\p{L}*\\b", "\\bmodal\\p{L}*\\b", "oluştur\\p{L}*", "inşa\\p{L}*"],
+  "size": ["\\bişt(ah|ha)\\p{L}*\\b", "\\bboyut\\p{L}*\\s*[:=]?\\s*(K|O|B|küçük|orta|büyük)\\b"],
+  "against": ["aksi kan[ıi]t", "kar[şs][ıi] kan[ıi]t", "neden yapmamal[ıi]y[ıi]z", "\\brisk\\p{L}*\\b"]
+}

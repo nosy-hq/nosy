@@ -1,0 +1,15 @@
+{
+  "acquiredOrClosedWords": [
+    "satın\\s*alın",
+    "kapan"
+  ],
+  "lineShapeKeys": {
+    "products": "urunler",
+    "lines": "satirlar",
+    "group": "grup",
+    "feature": "ozellik",
+    "not": "not",
+    "codes": "kodlar",
+    "decision": "karar"
+  }
+}

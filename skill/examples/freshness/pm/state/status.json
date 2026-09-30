@@ -1,0 +1,12 @@
+{
+ "type": "state",
+ "generated": "2026-09-27T13:00:00.000Z",
+ "range": "--since 2026-09-20 00:00 HEAD",
+ "main": 9,
+ "pr": 0,
+ "lastMain": "00c243d",
+ "prs": [],
+ "groups": [],
+ "dependency": 0,
+ "withoutReference": 9
+}

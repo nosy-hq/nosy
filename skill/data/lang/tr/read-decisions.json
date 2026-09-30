@@ -1,0 +1,19 @@
+{
+  "negationPatterns": [
+    "\\byapm[ıi]yoruz\\b",
+    "\\byapmayaca[gğ][ıi]z\\b",
+    "\\byap[ıi]lmaz\\b",
+    "\\byapılmayacak\\b",
+    "\\bkullan[ıi]lmaz\\b",
+    "\\bkullanm[ıi]yoruz\\b",
+    "\\bkullanmayaca[gğ][ıi]z\\b",
+    "\\beklenmez\\b",
+    "\\beklemiyoruz\\b",
+    "\\bgönderilmez\\b",
+    "\\bgöndermiyoruz\\b",
+    "\\bdesteklenmez\\b",
+    "\\bdesteklemiyoruz\\b",
+    "\\bizin verilmez\\b",
+    "\\byasaktır\\b"
+  ]
+}

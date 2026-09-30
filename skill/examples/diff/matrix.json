@@ -1,0 +1,51 @@
+{
+ "update": "2026-09-28",
+ "codes": {
+  "y": "exists",
+  "p": "partial",
+  "n": "missing",
+  "u": "notFound"
+ },
+ "steps": [
+  {
+   "no": "1",
+   "name": "Example step 1"
+  },
+  {
+   "no": "2",
+   "name": "Example step 2 (rival expected to get a new y)"
+  },
+  {
+   "no": "3",
+   "name": "Example step 3 (our own score will advance)"
+  }
+ ],
+ "biz": {
+  "name": "Example Product v0.2",
+  "codes": {
+   "1": "y",
+   "2": "n",
+   "3": "y"
+  },
+  "notes": {}
+ },
+ "products": [
+  {
+   "name": "RivalX",
+   "codes": {
+    "1": {
+     "k": "y",
+     "evidence": "rivalx.com, Sep 10"
+    },
+    "2": {
+     "k": "y",
+     "evidence": "rivalx.com, Sep 27: announced a new feature"
+    },
+    "3": {
+     "k": "y",
+     "evidence": "rivalx.com, Sep 10"
+    }
+   }
+  }
+ ]
+}

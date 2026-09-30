@@ -1,0 +1,54 @@
+{
+ "type": "state",
+ "generated": "2026-09-14T09:00:00.000Z",
+ "range": "--since 2026-09-07 00:00 origin/main",
+ "main": 5,
+ "pr": 2,
+ "lastMain": "aaa1111",
+ "prs": [
+  {
+   "n": 101,
+   "t": "Working on example feature A",
+   "a": "bora",
+   "draft": false,
+   "count": 3,
+   "last": "14.09 08:00"
+  },
+  {
+   "n": 102,
+   "t": "Example small fix",
+   "a": "bora",
+   "draft": true,
+   "count": 1,
+   "last": "13.09 18:00"
+  }
+ ],
+ "groups": [
+  {
+   "ref": "§10",
+   "n": 2,
+   "where": [
+    "main"
+   ],
+   "who": [
+    "bora"
+   ],
+   "last": "14.09 08:00",
+   "topic": "Example item that will get resolved"
+  },
+  {
+   "ref": "§20",
+   "n": 1,
+   "where": [
+    "#101"
+   ],
+   "who": [
+    "bora"
+   ],
+   "last": "12.09 10:00",
+   "topic": "Example pending item"
+  }
+ ],
+ "dependency": 0,
+ "withoutReference": 3
+}

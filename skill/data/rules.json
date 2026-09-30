@@ -1,0 +1,234 @@
+[
+ {
+  "id": "no-text-similarity-shipped",
+  "kind": "code",
+  "name": "Text similarity never ships anything",
+  "rule": "A title or text match between a request and a commit/PR is never enough by itself to call something shipped; without an explicit link it prints as a candidate to confirm, not a fact.",
+  "why": "kill-criterion-1 runs found explicit links 95% correct vs. title text matching 9% correct, 68% wrong (pm/decisions.md). canwe.mjs's bestFind() now exposes whether a matrix-row match came from an explicit ref or only title similarity, and a text-only claim prints as \"candidate — confirm\".",
+  "enforcedBy": [
+   "skill/tools/canwe.mjs",
+   "skill/tools/shipped-links.mjs",
+   "skill/tools/build-waves.mjs"
+  ],
+  "tests": [
+   "skill/test/canwe-candidate.test.mjs",
+   "skill/test/canwe-surface.test.mjs",
+   "skill/test/build-waves.test.mjs",
+   "skill/test/shipped-links.test.mjs"
+  ]
+ },
+ {
+  "id": "explicit-links-only",
+  "kind": "code",
+  "name": "Explicit links only, never inferred",
+  "rule": "A PR/commit only counts as tied to a decision, request, or issue when there is an explicit reference (closing keyword, #N, issue timeline/comment cross-reference) — never a guess from wording.",
+  "why": "recent.mjs and shipped-links.mjs tie every PR to its decision via refs.mjs on title+body, explicit refs only, \"no tie\" otherwise (pm/log.md line 418).",
+  "enforcedBy": [
+   "skill/tools/shipped-links.mjs",
+   "skill/tools/refs.mjs",
+   "skill/tools/recent.mjs"
+  ],
+  "tests": [
+   "skill/test/shipped-links.test.mjs",
+   "skill/test/refs.test.mjs",
+   "skill/test/recent.test.mjs"
+  ]
+ },
+ {
+  "id": "same-repo-links-only",
+  "kind": "code",
+  "name": "Closing references only from the same repo",
+  "rule": "A closing/linking reference only counts when it comes from the same repository as the issue or PR being checked; a fork's closing reference is ignored.",
+  "why": "shipped-links.mjs restricts GitHub's own closingIssuesReferences and keyword matches to same-repo, by construction (skill/tools/shipped-links.mjs lines 67, 73); pm/log.md logs 73/74 closed together.",
+  "enforcedBy": [
+   "skill/tools/shipped-links.mjs"
+  ],
+  "tests": [
+   "skill/test/shipped-links.test.mjs"
+  ]
+ },
+ {
+  "id": "integration-branch-detected",
+  "kind": "code",
+  "name": "The integration branch is detected, not assumed",
+  "rule": "Where work actually merges is detected from the repo's own merged-PR history (or sources.json's integrationBranch override), never assumed to be the default branch.",
+  "why": "integration-branch.mjs looks at the branch most merged PRs target; wired into collect-status.mjs, backfill-history.mjs, recent.mjs and shipped-links.mjs (pm/log.md line 305).",
+  "enforcedBy": [
+   "skill/tools/integration-branch.mjs"
+  ],
+  "tests": [
+   "skill/test/integration-branch.test.mjs"
+  ]
+ },
+ {
+  "id": "tiny-sample-hidden",
+  "kind": "code",
+  "name": "Tiny samples are hidden, not shown low",
+  "rule": "A rate, median, or calibration score built on fewer than minN rows (default 10) is withheld and shown as \"too few to say\" instead of being printed as a low or misleading number.",
+  "why": "thresholds.mjs's minN (default 10) gates score.mjs's calibration section and scoreboard.mjs's rate/median display; scoreboard.mjs says \"too few to say\" below that count.",
+  "enforcedBy": [
+   "skill/tools/thresholds.mjs",
+   "skill/tools/score.mjs",
+   "skill/tools/scoreboard.mjs"
+  ],
+  "tests": [
+   "skill/test/thresholds.test.mjs",
+   "skill/test/bet-score.test.mjs",
+   "skill/test/scoreboard.test.mjs"
+  ]
+ },
+ {
+  "id": "incomplete-count-withheld",
+  "kind": "code",
+  "name": "An incomplete shipped count is withheld, not shown low",
+  "rule": "A headline shipped count is only shown once every explicit link kind (PR body keywords, #N mentions, issue timeline/comment cross-references) has actually been counted for that run; otherwise it is not shown at all.",
+  "why": "Internal request 83, informed by the comprehension-check reading in pm/decisions.md: readers distrusted a \"4 shipped\" headline contradicted by its own footnote. shipped-record.mjs and scoreboard.mjs withhold the count unless the full link check ran (pm/log.md line 406).",
+  "enforcedBy": [
+   "skill/tools/shipped-record.mjs",
+   "skill/tools/scoreboard.mjs"
+  ],
+  "tests": [
+   "skill/test/shipped-record.test.mjs",
+   "skill/test/scoreboard.test.mjs"
+  ]
+ },
+ {
+  "id": "comment-only-commit-not-shipped",
+  "kind": "code",
+  "name": "A comment-only commit doesn't ship a decision",
+  "rule": "A commit that only touches comments or non-code lines does not count as shipping a decision, even if it explicitly references that decision.",
+  "why": "N1 (pm/waves.md line 13): 'The record is right' — done criteria include 'comment-only commits don't ship' as part of the explicit-link record's hand-checked rules (30-row hand-check sample, 3.3% wrong).",
+  "enforcedBy": [
+   "skill/tools/shipped-links.mjs",
+   "skill/tools/shipped-record.mjs"
+  ],
+  "tests": [
+   "skill/test/shipped-record-decisions.test.mjs",
+   "skill/test/shipped-record-decisions-links.test.mjs"
+  ]
+ },
+ {
+  "id": "code-wins-over-claim",
+  "kind": "code",
+  "name": "The code wins when a document claim conflicts with it",
+  "rule": "When answering \"can we do this,\" a claim from a decision doc or request is checked against the code at the integration ref; if they disagree, the code's evidence is what gets reported.",
+  "why": "canwe.mjs (post blind-test-v2 rewrite, internal request 95's fix cycle): the question's rarest terms are searched in the code first (\"In the code (read this first)\"), before decision-doc text; see skill/test/canwe-code.test.mjs header comment.",
+  "enforcedBy": [
+   "skill/tools/canwe.mjs"
+  ],
+  "tests": [
+   "skill/test/canwe-code.test.mjs",
+   "skill/test/canwe-context.test.mjs"
+  ]
+ },
+ {
+  "id": "never-rules-pattern-only",
+  "kind": "code",
+  "name": "Never rules are pattern-only, language-independent",
+  "rule": "The owner's \"never\" rules are matched as plain regex patterns against added lines, not by any language- or framework-specific logic, so they work for a product in any language.",
+  "why": "never-check.mjs's own header: reads sources.json's preread.never as \"the owner's own regex patterns: pattern-only, so a product in any language works\" (skill/tools/never-check.mjs lines 1-3).",
+  "enforcedBy": [
+   "skill/tools/never-check.mjs"
+  ],
+  "tests": [
+   "skill/test/never-check.test.mjs"
+  ]
+ },
+ {
+  "id": "deliberately-off-not-unbuilt",
+  "kind": "code",
+  "name": "A deliberately-off feature is not \"not built yet\"",
+  "rule": "When a decision or the owner's learned rules mark a feature as knowingly not built, canwe reports it as \"deliberately not built (decision ref)\" instead of sizing it as unsized greenfield work.",
+  "why": "Internal request 95, from the blind-test Q7 loss (pm/decisions.md: Nosy wrongly called deliberately-off KEP \"not built yet\"). canwe.mjs checks sources.json's dropped.knowingly pattern against the decision/request text before sizing (skill/tools/canwe.mjs lines 328-335, 467).",
+  "enforcedBy": [
+   "skill/tools/canwe.mjs"
+  ],
+  "tests": [
+   "skill/test/canwe-surface.test.mjs"
+  ]
+ },
+ {
+  "id": "nothing-written-outside-pm",
+  "kind": "code",
+  "name": "Nothing is written outside pm/",
+  "rule": "Every script that writes output (state, drafts, the page) writes only under the product's pm/ folder; nothing is written into the product's own repo.",
+  "why": "rules.md rule 4 (\"The result goes to the page\") and watch-rivals.mjs's own header: \"Nothing is written outside pm/\" (skill/tools/watch-rivals.mjs line 10).",
+  "enforcedBy": [
+   "skill/tools/watch-rivals.mjs",
+   "skill/tools/nosy.mjs"
+  ],
+  "tests": [
+   "skill/test/watch-rivals.test.mjs",
+   "skill/test/nosy-cli.test.mjs"
+  ]
+ },
+ {
+  "id": "nothing-external-without-asking",
+  "kind": "instruction",
+  "name": "Nothing external without the owner asking",
+  "rule": "Push, PR, issue/comment, message, or email are never sent on the owner's behalf unless the owner explicitly asked for that specific action; PRD and issue drafts stay as files under pm/ until then.",
+  "why": "rules.md, \"Writing externally\": \"Push, opening a PR, issue/comment, message, email: never without the owner explicitly asking.\" nosy.mjs's own header restricts outward writes to notify (only the given webhook) and publish (only after the privacy scan).",
+  "enforcedBy": [
+   "skill/rules.md",
+   "skill/tools/nosy.mjs",
+   "skill/tools/publish.mjs"
+  ],
+  "tests": []
+ },
+ {
+  "id": "privacy-scan-before-publish",
+  "kind": "code",
+  "name": "No customer data or secrets read or published",
+  "rule": "Before tea/spill/publish send anything outbound, the content is scanned for secrets (gitleaks-style patterns) and personal data (e-mail, phone numbers, IBANs of any country, card numbers, national ID, names it is given); either one blocks the send unless the owner passes --allow-sensitive. `nosy publish` also sends counts and structure only, never commit subjects, author names, PR or issue titles.",
+  "why": "rules.md, \"Positioning\": \"customer data, secrets, and keys are never read and never written to the page.\" privacy-scan.mjs's own header: exit code 1 on a high-severity finding, called by tea/spill before publishing.",
+  "enforcedBy": [
+   "skill/tools/privacy-scan.mjs",
+   "skill/tools/publish.mjs",
+   "skill/tools/publish-safe.mjs"
+  ],
+  "tests": [
+   "skill/test/privacy-scan.test.mjs",
+   "skill/test/publish-safe.test.mjs",
+   "skill/test/pii-mask.test.mjs"
+  ]
+ },
+ {
+  "id": "unverified-claims-labeled",
+  "kind": "instruction",
+  "name": "A claim without a primary source is marked unverified",
+  "rule": "Any claim not seen directly in a primary source (the product's own site, docs, changelog, or code) is labeled \"(unverified)\" rather than stated as fact.",
+  "why": "rules.md, \"Evidence\": \"A claim not seen in a primary source (the product's own site, docs, changelog) gets '(unverified)'.\" \"?\" means not found, and is never counted in counts.",
+  "enforcedBy": [
+   "skill/rules.md"
+  ],
+  "tests": []
+ },
+ {
+  "id": "sub-agents-cheap-models",
+  "kind": "config",
+  "name": "Sub-agents run on cheap models",
+  "rule": "Research sub-agents (e.g. rival research) run on a cheaper model (sonnet for research, haiku for review), never defaulted to the top-tier model.",
+  "why": "rules.md rule 5: \"Sub-agents run on cheap models (sonnet for research, haiku for review).\" and \"Cost\": don't use a paid browser/scraper tool the user hasn't authorized.",
+  "enforcedBy": [
+   "agents/nosy-neighbor.md",
+   "agents/nosy-auditor.md"
+  ],
+  "tests": [
+   "skill/test/watch-rivals.test.mjs"
+  ]
+ },
+ {
+  "id": "references-checked",
+  "kind": "code",
+  "name": "Every reference in an answer is checked before it goes out",
+  "rule": "Before an answer goes to the owner, every file:line in it must exist, every quote tied to a citation must be in that file word for word near that line, every commit hash must be in the repo, and every #N must match what GitHub says (exists, issue or PR, open or closed). A line that fails is fixed or dropped.",
+  "why": "The owner's 20-question test (29 Sep): answers quoted English docs as Turkish sentences in quotation marks (PRODUCT.md:74), cited a handler file that doesn't exist, and reported a merged PR (#377) as \"couldn't find the issue\". Blind graders marked each one wrong; each is mechanically checkable.",
+  "enforcedBy": [
+   "skill/tools/cite-check.mjs",
+   "skill/SKILL.md"
+  ],
+  "tests": [
+   "skill/test/cite-check.test.mjs"
+  ]
+ }
+]

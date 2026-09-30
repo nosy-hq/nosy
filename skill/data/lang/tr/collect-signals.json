@@ -1,0 +1,74 @@
+{
+  "_comment": "Turkish-language support for collect-signals.mjs: stopwords for the demand-signal matcher, and Turkish column/field-name synonyms for CSV/JSON signal files (a user's support export, interview notes, etc. may be in Turkish). Not Nosy's own language.",
+  "stopWords": [
+    "ve",
+    "ile",
+    "de",
+    "da",
+    "bir",
+    "bu",
+    "şu",
+    "için",
+    "gibi",
+    "ama",
+    "fakat",
+    "ancak",
+    "veya",
+    "ya",
+    "mi",
+    "mı",
+    "mu",
+    "mü",
+    "ki",
+    "her",
+    "en",
+    "çok",
+    "daha",
+    "olan",
+    "olarak",
+    "kadar"
+  ],
+  "fields": {
+    "text": [
+      "text",
+      "icerik",
+      "içerik",
+      "aciklama",
+      "açıklama",
+      "mesaj",
+      "yorum",
+      "talep",
+      "detay",
+      "konu"
+    ],
+    "date": [
+      "tarih",
+      "olusturulma",
+      "oluşturulma",
+      "olusturma",
+      "zaman",
+      "gonderilme",
+      "gönderilme"
+    ],
+    "source": [
+      "kaynak",
+      "kanal",
+      "tur"
+    ],
+    "email": [
+      "eposta",
+      "e-posta"
+    ],
+    "customer": [
+      "musteri",
+      "müşteri",
+      "hesap",
+      "kullanici",
+      "kullanıcı"
+    ]
+  },
+  "notDoing": [
+    "yapmıyoruz",
+    "yapmiyoruz"
+  ]
+}

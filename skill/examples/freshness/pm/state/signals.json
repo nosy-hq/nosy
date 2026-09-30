@@ -1,0 +1,5 @@
+{
+ "type": "signal",
+ "generated": "2026-09-18T13:00:00.000Z",
+ "not": "Example of a type unknown/written by another branch — not named in sources.json.freshness, so the general threshold (7 days) applies."
+}

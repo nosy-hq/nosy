@@ -1,0 +1,58 @@
+{
+ "type": "state",
+ "generated": "2026-09-28T10:00:00.000Z",
+ "range": "abc123..origin/main",
+ "main": 40,
+ "pr": 6,
+ "lastMain": "a1b2c3d",
+ "prs": [
+  {
+   "n": 101,
+   "t": "§20 bulk export",
+   "a": "dev1",
+   "draft": false,
+   "count": 4,
+   "last": "27.09 18:10"
+  }
+ ],
+ "groups": [
+  {
+   "ref": "§5",
+   "n": 2,
+   "where": [
+    "main"
+   ],
+   "who": [
+    "dev2"
+   ],
+   "last": "20.09 09:00",
+   "topic": "feat(§5): preference fields added"
+  },
+  {
+   "ref": "§20",
+   "n": 4,
+   "where": [
+    "#101"
+   ],
+   "who": [
+    "dev1"
+   ],
+   "last": "27.09 18:10",
+   "topic": "feat(§20): CSV export"
+  },
+  {
+   "ref": "§8",
+   "n": 1,
+   "where": [
+    "main"
+   ],
+   "who": [
+    "dev2"
+   ],
+   "last": "14.09 08:00",
+   "topic": "fix(§8): removed the old format"
+  }
+ ],
+ "dependency": 3,
+ "withoutReference": 5
+}

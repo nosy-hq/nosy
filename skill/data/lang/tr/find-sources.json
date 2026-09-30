@@ -1,0 +1,6 @@
+{
+  "packageKeywords": {
+    "legaltech": ["tebligat", "uyap", "uets", "ictihat", "dava\\b", "mahkeme", "avukat", "dilekce", "hukuk"],
+    "fintech": ["bankacilik", "\\bkredi\\b", "yatirim", "sigorta", "kripto", "bddk", "spk", "masak", "tcmb", "cuzdan"]
+  }
+}

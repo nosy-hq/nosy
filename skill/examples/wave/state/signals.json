@@ -1,0 +1,61 @@
+{
+ "type": "signal",
+ "generated": "2026-09-28T10:00:00.000Z",
+ "goals": [
+  {
+   "type": "request",
+   "ref": "§5",
+   "title": "Notification preferences screen",
+   "code": null,
+   "state": "exists",
+   "count": 18,
+   "customer": 7,
+   "trend": {
+    "last30": 12,
+    "previous30": 6
+   },
+   "ready": true,
+   "notDoing": false
+  },
+  {
+   "type": "matrix",
+   "ref": null,
+   "title": "Multi-approver ordering",
+   "code": "n",
+   "state": null,
+   "count": 9,
+   "customer": 4,
+   "trend": {
+    "last30": 4,
+    "previous30": 5
+   },
+   "ready": false,
+   "notDoing": false
+  },
+  {
+   "type": "decision",
+   "ref": "K20-report",
+   "title": "Weekly summary email",
+   "code": null,
+   "state": null,
+   "count": 2,
+   "customer": 1,
+   "trend": {
+    "last30": 0,
+    "previous30": 2
+   },
+   "ready": false,
+   "notDoing": true
+  }
+ ],
+ "themes": [
+  {
+   "key": "notification",
+   "count": 18
+  },
+  {
+   "key": "approval order",
+   "count": 9
+  }
+ ]
+}

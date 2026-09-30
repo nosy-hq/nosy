@@ -1,0 +1,53 @@
+{
+ "type": "lowHanging",
+ "generated": "2026-09-28T10:00:00.000Z",
+ "ref": "HEAD",
+ "items": [
+  {
+   "score": 1.5,
+   "effort": "S",
+   "type": "Backend ready, not on screen",
+   "title": "§5 Notification preferences screen",
+   "evidence": "apps/backend/src/notify/prefs.ts:42",
+   "detail": [
+    "42: dropped: prefs UI not built yet"
+   ]
+  },
+  {
+   "score": 0.67,
+   "effort": "M",
+   "type": "Served, no screen · in PR",
+   "title": "§20 Bulk export (in #101)",
+   "evidence": "pm/request.md §20",
+   "detail": []
+  },
+  {
+   "score": 0.67,
+   "effort": "L",
+   "type": "Common among rivals, partial for us",
+   "title": "Multi-approver ordering",
+   "evidence": "Deferred by decision K12",
+   "detail": [
+    "Present in 3 rivals: RivalA, RivalB, RivalC"
+   ]
+  },
+  {
+   "score": 1,
+   "effort": "M",
+   "type": "Status may be stale",
+   "title": "§8 Remove the old file format · \"served\" (Sep 12)",
+   "evidence": "a1b2c3d 14.09 fix(§8): removed the old format",
+   "detail": []
+  },
+  {
+   "score": 0.5,
+   "effort": "S",
+   "type": "Issue opened against us",
+   "title": "#205 Notifications arrive late",
+   "evidence": "user1 · 2026-09-20",
+   "detail": [
+    "2 items"
+   ]
+  }
+ ]
+}

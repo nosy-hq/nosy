@@ -1,0 +1,25 @@
+# tea
+
+Goal: build and publish the owner's decision page from `pm/` content.
+
+**The decision page is the default** (steps 0–5 below). The bets/shipped scoreboard is an extra page, built when the owner asks for it or has bets (`pm/bets/`):
+- a. Data: `pm/state/shipped.json` (the shipped record: explicit links only, plus `recent`) and, if present, `pm/state/score.json` (bets). If `shipped.json` is missing or older than the last commit on the integration branch, refresh it first.
+- b. Requests nobody has decided on: `node <skill>/tools/undecided.mjs pm` (writes only the `undecided` key; needs `issue.repo` in `sources.json`; skip it if there's none).
+- c. Page: `node <skill>/tools/scoreboard.mjs pm pm/scoreboard.html` (or `nosy page --scoreboard`). The headline shipped count appears only when every explicit link kind was counted; medians and estimate scores appear only above `threshold.minN`; each row says how it was linked. Don't hand-edit these numbers.
+- d. Then steps 4–5 below (privacy scan, publish).
+
+0. For a brand-new product page: `node <skill>/tools/build-matrix.mjs pm` then `node <skill>/tools/build-page.mjs pm <output.html>`. The summary comes from `pm/summary.md`; you write that by hand each cycle.
+1. Are the inputs fresh first: `node <skill>/tools/freshness.mjs pm --page <page.html>`. It checks how old the inputs are and how many commits have piled up since the last read; if there's a ✗, run the order it names first — don't publish the page with stale inputs. Then get the page address from `product.md`. If there is one, read the live version with the Artifact `read` call; if it differs from the local copy, merge first.
+2. Are the hand-written lines stale: `node <skill>/tools/find-stale.mjs pm <page.html> --json pm/state/stale.json`. Finds, by line number, rows that say "open PR" but have since merged, or "on the way" but have landed on main (doesn't change the page); fix any finding by hand.
+3. Sections (follow the owner's scope rule; the look comes from the Nosy section of `pm/name/brand-kit.html` — color, typeface, voice):
+   - Summary: at most 5 decision points, each with a tag (ahead / in a PR / attention / backend ready / rivals).
+   - Where we are: the last `peek`'s table (what landed · decision/request item · on screen · rival's equivalent).
+   - What can be done now: only work doable with today's backend, sized (S/M/L).
+   - Matrix: from `matrix.json`, with filters (all, changed this round, we don't have it, we're ahead).
+   - Head-to-head: a count computed from the matrix; a deliberately-not-built row isn't counted as missing; an acquired or shut-down rival doesn't count either.
+   - First screen (automatic, `glance.mjs`): the next product decision, four numbers (only we have, behind, checked cheap wins, waiting on the owner), where we stand against the top rivals with a 25-step strip, the roadmap as Now / Your call / Not doing, and what shipped. Readable without reading; every string has a length budget. The summary, cycle log and decisions sit below it, folded. Don't add prose to it: if something matters, it belongs in `pm/state` so the first screen picks it up.
+   - Today (automatic): from `state/status.json`, `state/lowhanging.json`, and `state/stale.json` if present (three boxes: Delivery, Low-hanging fruit, Possibly stale — the last one only draws if there's a finding); if the psst list has been filtered by the owner's feedback (`lowhanging.filtered.json`), that's what's read. If `state/diff.json` exists, its first 3–5 items can go into a hand-written "Since the last stakeout" box. `build-page.mjs` places this section itself; on a hand-built page, `node <skill>/tools/auto-section.mjs pm <page.html>` replaces the content between `<!-- pm:auto -->` markers. This section isn't hand-edited.
+   - Rival cards, rivals this week, patterns to take, waves, sources: acquired/shut-down rivals sit in their own closed group; a card leads with "Position relative to Nosy" and its most important recent announcement.
+4. Data lives in JS arrays; the page is drawn from them. Before publishing: lint the script, `node --check`, confirm row/cell counts with a DOM stub. Then the "Never your data" shield: `node <skill>/tools/privacy-scan.mjs <page.html> --pm pm`. It looks for secrets, personal data, local home-directory paths, and the names in `pm/private.json` (`{"names": [...]}`) — including inside `<script>` data. Exit code 2 means DON'T PUBLISH (1: the scan couldn't run, don't publish either): fix it at the source, or publish a masked copy with `--mask <publish.html>`.
+5. Publish with the Artifact tool (same file path, or `url`). A 5–8 line summary and the link go to chat.
+   If there's no Artifact (a non-Claude agent, CI): the page stays as `pm/page.html`; chat gets the summary and the file path. If a permanent, shareable address is needed, a GitHub Action can commit the page and publish it with GitHub Pages (`docs/INSTALL.md`, section k).

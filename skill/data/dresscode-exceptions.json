@@ -1,0 +1,48 @@
+{
+ "description": "dresscode exception patterns: derived per check from rejected matches (dresscode.mjs suggest --publish). Default: only a pattern seen in >=2 products is published; the ones with product_count 1 were deliberately chosen by the owner because they're general. Contains no product text.",
+ "patterns": [
+  {
+   "id": "Communication#2",
+   "pattern": "\\bwhat\\W+is\\W+announced\\b",
+   "reason": "Content announced to a screen reader isn't a change announcement to the team.",
+   "product_count": 1,
+   "support": 1,
+   "date": "2026-09-28"
+  },
+  {
+   "id": "Enablement#2",
+   "pattern": "\\bHow\\W+to\\W+run\\b",
+   "reason": "Instructions for running a test or script aren't a guide for setting up a new screen.",
+   "product_count": 1,
+   "support": 1,
+   "date": "2026-09-28"
+  },
+  {
+   "id": "Prioritization#2",
+   "pattern": "\\bSystem\\W+Roadmap\\b",
+   "reason": "The name of the \"Design System Roadmap\" document isn't a tie to the product roadmap.",
+   "product_count": 1,
+   "support": 1,
+   "date": "2026-09-28"
+  },
+  {
+   "id": "Design–Code Alignment#3",
+   "pattern": "(?<![a-z0-9])(?:MCP|server|tool)\\W+catalog[a-z0-9]*(?![a-z0-9])",
+   "structure": {
+    "side": "left",
+    "root": [
+     "catalog"
+    ],
+    "neighbors": [
+     "MCP",
+     "server",
+     "tool"
+    ]
+   },
+   "reason": "A server/tool catalog isn't a component catalog.",
+   "product_count": 1,
+   "support": 4,
+   "date": "2026-09-28"
+  }
+ ]
+}

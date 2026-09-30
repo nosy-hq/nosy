@@ -1,0 +1,62 @@
+{
+ "update": "2026-09-28",
+ "source": "example data (build-waves.mjs contract test)",
+ "products": [
+  "Example",
+  "RivalA",
+  "RivalB",
+  "RivalC",
+  "RivalD"
+ ],
+ "lines": [
+  {
+   "group": "Notifications",
+   "feature": "Notification preferences screen",
+   "not": "Backend ready, no screen (§5)",
+   "codes": {
+    "Example": "b",
+    "RivalA": "y",
+    "RivalB": "y",
+    "RivalC": "n",
+    "RivalD": "y"
+   }
+  },
+  {
+   "group": "Approval flow",
+   "feature": "Multi-approver ordering",
+   "not": "Deferred by decision K12",
+   "codes": {
+    "Example": "n",
+    "RivalA": "y",
+    "RivalB": "y",
+    "RivalC": "y",
+    "RivalD": "n"
+   }
+  },
+  {
+   "group": "Efficiency",
+   "feature": "Bulk tagging",
+   "not": "In the request doc as §31, no backend",
+   "codes": {
+    "Example": "n",
+    "RivalA": "y",
+    "RivalB": "y",
+    "RivalC": "y",
+    "RivalD": "n"
+   }
+  },
+  {
+   "group": "Reporting",
+   "feature": "Weekly summary email",
+   "not": "The owner said we're not doing this, runs against KEP",
+   "decision": "notDoing",
+   "codes": {
+    "Example": "n",
+    "RivalA": "y",
+    "RivalB": "n",
+    "RivalC": "n",
+    "RivalD": "n"
+   }
+  }
+ ]
+}

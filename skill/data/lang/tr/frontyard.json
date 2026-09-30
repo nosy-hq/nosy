@@ -1,0 +1,338 @@
+{
+  "glossary": {
+    "tazelik": [
+      "stale",
+      "fresh",
+      "freshness"
+    ],
+    "bayat": [
+      "stale",
+      "outdated"
+    ],
+    "karar": [
+      "decision"
+    ],
+    "belge": [
+      "document",
+      "docs"
+    ],
+    "klasör": [
+      "folder",
+      "directory"
+    ],
+    "hafıza": [
+      "memory",
+      "remember"
+    ],
+    "defter": [
+      "ledger",
+      "remember",
+      "log"
+    ],
+    "cevap": [
+      "answer"
+    ],
+    "soru": [
+      "question",
+      "ask"
+    ],
+    "rakip": [
+      "rival",
+      "competitor",
+      "neighbour",
+      "neighbor"
+    ],
+    "komşu": [
+      "neighbour",
+      "neighbor",
+      "rival"
+    ],
+    "fiyat": [
+      "price",
+      "pricing"
+    ],
+    "ekran": [
+      "screen",
+      "button"
+    ],
+    "envanter": [
+      "inventory",
+      "endpoint"
+    ],
+    "kayıt": [
+      "record",
+      "signup",
+      "register"
+    ],
+    "giriş": [
+      "login",
+      "sign in"
+    ],
+    "özellik": [
+      "feature"
+    ],
+    "geçmiş": [
+      "history"
+    ],
+    "dışa": [
+      "export"
+    ],
+    "aktarma": [
+      "export",
+      "import"
+    ],
+    "paylaş": [
+      "share"
+    ],
+    "davet": [
+      "invite"
+    ],
+    "bildirim": [
+      "notification",
+      "notify"
+    ],
+    "arama": [
+      "search"
+    ],
+    "rapor": [
+      "report"
+    ],
+    "takvim": [
+      "calendar"
+    ],
+    "ödeme": [
+      "payment",
+      "billing"
+    ],
+    "abonelik": [
+      "subscription"
+    ],
+    "sürüm": [
+      "release",
+      "version"
+    ],
+    "page": [
+      "page"
+    ],
+    "tasarım": [
+      "design"
+    ],
+    "dalga": [
+      "wave"
+    ],
+    "boyut": [
+      "size",
+      "sized"
+    ],
+    "ölçüm": [
+      "metric",
+      "analytics"
+    ],
+    "olay": [
+      "event"
+    ],
+    "kapı": [
+      "gate"
+    ],
+    "gizlilik": [
+      "privacy"
+    ],
+    "sır": [
+      "secret"
+    ],
+    "talep": [
+      "request",
+      "demand"
+    ],
+    "teslim": [
+      "shipped",
+      "ship"
+    ],
+    "oku": [
+      "read",
+      "reads"
+    ],
+    "matrix": [
+      "matrix"
+    ],
+    "teslimat": [
+      "shipped",
+      "delivery"
+    ],
+    "önceliklendirme": [
+      "priority",
+      "prioritize"
+    ],
+    "kural": [
+      "rule"
+    ],
+    "paylaşılabilir": [
+      "shareable",
+      "share"
+    ],
+    "kaynak": [
+      "source",
+      "receipt"
+    ],
+    "doğrulanmadı": [
+      "unverified",
+      "verified"
+    ],
+    "onay": [
+      "approval",
+      "approve",
+      "asking"
+    ],
+    "kod": [
+      "code"
+    ],
+    "ajan": [
+      "agent"
+    ],
+    "zamanlı": [
+      "scheduled",
+      "weekly"
+    ],
+    "fizibilite": [
+      "feasibility"
+    ],
+    "yapabilir": [
+      "can we"
+    ],
+    "görev": [
+      "task"
+    ],
+    "atama": [
+      "assign"
+    ],
+    "izleme": [
+      "watch",
+      "monitor"
+    ],
+    "uyarı": [
+      "alert",
+      "warn"
+    ],
+    "sunucu": [
+      "server",
+      "self-host"
+    ],
+    "gerçek": [
+      "real"
+    ],
+    "yayın": [
+      "publish",
+      "share"
+    ],
+    "rakipler": [
+      "rivals",
+      "neighbours"
+    ],
+    "şimdi": [
+      "now",
+      "today"
+    ],
+    "yapılabilir": [
+      "could",
+      "can"
+    ],
+    "içinde": [
+      "inside",
+      "within"
+    ],
+    "çalışır": [
+      "runs",
+      "works"
+    ],
+    "kodlama": [
+      "coding"
+    ],
+    "işaret": [
+      "flag",
+      "marker",
+      "mark"
+    ],
+    "gösterme": [
+      "show",
+      "cite"
+    ],
+    "çıkarım": [
+      "infer"
+    ],
+    "öneri": [
+      "suggest",
+      "next"
+    ],
+    "sahip": [
+      "owner"
+    ],
+    "haftalık": [
+      "weekly"
+    ],
+    "açılış": [
+      "opening",
+      "landing"
+    ],
+    "vitrin": [
+      "landing",
+      "front"
+    ],
+    "hazır": [
+      "ready"
+    ],
+    "yol": [
+      "roadmap",
+      "path"
+    ],
+    "harita": [
+      "roadmap",
+      "map"
+    ]
+  },
+  "stopwords": [
+    "artık",
+    "için",
+    "ile",
+    "gibi",
+    "daha",
+    "olan",
+    "yeni",
+    "bir",
+    "iki",
+    "üç",
+    "yalnız",
+    "her",
+    "değil",
+    "ama",
+    "sonra",
+    "kadar",
+    "göre",
+    "aynı",
+    "gün",
+    "iç",
+    "talep",
+    "betik",
+    "dosya",
+    "satır",
+    "hem",
+    "veya",
+    "yoksa",
+    "varsa",
+    "olarak",
+    "diye",
+    "bunu",
+    "şimdi",
+    "önce"
+  ],
+  "maintenanceWords": [
+    "birleştir",
+    "birlestir",
+    "günlük",
+    "gunluk"
+  ],
+  "promisePhrases": [
+    "yakında",
+    "bekleme listesi",
+    "erken erişim"
+  ]
+}

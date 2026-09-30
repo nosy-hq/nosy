@@ -1,0 +1,5 @@
+{
+  "hiddenName": "AYŞE Yılmaz",
+  "denyListNames": ["Ayşe Yılmaz", "Deneme Müşteri A.Ş."],
+  "denyListPattern": "MUSTERI-\\d{4}"
+}

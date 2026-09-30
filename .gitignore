@@ -1,0 +1,9 @@
+# Nosy plugin packaging output (the claude.ai zip, etc.); regenerated with `node packaging/claude-ai-zip.mjs`.
+dist/
+
+# watch-rivals snapshots: third-party page text, kept on this machine only
+pm/history/watch/
+
+# measure-size.mjs's per-commit "suggested owner" cache: a local speed-up, not
+# product data - safe to lose, shouldn't be committed.
+pm/state/.measure-size-ownership-cache.json

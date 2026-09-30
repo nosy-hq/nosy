@@ -1,0 +1,17 @@
+{
+  "name": "nosy",
+  "version": "0.15.0",
+  "private": true,
+  "description": "Nosy about your product. Never your data. A product manager that lives inside your coding agent.",
+  "type": "module",
+  "bin": {
+    "nosy": "skill/tools/nosy.mjs"
+  },
+  "scripts": {
+    "test": "node --test skill/test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "license": "MIT"
+}

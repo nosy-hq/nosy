@@ -1,0 +1,4 @@
+{
+ "_note": "Turkish-language support for learn.mjs: filler words skipped when suggesting a shared phrase from mute/knowingly rules written in Turkish.",
+ "stopwords": ["için", "icin", "gibi", "yani", "henüz", "henuz", "yapılmadı", "yapilmadi", "değil", "degil", "yani değil", "daha", "bunun", "ile", "bu", "ve"]
+}

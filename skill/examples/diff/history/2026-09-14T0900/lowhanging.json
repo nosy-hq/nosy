@@ -1,0 +1,25 @@
+{
+ "type": "lowHanging",
+ "generated": "2026-09-14T09:00:00.000Z",
+ "ref": "origin/main",
+ "items": [
+  {
+   "score": 2.5,
+   "effort": "S",
+   "type": "Backend ready, not on screen",
+   "title": "§10 Example item that will get resolved",
+   "evidence": "src/example.ts:12",
+   "detail": [
+    "dropped: example field"
+   ]
+  },
+  {
+   "score": 1.8,
+   "effort": "M",
+   "type": "Status may be stale",
+   "title": "§20 Example pending item",
+   "evidence": "src/example2.ts:5",
+   "detail": []
+  }
+ ]
+}

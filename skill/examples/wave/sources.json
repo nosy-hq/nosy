@@ -1,0 +1,16 @@
+{
+ "refs": [
+  "#\\d+",
+  "§\\d+[a-z]?",
+  "\\bK\\d{2,3}(?:\\s*m\\.\\s*\\d+)?"
+ ],
+ "glossary": {
+  "notification": [
+   "notification"
+  ],
+  "approval": [
+   "approval"
+  ]
+ },
+ "_note": "A small sources.json for the build-waves.mjs contract example. repo/preread are deliberately absent: decisions are read only from pm/decisions.md, and the matrix is found at the default matrix.json path."
+}

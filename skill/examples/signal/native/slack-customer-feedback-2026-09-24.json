@@ -1,0 +1,5 @@
+[
+ { "type": "message", "subtype": "channel_join", "text": "<@U01> has joined the channel", "ts": "1790229600.000100", "user": "U01" },
+ { "type": "message", "text": "Another customer asked for a CSV export of shipments today, third one this week.", "ts": "1790233200.000200", "user": "U02" },
+ { "type": "message", "text": "ok", "ts": "1790233300.000300", "user": "U03" }
+]

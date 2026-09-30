@@ -1,0 +1,48 @@
+{
+ "type": "size-bulk",
+ "generated": "2026-09-28T10:00:00.000Z",
+ "items": [
+  {
+   "title": "Notification preferences screen",
+   "ref": "§5",
+   "estimate": {
+    "size": "S",
+    "active_day_median": 1.5,
+    "range": [
+     1,
+     3
+    ],
+    "confidence": "high",
+    "justification": "average of 3 similar screens"
+   },
+   "owner": [
+    {
+     "who": "dev2",
+     "pay": 0.8,
+     "commit": 6
+    }
+   ]
+  },
+  {
+   "title": "Bulk export",
+   "ref": "§20",
+   "estimate": {
+    "size": "M",
+    "active_day_median": 4,
+    "range": [
+     3,
+     6
+    ],
+    "confidence": "medium",
+    "justification": "PR #101 still open, CI is queued"
+   },
+   "owner": [
+    {
+     "who": "dev1",
+     "pay": 1,
+     "commit": 4
+    }
+   ]
+  }
+ ]
+}

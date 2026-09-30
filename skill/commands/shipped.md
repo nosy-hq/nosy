@@ -1,0 +1,21 @@
+# shipped [7d|date|ref]
+
+Goal: the record of what actually shipped — what reached the integration branch, when, and which decision or request each change was for — linked only where a PR, commit or issue says so. Plus what merged since the last run and what's close to merging. It runs `peek`'s core and `overheard`'s "which decision does this PR serve"; both commands still go further on their own.
+
+The output has three sections, each answering a DIFFERENT question, each under its own heading (these two headline numbers used to share no heading, so "0 shipped" printed right above an 85-row table of landed work read as a flat contradiction to a PM skimming it):
+   - **"Decisions that shipped (explicit links: …)"** — of the decisions/issues opened in the window, how many have an EXPLICIT link (a commit that names the decision's id, or an issue ↔ PR link) to the work that shipped them. This can legitimately be 0 even when plenty of work landed: it only counts work that was explicitly tied back to a decision.
+   - **"Work that landed, by reference (any ref-tagged commit — not the same question as above)"** — everything that reached the integration branch, grouped by whatever reference (`K123`, `§22`, `#45`, `nb-…`) each commit happens to carry, whether or not that reference is a "decision" in the first section's sense. This is `peek`'s core (`collect-status.mjs`) and answers "what landed", not "what shipped a decision".
+   - **"recent: merged since the last run, and close to merging"** — `recent.mjs`.
+   When the first section shows 0 shipped and the second isn't empty, a one-line note explains the gap instead of leaving it looking like a contradiction: `(N references landed above, but none names a decision in <decisions path or issue repo>; the two counts are answering different questions — link convention: …)`.
+
+1. `nosy shipped [7d]` (or the three steps by hand):
+   - **Explicit links** (when `<skill>/tools/shipped-links.mjs` is installed): issue ↔ PR links from PR body keywords, `#N` in merged PR text and issue timeline/comment cross-references in the same repo → `pm/state/shipped.json`.
+   - **The record:** `node <skill>/tools/collect-status.mjs <repo> <start> --pm pm --json pm/state/status.json` — what reached the integration branch (detected, not assumed: `integration-branch.mjs`), grouped by the decision/request/issue/bet reference each commit carries (`refs.mjs`, including bet ids `nb-…`).
+   - **Recent:** `node <skill>/tools/recent.mjs pm --json pm/state/recent.json` — merged since the last run (incremental) and open PRs close to merging (approved / green CI), each tied to its reference.
+2. Read it as the owner would, three short lists:
+   - **Shipped:** what, for which decision or request, how it was linked (PR closes it / ref in the commit / bet id). Commit hash or PR number on every line. In decisions-log mode (`--decisions`), a decision whose own text carries a measurement/success line ("Measurement:", "Ölçüm:", "Success:", "we'll know it worked when…", …) shows that line as "to check: <line>" — recorded, not scored (cases like "there's a verified quote but the model isn't writing" were only caught from a person's own note before). When the line names a checkable event (a backtick-quoted event name), and that name is one `scan-metrics.mjs` actually found in the code, the line also says "event `<name>` exists in code: yes/no" — an exact-name fact, never a similarity guess.
+   - **Close:** open PRs close to merging and what they're for.
+   - **Unlinked:** work that reached the branch with no reference. Don't guess what it was for: say it's unlinked, and suggest the link convention (`move-in` step 6).
+3. Rules (the direction's): a change counts as shipped only when a PR, commit or the issue itself links it. Nothing is matched by title. When a count is incomplete (links that live only in issue comments aren't read yet, a gh read was capped), **withhold the headline number** and say why, instead of showing an undercount. Tiny samples: no trend, "too few to say" below `minN`.
+4. Write `pm/state/<date>.md` with the range read and the three lists. If bets exist (`pm/bets/`), run `score` next; then `tea` publishes.
+5. Not code review: no comments on style, bugs or quality. Nothing is written outside `pm/`.
