@@ -39,7 +39,7 @@ npx github:nosy-hq/nosy install
 
 Or tell your agent: *"Read https://github.com/nosy-hq/nosy/blob/main/llms.txt and install Nosy in this repo."* Then type `/nosy` (Codex: `$nosy`). If your agent asks you to trust Nosy's hooks, there are four small ones, each with an off switch ([docs/INSTALL.md](docs/INSTALL.md)).
 
-Needs git and Node 18.17 or newer. Run `move-in` once (`/nosy:move-in` from the plugin, `/nosy move-in` from a skill install): it reads your README, docs, decision files, git history and, through `gh` if you have it, issues and PRs. The counting runs on your machine with no model.
+Needs git and Node 18.17 or newer. Run `move-in` once (`/nosy:move-in` from the plugin, `/nosy move-in` from a skill install): it reads your README, docs, decision files, git history and, through `gh` if you have it, issues and PRs. `move-in` ends with `/nosy:tour`, which says first what Nosy reads, writes and sends, then asks its questions once instead of one per step. The counting runs on your machine with no model.
 
 ## Try these first
 
@@ -56,7 +56,7 @@ Needs git and Node 18.17 or newer. Run `move-in` once (`/nosy:move-in` from the 
 
 ## Show your team
 
-Optional. `nosy publish` turns the `pm/` folder into a page your whole team can open: your next decision, where you stand against every rival, what customers ask for, the week on one page. Free for now.
+Optional. `nosy publish` turns the `pm/` folder into a page your whole team can open: your next decision, where you stand against every rival, what customers ask for, the week on one page. Free for now. Your Cloud token goes in a file, never on a command line ([docs/INSTALL.md](docs/INSTALL.md#m-share-with-your-team-optional)).
 
 <p align="center"><a href="https://cloud.nosy.sh/demo"><img src="docs/assets/cloud-dashboard.webp" alt="The sample Nosy Cloud dashboard for Steady, a made-up product: the next product decision, four key numbers with their trend, and where it stands against its rivals" width="860"></a></p>
 
@@ -92,19 +92,20 @@ Nosy is one skill folder (`skill/`, the open Agent Skills format) plus small dep
 | **Slack / Discord** | The Action, or `nosy notify`, posts the weekly "Psst…" to a webhook. |
 | **Terminal, no agent** | `npx github:nosy-hq/nosy weekly` |
 
-`npx github:…` runs code straight from a repo. To know which code, pin a release tag: `npx github:nosy-hq/nosy#v0.18.0 install`. Every path in detail: [docs/INSTALL.md](docs/INSTALL.md).
+`npx github:…` runs code straight from a repo. To know which code, pin a release tag: `npx github:nosy-hq/nosy#v0.19.0 install`. Every path in detail: [docs/INSTALL.md](docs/INSTALL.md).
 
 </details>
 
 ## Commands
 
 <details>
-<summary>All 17 commands</summary>
+<summary>All 18 commands</summary>
 
 | Command | What it does |
 |---|---|
 | `/nosy:nosy` | Suggests the 2–3 commands worth running now. (Skill-only install: `/nosy`.) |
 | `/nosy:move-in` | Learns your product, rules and roadmap. Run once. |
+| `/nosy:tour` | The first look in one go: what Nosy reads and writes, then one list of questions. |
 | `/nosy:shipped` | What reached your integration branch, and which decision each change was for. |
 | `/nosy:peek` | What shipped, what didn’t, what has no screen. |
 | `/nosy:psst` | What you could ship today. Asked for + ready goes first. |
@@ -119,13 +120,13 @@ Nosy is one skill folder (`skill/`, the open Agent Skills format) plus small dep
 | `/nosy:frontyard` | Is your landing page behind the product, or ahead of it? |
 | `/nosy:stakeout` | The whole weekly loop, ending with what changed. |
 | `/nosy:bet · /nosy:score` | Optional: record a bet, settle it against git later. |
-| `/nosy:doctor` | Renames old files and keys in a `pm/` written by an older Nosy (`--fix`). |
+| `/nosy:doctor` | Finds old files and keys in a `pm/` written by an older Nosy and renames them (`--fix`, after a list and a backup). `--check` tests the install. |
 
 Most commands have a terminal twin that runs with no model, for example `npx github:nosy-hq/nosy peek` (see [docs/CLI-CONTRACT.md](docs/CLI-CONTRACT.md) for which, and for the ones that are agent only). `npx github:nosy-hq/nosy rival-demand` has no slash command: it lists what the users of your open-source rivals ask for most, from their public issues and Discussions. `npx github:nosy-hq/nosy todo` has no slash command either: it is the list of what only a person can do, or said they would (an account, a payment, a submission under your name). Your agent files an item instead of leaving it in a chat that ends, the first line of your next session says what still waits, and the page shows it as "Waiting on people". It is not a task tracker: no due dates, no estimates. The items are files under `pm/todo/` in your repo, so a teammate's agent sees the same list.
 
 </details>
 
-**1 skill · 17 commands · 84 scripts · 4 hooks · 16 named rules.** Plain, dependency-free Node: the counting runs in your terminal, in CI or as an MCP server, with no model and no API key. Your agent adds the judgment. Everything Nosy remembers lives in a `pm/` folder in your repo.
+**1 skill · 18 commands · 91 scripts · 4 hooks · 16 named rules.** Plain, dependency-free Node: the counting runs in your terminal, in CI or as an MCP server, with no model and no API key. Your agent adds the judgment. Everything Nosy remembers lives in a `pm/` folder in your repo.
 
 ## If it broke
 
@@ -136,8 +137,8 @@ Most commands have a terminal twin that runs with no model, for example `npx git
 ## What Nosy reads, what leaves your machine
 
 - **Reads.** Nosy reads your code, git history, GitHub issues and PRs including their text (titles, bodies, comments and author logins, through your own `gh`), your decision and roadmap docs, and public web pages.
-- **Writes.** Nosy writes to your `pm/` folder, plus a few named files: temporary files, a first-run marker, the skill folders `nosy install` copies and files you name with a flag. The optional weekly GitHub Action commits and pushes `pm/state/` and the decision page only if you set `commit: "true"`.
-- **Sends.** Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed, and GitHub through your own `gh`, including a read-only lookup of the `#N` issues your agent's answer cites (`NOSY_CITE_GH=0` turns that off), and, when you run `nosy rival-demand`, the public issues and Discussions of the open-source rivals you name. `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes). Both stop on a secret or personal data unless you pass `--allow-sensitive`. The model call is your agent's.
+- **Writes.** Nosy writes to your `pm/` folder, plus a few named files: temporary files, a first-run marker, the skill folders `nosy install` copies, a hand-built page of yours when you run `nosy page-adopt` (after a copy in `pm/.backup/`) and files you name with a flag. The optional weekly GitHub Action commits and pushes `pm/state/` and the decision page only if you set `commit: "true"`.
+- **Sends.** Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed (and Apple's public app lookup for a rival whose store id you set), and GitHub through your own `gh`, including a read-only lookup of the `#N` issues your agent's answer cites (`NOSY_CITE_GH=0` turns that off), and, when you run `nosy rival-demand`, the public issues and Discussions of the open-source rivals you name. `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes). Both stop on a secret or personal data unless you pass `--allow-sensitive`. The model call is your agent's.
 - **No telemetry.** No analytics, usage pings or crash reports. The one call you didn't start yourself is a once-a-day read of a public version file, so the plugin can say when a newer Nosy is out (nothing about you in it; `NOSY_NO_UPDATE_CHECK=1` turns it off).
 
 **What the plugin's hooks do on their own.** Installing the plugin adds four hooks. They run on your machine, read local files and git, and print a short note to your agent. None of them sends your code, history or documents anywhere, and each has an off switch in the plugin's settings.

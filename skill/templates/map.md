@@ -10,6 +10,14 @@ The one page every command reads before answering: what the product is made of, 
 
 Environments: <production, beta, staging…: what's in beta but not yet in production>
 
+## Versions in flight
+One product that exists twice, in two places, is two rows here, not one `Status` cell: the old version still serving customers and the new one being built (first run on a real product: the old app in production, the new one in test). Leave the table out when there is one version.
+
+| Version | Where it runs | Who uses it | State | Replaces / replaced by | Source |
+|---|---|---|---|---|---|
+| <the old app> | <production> | <all customers> | <live, being replaced> | <replaced by the new app, date open> | <(owner, date)> |
+| <the new app> | <test / beta> | <the team> | <in development> | <replaces the old app> | <(owner, date)> |
+
 ## Screens ↔ code
 | Screen (the owner's name) | Code | Backend area | Source |
 |---|---|---|---|

@@ -6,7 +6,7 @@
 // Ponytail's "one-command setup" pattern (pm/product.md, owner's rule); ccpm's deterministic/LLM-free script +
 // evidence-trail pattern (pm/rivals/automazeio-ccpm.md); Productboard Spark's "one card, one approval" (show the
 // diff before writing) from pm/rivals/productboard-spark.md. `inventory` paths come from inventory.mjs's own pathEstimated.
-import fs from "node:fs"; import path from "node:path"; import { execFileSync, spawnSync } from "node:child_process"; import { fileURLToPath } from "node:url"; import { pathEstimated } from "./inventory.mjs"; import { findNextDocs } from "./team-next.mjs"; import { advice, nosyCommand, oldLayoutNote } from "./hints.mjs"; import { readSources } from "./sources-file.mjs";
+import fs from "node:fs"; import path from "node:path"; import { execFileSync, spawnSync } from "node:child_process"; import { fileURLToPath } from "node:url"; import { pathEstimated } from "./inventory.mjs"; import { findNextDocs } from "./team-next.mjs"; import { advice, nosyCommand, oldLayoutNote } from "./hints.mjs"; import { readSources, rivalDoc, rivalFiles } from "./sources-file.mjs";
 
 // Turkish package-detection keywords (a repo written in Turkish still needs a legaltech/fintech match): kept as
 // data and loaded at runtime, since this is a language feature of the product being analyzed, not Nosy's own.
@@ -347,6 +347,32 @@ const next = nextDocs.files.length
   ? add("next", { path: nextDocs.files.length === 1 ? nextDocs.files[0] : nextDocs.files }, nextDocs.candidates.length > 1 ? "low" : "medium", nextDocs.candidates.slice(0, 3).map(c => `${c.file}: ${c.commits} commits in 14 days, ${c.cites} paragraphs cite repo paths`).join("; "))
   : add("next", null, "–", "no working notes found (no markdown file edited in 5+ commits lately that cites the code); psst skips signal 10");
 
+// ---- rival-shaped folders: rival research kept outside pm/rivals ----
+// A real product kept it in references/<name>/competitive-*.md, so `doctor` said "no rival files yet" and `neighbors` started from
+// zero. A folder (at most 3 levels below the repo root; node_modules, .git and vendor skipped) is rival-shaped when it holds at
+// least 2 markdown files, at any depth, with the rival template's own structure (sources-file.mjs rivalDoc: its headings or its
+// matrix table; structure only, nothing read from the files' prose). The folder with the most such files wins, the deeper one on a tie.
+// `git grep` narrows the markdown to the few files that might carry that structure before any of them is read.
+const SKIP = new Set(["node_modules", ".git", "vendor"]);
+const rivalFound = (() => {
+  const prefix = `${ref}:`;
+  const hits = (gitTry("grep", "-l", "-i", "-E", "Latest major announcement|Position relative to|^[[:space:]]*\\|.*\\|[[:space:]]*[ypnud][[:space:]]*\\|", ref, "--", "*.md") || "")
+    .split("\n").filter(Boolean).map(l => l.startsWith(prefix) ? l.slice(prefix.length) : l)
+    .filter(f => f.includes("/") && !f.split("/").some(seg => SKIP.has(seg)) && !path.basename(f).startsWith("_"))
+    .slice(0, 300).filter(f => rivalDoc(show(f) || ""));
+  const folders = new Map();
+  for (const f of hits) { const seg = f.split("/"); for (let k = 1; k <= Math.min(3, seg.length - 1); k++) { const d = seg.slice(0, k).join("/"); (folders.get(d) || folders.set(d, []).get(d)).push(f); } }
+  const best = [...folders].filter(([, fs2]) => fs2.length >= 2).sort((a, b) => b[1].length - a[1].length || b[0].split("/").length - a[0].split("/").length || a[0].localeCompare(b[0]))
+    .find(([d]) => { const abs = path.join(repoAbs, d); return abs !== pmAbs && !abs.startsWith(pmAbs + path.sep) && !pmAbs.startsWith(abs + path.sep); }); // pm/ itself is not "elsewhere"
+  return best ? { folder: best[0], files: best[1].sort() } : null;
+})();
+const rivalsHere = rivalFiles(path.join(pmAbs, "rivals")).length;
+// Written relative to the folder that holds pm/ (sources-file.mjs rivalsDir resolves it from there).
+const rivalsPath = rivalFound && !rivalsHere
+  ? add("rivalsPath", path.relative(path.dirname(pmAbs), path.join(repoAbs, rivalFound.folder)).split(path.sep).join("/"), "medium",
+    `${rivalFound.files.length} files with the rival template's structure (Latest major announcement / Position relative / matrix table): ${rivalFound.files.slice(0, 5).join(", ")}${rivalFound.files.length > 5 ? ` (+${rivalFound.files.length - 5} more)` : ""}; the owner confirms these are the rivals`)
+  : add("rivalsPath", "", "–", rivalsHere ? `${path.join(pmDir, "rivals")} already has ${rivalsHere} rival file${rivalsHere === 1 ? "" : "s"}` : "no folder with 2+ rival-shaped files");
+
 // ============================================================
 // suggestion object (sources.json shape)
 // ============================================================
@@ -363,6 +389,7 @@ const suggestion = {
   inventory,
   ...(frontyard ? { frontyard: { ...frontyard, every: 7 } } : {}),
   ...(next ? { next } : {}),
+  ...(rivalsPath ? { rivalsPath } : {}),
   _source_find: { date: new Date().toISOString().slice(0, 10), confidence: confidences },
 };
 
@@ -412,4 +439,4 @@ const skillRoot = !skillRel ? "skill" : skillRel.startsWith("..") ? skillAbs : s
 md += `\nNext: \`node ${skillRoot}/tools/verify-setup.mjs ${pmDir}\`\n`;
 
 process.stdout.write(md);
-if (jsonOut) fs.writeFileSync((fs.mkdirSync(path.dirname(jsonOut), { recursive: true }), jsonOut), JSON.stringify({ type: "source_find", generated: new Date().toISOString(), repo: path.resolve(repo), ref, suggestion, confidence: confidences, team, packageEstimated: packageWinner ? packageWinner.name : null }, null, 1));
+if (jsonOut) fs.writeFileSync((fs.mkdirSync(path.dirname(jsonOut), { recursive: true }), jsonOut), JSON.stringify({ type: "source_find", generated: new Date().toISOString(), repo: path.resolve(repo), ref, suggestion, confidence: confidences, team, rivalsEvidence: rivalFound && rivalsPath ? rivalFound : null, packageEstimated: packageWinner ? packageWinner.name : null }, null, 1));

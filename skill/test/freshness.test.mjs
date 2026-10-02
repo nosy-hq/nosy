@@ -122,3 +122,49 @@ test("if the base outputs are missing entirely (empty pm/state), doesn't say 'fr
   assert.match(r.output, /state\/status\.json[^\n]*✗[^\n]*missing/);
   assert.match(r.output, /next up: peek → psst/);
 });
+
+// ---- the auto-section's generation time is an ISO stamp on the block, in any language ----
+// A minimal pm/ (no sources.json, no rivals): only status.json and a page are read. The input is generated at `inputAt`.
+function pageCase(block, inputAt) {
+  const dir = temporary("nosy-freshness-page-"); copies.push(dir);
+  const pm = path.join(dir, "pm"); fs.mkdirSync(path.join(pm, "state"), { recursive: true });
+  fs.writeFileSync(path.join(pm, "state", "status.json"), JSON.stringify({ type: "state", generated: inputAt.toISOString() }));
+  const page = path.join(dir, "page.html");
+  fs.writeFileSync(page, `<h1>Product</h1>\n<!-- pm:auto -->\n${block}\n<!-- /pm:auto -->\n<footer>f</footer>`);
+  const out = path.join(dir, "f.json");
+  const r = run(path.join(Tool, "freshness.mjs"), [pm, "--page", page, "--json", out]);
+  assert.equal(r.code, 0, r.error);
+  return { r, row: JSON.parse(fs.readFileSync(out, "utf8")).inputs.find(x => x.name === "page: auto section") };
+}
+const hoursAgo = h => new Date(Date.now() - h * 3600000);
+
+test("a block stamped data-generated is dated from the stamp: current when it is newer than the input, behind when it is older (no month name read)", () => {
+  const input = hoursAgo(5);
+  const fresh = pageCase(`<section id="auto" data-generated="${hoursAgo(4).toISOString()}"><p>No dates in words here.</p></section>`, input);
+  assert.equal(fresh.row.status, "✓", fresh.r.output); assert.match(fresh.row.reason, /section generated /);
+  const behind = pageCase(`<section id="auto" data-generated="${hoursAgo(9).toISOString()}"><p>No dates in words here.</p></section>`, input);
+  assert.equal(behind.row.status, "✗", behind.r.output); assert.equal(behind.row.command, "auto-section");
+});
+
+test("a Turkish block (month in Turkish, 'Eyl') is dated by its stamp; the stamp wins over a text date that says otherwise", () => {
+  const input = hoursAgo(5);
+  const tr = pageCase(`<section id="auto" data-generated="${hoursAgo(4).toISOString()}"><p class="pmo-m">oluşturuldu 30 Eyl 13:15</p></section>`, input);
+  assert.equal(tr.row.status, "✓", tr.r.output);
+  // The text claims a date far in the past; the stamp is what is read.
+  const wins = pageCase(`<section id="auto" data-generated="${hoursAgo(4).toISOString()}"><p>generated 1 Jan 2020 10:00</p></section>`, input);
+  assert.equal(wins.row.status, "✓", wins.r.output);
+});
+
+test("a block from an older Nosy (no stamp) is still dated from its English text, and a Turkish one says it carries no time", () => {
+  const input = new Date(), d = new Date(input.getTime() - 3 * 86400000);
+  const p2 = n => String(n).padStart(2, "0"), en = `${d.getDate()} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()]} ${d.getFullYear()} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  const old = pageCase(`<section id="auto"><p class="pmo-m">generated ${en}</p></section>`, input);
+  assert.equal(old.row.status, "✗", old.r.output); assert.match(old.row.reason, /section says /, "the text parse is the fallback");
+  const tr = pageCase(`<section id="auto"><p class="pmo-m">oluşturuldu 30 Eyl 13:15</p></section>`, input);
+  assert.equal(tr.row.status, "–", tr.r.output); assert.match(tr.row.reason, /no generation time/);
+});
+
+test("a stamp that is not an ISO time is ignored (falls back to the text)", () => {
+  const out = pageCase(`<section id="auto" data-generated="30 Eyl"><p>nothing</p></section>`, hoursAgo(5));
+  assert.equal(out.row.status, "–", out.r.output);
+});

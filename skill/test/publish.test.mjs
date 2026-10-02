@@ -1,4 +1,4 @@
-// publish.mjs: sends only the dashboard files of pm/ to Nosy Cloud, with the token from the environment,
+// publish.mjs: sends only the dashboard files of pm/ to Nosy Cloud, with the token from the environment or a token file,
 // after the privacy scan. A local HTTP server stands in for the cloud; no real network.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
@@ -9,11 +9,11 @@ import { spawn } from "node:child_process";
 import { temporary, clean, Tool } from "./helpers.mjs";
 
 const PUBLISH = path.join(Tool, "publish.mjs");
-let tmp, pm, server, url, got;
+let tmp, pm, server, url, got, home;
 
-// spawnSync would block the in-process server, so the child runs async.
+// spawnSync would block the in-process server, so the child runs async. HOME is a temp folder, so the real ~/.config/nosy/token is never read.
 const run = (args, env = {}) => new Promise(resolve => {
-  const c = spawn(process.execPath, [PUBLISH, ...args], { env: { PATH: process.env.PATH, ...env } });
+  const c = spawn(process.execPath, [PUBLISH, ...args], { env: { PATH: process.env.PATH, HOME: home, USERPROFILE: home, ...env } });
   let output = "", error = "";
   c.stdout.on("data", d => (output += d)); c.stderr.on("data", d => (error += d));
   c.on("close", code => resolve({ code, output, error }));
@@ -21,6 +21,7 @@ const run = (args, env = {}) => new Promise(resolve => {
 
 before(async () => {
   tmp = temporary("nosy-publish-");
+  home = path.join(tmp, "home"); fs.mkdirSync(home);
   pm = path.join(tmp, "cargo", "pm");
   fs.mkdirSync(path.join(pm, "state"), { recursive: true });
   fs.writeFileSync(path.join(pm, "matrix.json"), JSON.stringify({ steps: [{ no: "1", name: "Setup" }], biz: { name: "Cargo", codes: { 1: "y" } }, products: [] }));
@@ -112,4 +113,98 @@ test("rival demand goes up only if you ran it, cut to public tracker facts, and 
   assert.deepEqual(Object.keys(sent.repos[0].asks[0].possibleArea), ["no", "feature"]);
   assert.equal("note" in sent || "source" in sent, false);
   fs.rmSync(path.join(pm, "state", "rival-demand.json"));
+});
+
+// ---- the token is read from a file, never from the command line ----
+// On the first real run the key was typed into a command, so it stayed in the shell history and in the chat log. The environment still
+// works; a file is now the better way, and a file other users can read is refused before anything is sent.
+const tokenFile = (dir, name, text, mode = 0o600) => { const f = path.join(dir, name); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, text); fs.chmodSync(f, mode); return f; };
+const posix = process.platform === "win32" ? { skip: "mode bits don't exist on Windows" } : {};
+
+test("the default token file ~/.config/nosy/token is used, and the token never shows in the output", async () => {
+  const h = path.join(tmp, "h-default"); tokenFile(h, ".config/nosy/token", "nsy_good\n");
+  got = null;
+  const r = await run([pm, "--url", url, "--yes"], { HOME: h, USERPROFILE: h });
+  assert.equal(r.code, 0, r.error);
+  assert.equal(got.auth, "Bearer nsy_good", "surrounding whitespace is trimmed");
+  assert.ok(!(r.output + r.error).includes("nsy_good"), "the token is never printed");
+});
+
+test("XDG_CONFIG_HOME moves the default file", async () => {
+  const x = path.join(tmp, "xdg"); tokenFile(x, "nosy/token", "nsy_good");
+  got = null;
+  const r = await run([pm, "--url", url, "--yes"], { XDG_CONFIG_HOME: x });
+  assert.equal(r.code, 0, r.error);
+  assert.equal(got.auth, "Bearer nsy_good");
+});
+
+test("order: NOSY_CLOUD_TOKEN, then --token-file, then NOSY_CLOUD_TOKEN_FILE, then the default file", async () => {
+  const h = path.join(tmp, "h-order"); tokenFile(h, ".config/nosy/token", "nsy_default");
+  const flagFile = tokenFile(tmp, "flag.token", "nsy_good"), envFile = tokenFile(tmp, "env.token", "nsy_envfile");
+  const env = { HOME: h, USERPROFILE: h };
+  got = null;
+  assert.equal((await run([pm, "--url", url, "--yes", "--token-file", flagFile], { ...env, NOSY_CLOUD_TOKEN_FILE: envFile })).code, 0);
+  assert.equal(got.auth, "Bearer nsy_good", "--token-file beats NOSY_CLOUD_TOKEN_FILE");
+  const viaEnvFile = await run([pm, "--url", url, "--yes"], { ...env, NOSY_CLOUD_TOKEN_FILE: tokenFile(tmp, "env2.token", "nsy_good") });
+  assert.equal(viaEnvFile.code, 0, viaEnvFile.error);
+  assert.equal(got.auth, "Bearer nsy_good", "NOSY_CLOUD_TOKEN_FILE beats the default file");
+  const viaVar = await run([pm, "--url", url, "--yes", "--token-file", envFile], { ...env, NOSY_CLOUD_TOKEN: "nsy_good" });
+  assert.equal(viaVar.code, 0, viaVar.error);
+  assert.equal(got.auth, "Bearer nsy_good", "the environment variable beats every file");
+});
+
+test("a token file that group or others can read is refused with the chmod to run, and nothing is sent", posix, async () => {
+  for (const mode of [0o644, 0o640, 0o604]) {
+    const f = tokenFile(tmp, `loose-${mode.toString(8)}.token`, "nsy_good", mode);
+    got = null;
+    const r = await run([pm, "--url", url, "--yes", "--token-file", f]);
+    assert.equal(r.code, 1, `mode ${mode.toString(8)}`);
+    assert.ok(r.error.includes(`chmod 600 ${f}`), r.error);
+    assert.match(r.error, new RegExp(`mode ${mode.toString(8)}`));
+    assert.equal(got, null, "nothing may be sent");
+    assert.ok(!(r.output + r.error).includes("nsy_good"));
+  }
+  // the default file is checked the same way
+  const h = path.join(tmp, "h-loose"); tokenFile(h, ".config/nosy/token", "nsy_good", 0o644);
+  got = null;
+  const d = await run([pm, "--url", url, "--yes"], { HOME: h, USERPROFILE: h });
+  assert.equal(d.code, 1);
+  assert.match(d.error, /chmod 600 .*\.config\/nosy\/token/);
+  assert.equal(got, null);
+  // 0400 (read-only for you) is fine
+  assert.equal((await run([pm, "--url", url, "--yes", "--token-file", tokenFile(tmp, "ro.token", "nsy_good", 0o400)])).code, 0);
+});
+
+test("a named token file that is missing, empty or holds more than a token stops the send", async () => {
+  got = null;
+  const missing = await run([pm, "--url", url, "--yes", "--token-file", path.join(tmp, "nope.token")]);
+  assert.equal(missing.code, 1);
+  assert.match(missing.error, /token file .*nope\.token can't be read \(ENOENT\)/);
+  const empty = await run([pm, "--url", url, "--yes", "--token-file", tokenFile(tmp, "empty.token", " \n")]);
+  assert.equal(empty.code, 1);
+  assert.match(empty.error, /is empty/);
+  const two = await run([pm, "--url", url, "--yes", "--token-file", tokenFile(tmp, "two.token", "nsy_good and more")]);
+  assert.equal(two.code, 1);
+  assert.match(two.error, /more than one word/);
+  assert.ok(!(two.output + two.error).includes("nsy_good"), "even a refused file's content is not echoed");
+  assert.equal(got, null);
+});
+
+test("with no token anywhere, the failure leads with the file: where to save it, chmod 600, and the shell-history warning", async () => {
+  const h = path.join(tmp, "h-none"); fs.mkdirSync(h, { recursive: true });
+  const r = await run([pm, "--url", url, "--yes"], { HOME: h, USERPROFILE: h });
+  assert.equal(r.code, 1);
+  assert.match(r.error, /NOSY_CLOUD_TOKEN is not set and there is no token file/);
+  assert.ok(r.error.includes(path.join(h, ".config", "nosy", "token")), r.error);
+  assert.match(r.error, /chmod 600/);
+  assert.match(r.error, /printf '%s' '<token>' >/);
+  assert.match(r.error, /shell history/);
+  assert.match(r.error, /--token-file <path>/);
+  assert.doesNotMatch(r.error, /export it/, "no longer tells people to export it");
+});
+
+test("the usage header names the token file", () => {
+  const head = fs.readFileSync(PUBLISH, "utf8").split("\n").slice(0, 25).join("\n");
+  assert.match(head, /--token-file <path>/);
+  assert.match(head, /\.config\/nosy\/token/);
 });

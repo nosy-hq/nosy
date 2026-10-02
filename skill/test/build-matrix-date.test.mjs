@@ -84,3 +84,18 @@ test("build-matrix never loses the owner's matrix", () => {
     assert.equal(fs.readdirSync(path.join(pm, "history")).filter(f => f.startsWith("matrix-before-build-")).length, 1);
   } finally { fs.rmSync(d, { recursive: true, force: true }); }
 });
+
+test("build-matrix: no pm/rivals folder is a sentence with the next step and exit 1, not a stack trace; [verified: date] leaves the evidence text clean", () => {
+  const root = temporary("nosy-bm-nodir-");
+  try {
+    const pm = path.join(root, "pm"); fs.mkdirSync(pm);
+    const r = run(path.join(Tool, "build-matrix.mjs"), [pm]);
+    assert.equal(r.code, 1); assert.match(r.error, /no .*rivals\/ yet: run \/nosy:neighbors first.*nosy rivals-import/); assert.doesNotMatch(r.error, /ENOENT|at Object/);
+    fs.mkdirSync(path.join(pm, "rivals"));
+    fs.writeFileSync(path.join(pm, "rivals", "acme.md"), "# Acme\n\n## Feature matrix\n\n| # | Step | Code | Evidence |\n|---|---|---|---|\n| 1 | Export | y | https://acme.example/x [verified: 2026-10-02] |\n| 2 | Share | n | none [verified: soon] |\n");
+    assert.equal(run(path.join(Tool, "build-matrix.mjs"), [pm]).code, 0);
+    const c = JSON.parse(fs.readFileSync(path.join(pm, "matrix.json"), "utf8")).products[0].codes;
+    assert.deepEqual(c[1], { k: "y", evidence: "https://acme.example/x", verified_at: "2026-10-02" });
+    assert.deepEqual(c[2], { k: "n", evidence: "none [verified: soon]" }, "a date that isn't one stays in the text");
+  } finally { clean(root); }
+});

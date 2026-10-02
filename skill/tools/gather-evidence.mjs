@@ -45,7 +45,7 @@ const requestB = K.request ? blocks(show(K.request.path), K.request.title) : [];
 const rivalDir = path.join(pm, "..", "references");
 const rivalFiles = [path.join(pm, "rivals"), rivalDir].filter(d => fs.existsSync(d)).flatMap(d => fs.readdirSync(d, { recursive: true }).filter(f => String(f).endsWith(".md")).map(f => path.join(d, String(f))));
 const money = rivalFiles.flatMap(f => fs.readFileSync(f, "utf8").split(/\n\s*\n/).map(p => ({ f, p })));
-const M = K.matrix ? matrixRead(K.matrix) : null; // either matrix shape
+const M = K.matrix ? matrixRead(K.matrix, { codes: K.matrixCodes }) : null; // either matrix shape
 const log = execFileSync("git", ["-C", K.repo, "log", "--no-merges", "--since=30.days", "--format=%h %ad %an | %s", "--date=short", K.ref], { encoding: "utf8" }).split("\n").filter(Boolean);
 setupIdf([...decisionB, ...requestB, ...money.map(x => x.p), ...(M?.lines || []).map(r => r.feature + " " + r.not), ...log]);
 // internal request 72 (kill criterion 1: word/title similarity checked against real GitHub history was only

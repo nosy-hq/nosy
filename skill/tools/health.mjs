@@ -137,19 +137,25 @@ export async function check({ cwd = process.cwd(), pm: pmArg, env = process.env,
   }
 
   // 7. pm/ here: absent is fine (not moved in yet); present must be readable.
-  const pm = path.resolve(cwd, pmArg || env.NOSY_PM || "pm"), rel = path.relative(cwd, pm) || "pm";
+  // Same lookup as every other command (sources-file.mjs findPm): --pm, NOSY_PM, ./pm, else the nearest pm/ above this folder.
+  const S0 = await soft("sources-file.mjs"), pm = path.resolve(cwd, pmArg || env.NOSY_PM || (S0 ? S0.findPm(cwd) : "pm")), rel = path.relative(cwd, pm) || "pm";
   const src = path.join(pm, "sources.json");
   if (fs.existsSync(src)) {
     const s = readJson(src);
     if (s.error) add("fail", `${rel}/sources.json isn't valid JSON (${s.error})`, `fix that spot by hand, or move it aside and run \`/nosy:move-in\` (or \`nosy setup .\`)`);
     else if (!s.value || typeof s.value !== "object" || Array.isArray(s.value)) add("fail", `${rel}/sources.json isn't a JSON object`, "move it aside and run `/nosy:move-in` (or `nosy setup .`)");
     else {
-      const K = s.value, repo = path.resolve(path.dirname(pm), K.repo || "."), ref = K.ref || "HEAD";
+      const K = s.value, repoGiven = typeof K.repo === "string" && K.repo ? K.repo : ".", ref = typeof K.ref === "string" && K.ref ? K.ref : "HEAD";
+      // A `repo` that isn't text (a number, a list) is a typo, said as one; "." means the repo this pm/ lives in (sources-file.mjs resolveRepo).
+      const repo = S0 ? S0.resolveRepo(pm, repoGiven, { cwd }) : path.resolve(path.dirname(pm), repoGiven);
+      if (K.repo !== undefined && typeof K.repo !== "string") add("fail", `${rel}/sources.json \`repo\` isn't text (it is ${Array.isArray(K.repo) ? "a list" : typeof K.repo})`, `set \`repo\` to the path of the product's git folder ("." when pm/ is inside it)`);
+      else
       if (g.missing || g.status !== 0) add("warn", `${rel}/sources.json read, but its repo can't be checked without git`, "install git (above)");
       else if (!fs.existsSync(repo) || run("git", ["-C", repo, "rev-parse", "--git-dir"], cwd).status !== 0) add("fail", `${rel}/sources.json \`repo\` (${K.repo || "."}) isn't a git repo (looked in ${repo})`, `fix \`repo\` in ${rel}/sources.json: a path to the product's git folder, relative to ${path.dirname(pm) === cwd ? "this folder" : path.dirname(pm)}`);
       else if (run("git", ["-C", repo, "rev-parse", "--verify", "--quiet", "HEAD"], cwd).status !== 0) add("fail", `${repo} has no commits yet, so there's nothing to read`, "make a first commit (`git commit --allow-empty -m start`), then run this again");
       else if (run("git", ["-C", repo, "rev-parse", "--verify", "--quiet", `${ref}^{commit}`], cwd).status !== 0) add("fail", `${rel}/sources.json \`ref\` (${ref}) isn't a branch or commit in ${repo}`, `\`git -C ${repo} branch -a\` lists them; fix \`ref\`, or \`git fetch\` if it is a remote branch`);
       else add("ok", `${rel}/sources.json reads; repo ${K.repo || "."} at ${ref} resolves`);
+      await pmContents({ K, pm, rel, add, soft, command });
       if (K.issue?.repo && !ghFound) add("warn", `${rel}/sources.json has issue.repo (${K.issue.repo}) but gh isn't installed: issues and PRs are skipped`, "install gh (above), or remove `issue` to silence this");
     }
   } else if (fs.existsSync(path.join(pm, "kaynaklar.json"))) add("warn", `${rel}/ is from an older Nosy (kaynaklar.json)`, "`nosy doctor --fix`");
@@ -157,6 +163,37 @@ export async function check({ cwd = process.cwd(), pm: pmArg, env = process.env,
   else add("note", `no ${rel}/ here, so Nosy hasn't moved in (fine outside a product repo)`, "`/nosy:move-in` in your agent, or `nosy setup .`");
 
   return { version, node, lines };
+}
+
+// What else in pm/ is shaped for this version: the matrix (the same reader `publish` uses), the page's marker, and
+// which optional parts exist. First run on a real product: `doctor` called a pm/ fine while the matrix still had old keys and the page an old
+// marker. Nothing here is a hard failure: Nosy runs without a matrix, a page or rivals; each line says what to run.
+async function pmContents({ K, pm, rel, add, soft, command }) {
+  const base = path.dirname(pm), at = p => (path.isAbsolute(p) ? p : path.resolve(base, p));
+  const matrixFile = typeof K.matrix === "string" && K.matrix ? at(K.matrix) : path.join(pm, "matrix.json");
+  if (fs.existsSync(matrixFile)) {
+    const M = await soft("matrix-preflight.mjs");
+    if (M) {
+      const name = path.relative(process.cwd(), matrixFile) || matrixFile;
+      let P; try { P = M.preflightMatrix(fs.readFileSync(matrixFile, "utf8"), { codes: K.matrixCodes && typeof K.matrixCodes === "object" ? K.matrixCodes : {} }); } catch (e) { P = { ok: false, problem: `can't be read (${String(e.message).split("\n")[0].slice(0, 80)})` }; }
+      const problem = String(P.problem ?? "");
+      if (!P.ok && !P.report) add("warn", `${name} can't be read as a matrix: ${problem.replace(/^pm\/matrix\.json /, "")}`, `\`${command("neighbors")}\` rebuilds it, or fix the shape by hand`);
+      else if (!P.ok) add("warn", `${name}: ${problem.replace(/^\d+ of \d+ cells in pm\/matrix\.json/, "most cells")}`, "map them under `matrixCodes` in sources.json");
+      else if (P.report.keysTranslated) add("warn", `${name} is keyed in another language (${P.report.areas} areas): Nosy reads it, and \`publish\` sends it as English, but the Cloud dashboard can't read the file itself`, `\`${command("neighbors")}\` rewrites it in English keys`);
+      else if (P.report.unknown.length || P.report.mapped.length) add("note", `${name}: ${M.describe(P.report)}`, P.report.unknown.length ? "map the unknown codes under `matrixCodes` in sources.json (y done, p partial, n missing, u unknown, d announced)" : null);
+      else add("ok", `${name} reads: ${M.describe(P.report)}`);
+    }
+  }
+  const page = typeof K.page === "string" && K.page ? at(path.isAbsolute(K.page) ? K.page : path.join(pm, K.page)) : null;
+  if (page && fs.existsSync(page)) {
+    const html = fs.readFileSync(page, "utf8");
+    if (/<!--\s*\/?pm:otomatik\s*-->/.test(html)) add("warn", `${path.relative(process.cwd(), page) || page} has the old marker pm:otomatik, so the page update would add a second block instead of replacing it`, "rename it to `<!-- pm:auto -->` … `<!-- /pm:auto -->` (it is your page: Nosy doesn't edit it for you)");
+  }
+  // Rival files: <pm>/rivals, or the folder sources.json `rivalsPath` names (internal request 205; sources-file.mjs rivalsDir).
+  const S = await soft("sources-file.mjs"), rivalsAt = S ? S.rivalsDir(pm, K) : path.join(pm, "rivals");
+  const rivals = S ? S.rivalFiles(rivalsAt, { nested: rivalsAt !== path.join(pm, "rivals") }).length : mdCount(rivalsAt), has = (ok, yes, no) => (ok ? `${yes} ✓` : `${no} –`);
+  add("note", `optional setup: ${[has(rivals > 0, `rivals (${rivals} file${rivals === 1 ? "" : "s"})`, "rivals (none yet)"), has(!!K.research, "research tool chosen", "research tool not chosen"), has(!!(K.cloud && K.cloud.url), "Cloud target set", "no Cloud target"), has(fs.existsSync(path.join(pm, "map.md")), "map.md", "no map.md")].join(" · ")}`,
+    rivals > 0 ? null : `\`${command("neighbors")}\` finds rivals; if yours live elsewhere (a \`references/\` folder), \`${command("setup")}\` proposes it as \`rivalsPath\` in sources.json, or set it by hand`);
 }
 
 const SYMBOL = { ok: "✓", fail: "✗", warn: "!", note: "–" };

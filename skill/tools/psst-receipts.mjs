@@ -13,12 +13,18 @@
 //              right above it, verbatim, plus decisions that name that file. A comment there that carries a ref (#385,
 //              K178) or a decision naming the file puts the item behind a gate: it was held on purpose until shown
 //              otherwise. Blind re-run v6's only loss was such an item ("a screen decision, not a missing read, #385").
+//              A #N that is an issue in pm/state/facts/github.json is a ticket, not a parking sign:
+//              it is listed under `ticketed` (open: tracked and ready; closed: check it was finished) and holds nothing.
+//   local      work already written on a branch the integration branch lacks, or uncommitted in a working tree (internal request
+//              195, local-work.mjs): matched by a file in common or a reference in the branch's commit subjects. On the first
+//              run on a real product 3 of 5 draft items were already done on the owner's own unpushed branches.
 //   reach      code identifiers the texts name (`backticked`, snake_case, camelCase, name[]): which top-level apps
 //              contain each one at ref. An identifier absent from an app the change must reach means a cross-app change.
 import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { fileURLToPath } from "node:url";
 import { patternsOfLoad, refRegex } from "./refs.mjs";
 import { decisionsOfRead } from "./read-decisions.mjs";
 import { readSourcesSafe } from "./sources-file.mjs";
+import { loadLocalWork, pushedNames, matchBranchesDetailed, workingTreeScan, editsIn, formatLocal } from "./local-work.mjs";
 
 const readJson = f => { try { return JSON.parse(fs.readFileSync(f, "utf8").replace(/^\uFEFF/, "")); } catch { return null; } };
 const uniq = a => [...new Set(a.filter(Boolean))];
@@ -74,7 +80,15 @@ export function receipts(pm, { top = 30 } = {}) {
   const codeShaped = x => /_/.test(x) || /[a-z][A-Z]/.test(x);
   const identsIn = s => uniq([...String(s || "").matchAll(IDENT)].map(m => (m[1] || m[2] || m[3] || m[4] || "").replace(/\[\]$/, "")).filter(x => x.length >= 5 && codeShaped(x) && !/[./]/.test(x)));
 
+  // Local work: facts' branch list (`nosy facts`; psst refreshes it), read once.
+  const LW = loadLocalWork(pm), pushed = LW ? pushedNames(repo) : new Set();
+  let scanned; // the worktrees' uncommitted files, read on the first item that names a file
   const pending = readJson(path.join(pm, "state", "pending.json"))?.items || [];
+  // Issues by number, from the facts (`nosy facts`): a ref in a code comment that is an issue number is a ticket, not a parking
+  // sign. On the first real run the top items were "held" for a comment saying "issue to follow", but the
+  // issues had been opened that same day. No github.json: every ref stays a parking sign, exactly as before.
+  const issueByNo = new Map();
+  for (const x of readJson(path.join(pm, "state", "facts", "github.json"))?.items || []) if (x && x.kind === "issue" && x.n != null) issueByNo.set(String(x.n), x);
   // Comment lines in any language's syntax: the markers are code, not words.
   const COMMENT = /^\s*(\/\/|#(?![!\[{])|\/\*|\*|--|<!--|;|%|\{\/\*)/;
   const files = new Map(), fileLines = f => { if (!files.has(f)) files.set(f, (git("show", `${ref}:${f}`) || "").split("\n")); return files.get(f); };
@@ -122,19 +136,37 @@ export function receipts(pm, { top = 30 } = {}) {
     const locs = uniq([it.evidence, ...(it.detail || [])].flatMap(t => String(t).match(/[\w@~./+-]+\.[A-Za-z0-9]+:\d+/g) || [])).slice(0, 4);
     const code = locs.map(codeAt).filter(Boolean);
     // The team's own next-list items point at their notes, not at code: a ref in a note is context, not a parking sign.
-    const held = /^On the team's next list/.test(it.type) ? [] : code.filter(c => c.refs.length || c.decisions.length);
-    const gate = held.length ? { held: true, because: held.map(c => ({ at: c.at, refs: c.refs, decisions: c.decisions })) } : null;
-    out.push({ rank: i + 1, type: it.type, title: it.title, ref: it.ref || null, evidence: it.evidence, gate, code, needs, request: req, decisions: decs, history, reach });
+    // A #N that is a known issue (open or closed) is a ticket, not a parking sign: it is reported under `ticketed` and doesn't hold
+    // the item. Any other ref (K178, a PR, an issue the facts don't list) and any decision naming the file still holds it.
+    const ticketed = [], isTicket = r => { const n = (String(r).match(/^#(\d+)$/) || [])[1], x = n && issueByNo.get(n); return x && (x.state === "open" || x.state === "closed") ? { ref: r, n: +n, state: x.state } : null; };
+    const heldBy = [];
+    for (const c of /^On the team's next list/.test(it.type) ? [] : code) {
+      const rest = [];
+      for (const r of c.refs) { const t = isTicket(r); if (t) { if (!ticketed.some(x => x.n === t.n)) ticketed.push(t); } else rest.push(r); }
+      if (rest.length || c.decisions.length) heldBy.push({ at: c.at, refs: rest, decisions: c.decisions });
+    }
+    const gate = heldBy.length ? { held: true, because: heldBy } : null;
+    // Every evidence file the item names (not only the four whose code is quoted), and its references.
+    const evPaths = uniq([it.evidence, ...(it.detail || [])].flatMap(t => [...String(t).matchAll(/([\w@~./+-]+\.[A-Za-z0-9]+):\d+/g)].map(m => m[1])));
+    const { list: local, more: localMore } = matchBranchesDetailed(LW, { paths: evPaths, refs, refRe, pushed });
+    const edits = evPaths.length ? editsIn(scanned ??= workingTreeScan(repo), evPaths) : []; // one `git status` per worktree for the whole list, not one per item
+    out.push({ rank: i + 1, type: it.type, title: it.title, ref: it.ref || null, evidence: it.evidence, gate, ticketed, code, needs, request: req, decisions: decs, history, reach, local, localMore, edits, inProgress: local.some(x => x.strength === "strong") || edits.length > 0 });
   }
-  return { type: "psstReceipts", generated: new Date().toISOString(), ref, units, items: out };
+  return { type: "psstReceipts", generated: new Date().toISOString(), ref, units, localWork: LW ? { checked: true, facts: LW.generated, base: LW.base, branches: LW.branches.length, prsRead: LW.ghRead } : { checked: false }, items: out };
 }
 
 export function formatMd(R) {
   if (!R) return "No pm/sources.json or pm/state/lowhanging.json: run psst (lowhanging.mjs) first.\n";
   let o = `# psst receipts · ${R.ref}\n\nCheck every item against these before you list it (psst.md, step 3).\n`;
+  if (!R.localWork?.checked) o += `\n_Local work not checked: no \`pm/state/facts/branches.json\` (run \`nosy facts\`). Without it, work already written on a local branch looks like new work._\n`;
+  else if (!R.localWork.prsRead) o += `\n_Local branches checked (${R.localWork.branches}, facts of ${String(R.localWork.facts).slice(0, 10)}); GitHub wasn't read, so "no PR" below means "no PR known"._\n`;
   for (const it of R.items) {
     o += `\n## ${it.rank}. ${it.title}\n${it.type} · ${it.evidence}\n`;
     if (it.gate) o += `\n**⛔ Held on purpose until shown otherwise:** the code at ${it.gate.because.map(b => `${b.at} (${[...b.refs, ...b.decisions.map(d => `decision ${d}`)].join(", ")})`).join("; ")} records a decision or a tracked deferral. Don't list it as cheap work unless you quote that line and show why it no longer applies.\n`;
+    for (const t of it.ticketed || []) o += t.state === "open"
+      ? `\n**Ticketed:** issue #${t.n} is open, so it is tracked and ready, not parked.\n`
+      : `\n**Ticketed**, issue #${t.n} is closed: check it was finished.\n`;
+    if (it.local?.length || it.edits?.length) o += formatLocal(it.local || [], it.edits || [], it.localMore || 0);
     for (const c of it.code.filter(c => c.text.length)) o += `\n**Code at ${c.at}:**\n\n${c.text.map(l => `> ${l}`).join("\n")}\n`;
     if (it.needs.length) o += `\n**The screen's own need:** ${it.needs.join(" · ")}\n`;
     for (const s of it.request) o += `\n**Request §${s.no}** (${s.file}:${s.line}):\n\n${s.text.split("\n").map(l => `> ${l}`).join("\n")}\n`;
@@ -146,7 +178,7 @@ export function formatMd(R) {
   return o;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) { // realpath: a skill reached through a symlink (the project skill link) still runs
   const argv = process.argv.slice(2), take = k => { const i = argv.indexOf(k); return i >= 0 ? argv.splice(i, 2)[1] : null; };
   const jsonOut = take("--json"), topArg = take("--top");
   const R = receipts(argv[0] || "pm", { top: topArg ? +topArg : 30 });

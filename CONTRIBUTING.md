@@ -8,7 +8,7 @@ Small, focused changes are welcome. Open an issue first for anything larger than
 npm test
 ```
 
-That runs `node --test skill/test/*.test.mjs`: about 800 tests, roughly a minute on a laptop. They are hermetic: a fake product and a fake `gh`, no network, no writes outside a temp folder. You need Node 18.17 or newer and git. [`skill/test/README.md`](skill/test/README.md) explains the fake product.
+That runs `node --test skill/test/*.test.mjs`: about 1,000 tests, roughly a minute on a laptop. They are hermetic: a fake product and a fake `gh`, no network, no writes outside a temp folder. You need Node 18.17 or newer and git. [`skill/test/README.md`](skill/test/README.md) explains the fake product.
 
 ## Rules for code
 

@@ -91,3 +91,46 @@ test("native exports (Intercom, Zendesk, Slack, Gong): nested records are read, 
   assert.ok(!/1970/.test(JSON.stringify(j)), "epoch seconds must not become 1970");
   assert.ok(/2026-09-2[45]/.test(JSON.stringify(j)), "the Intercom epoch date should appear as a real date");
 });
+
+// an issue its own team opened is a work item, not a customer asking. sources.json `team` (logins, any case,
+// an array or one string) keeps it out of every count and customer; it is reported apart as `workItems`.
+test("team-authored GitHub issues are work items: not demand, not customers, reported separately", async () => {
+  const { fakeGhSetup } = await import("./helpers.mjs");
+  const issues = [
+    { number: 11, title: "Bulk shipment export to CSV", body: "We need to download the bulk shipment export as CSV.", createdAt: "2026-09-20T10:00:00Z", author: { login: "grace-customer" } },
+    { number: 12, title: "Bulk shipment export: build the CSV download", body: "Task: bulk shipment export, CSV download endpoint.", createdAt: "2026-09-21T10:00:00Z", author: { login: "Ops-Dev" } },
+    { number: 13, title: "Bulk shipment export CSV again", body: "Another note on the bulk shipment export CSV download.", createdAt: "2026-09-22T10:00:00Z", author: { login: "second-dev" } },
+  ];
+  const gh = fakeGhSetup({ issueListAll: issues });
+  const emptyDir = path.join(tmp, "empty-signal"); fs.mkdirSync(emptyDir, { recursive: true });
+  const exportGoal = j => j.goals.find(h => /export/i.test(h.title));
+  const collect = team => {
+    const pm2 = temporary("nosy-team-pm-"); fs.cpSync(pm, pm2, { recursive: true });
+    const kj = JSON.parse(fs.readFileSync(path.join(pm2, "sources.json"), "utf8"));
+    if (team !== undefined) kj.team = team;
+    fs.writeFileSync(path.join(pm2, "sources.json"), JSON.stringify(kj));
+    const out = path.join(tmp, `team-${Math.random().toString(36).slice(2)}.json`);
+    const r = run(path.join(Tool, "collect-signals.mjs"), [pm2, emptyDir, "--gh", "--json", out], { env: gh.env });
+    clean(pm2);
+    assert.equal(r.code, 0, `stderr: ${r.error}`);
+    return { j: JSON.parse(fs.readFileSync(out, "utf8")), md: r.output };
+  };
+  try {
+    const none = collect(undefined);
+    assert.equal(none.j.total, 3, "without `team` all three issues are signals");
+    assert.equal(exportGoal(none.j).customer, 3);
+    assert.equal(none.j.workItems, undefined, "no team, no workItems key");
+
+    for (const team of [["ops-dev", "@Second-Dev"], "OPS-DEV"]) {
+      const { j, md } = collect(team);
+      const n = Array.isArray(team) ? 2 : 1;
+      assert.equal(j.total, 3 - n, `team ${JSON.stringify(team)}: their issues are not signals`);
+      assert.equal(exportGoal(j).customer, 3 - n, "and not customers");
+      assert.equal(exportGoal(j).count, 3 - n);
+      assert.equal(j.workItems.count, n);
+      assert.ok(j.workItems.matched >= 1 && j.workItems.goals.some(g => /export/i.test(g.title)), `work items are still matched to a target: ${JSON.stringify(j.workItems)}`);
+      assert.match(md, /Team-authored issues .*work items, not demand/);
+      assert.equal(j.sources.find(k => k.format === "github").signal, 3 - n);
+    }
+  } finally { clean(gh.dir); }
+});

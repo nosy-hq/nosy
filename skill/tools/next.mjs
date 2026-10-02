@@ -3,6 +3,7 @@
 // pm/inspiration-skill-products.md). It never runs a command itself: the pick is a suggestion the owner confirms.
 // Signals, all read-only and local (no network, no gh):
 //   no pm/ or no sources.json                         → move-in (and nothing else: every other command needs it)
+//   set up, four or more of the six first answers missing, no tour yet → tour
 //   no record (state/shipped.json or status.json), or it's old / main moved since   → shipped
 //   no psst list, or it's older than the record / a week  → psst
 //   no rival files, or rivals not checked in 30+ days  → neighbors
@@ -17,7 +18,7 @@ import { Maintenance, commitArea } from "./frontyard.mjs";
 import { nextDecision, render as renderDecision } from "./next-decision.mjs";
 import { status as loadedStatus, render as loadedRender } from "./loaded.mjs";
 import { updateNotice } from "./update-check.mjs";
-import { readSourcesSafe } from "./sources-file.mjs";
+import { readSourcesSafe, rivalsDir, rivalFiles } from "./sources-file.mjs";
 import { nosyCommand } from "./hints.mjs";
 
 const DAY = 864e5;
@@ -38,16 +39,18 @@ function commitsSince(K, sinceMs) {
   } catch { return []; }
 }
 
-// Last time each rival file was touched: its last git commit, else its mtime. { file: ms }.
-function rivalTouched(dir) {
-  let files = []; try { files = fs.readdirSync(dir).filter(f => f.endsWith(".md") && !f.startsWith("_")); } catch { return {}; }
+// Last time each rival file was touched: its last git commit, else its mtime. { file: ms }. `nested`: a rivalsPath folder
+//, whose files may sit in subfolders; keys are then paths relative to it.
+export function rivalTouched(dir, { nested = false } = {}) {
+  const files = rivalFiles(dir, { nested });
+  if (!files.length) return {};
   const seen = {};
   try {
-    const out = execFileSync("git", ["-C", dir, "log", "--format=@%cI", "--name-only", "--", "."], { encoding: "utf8", maxBuffer: 64 << 20, stdio: ["ignore", "pipe", "ignore"] });
+    const out = execFileSync("git", ["-c", "core.quotepath=off", "-C", dir, "log", "--relative", "--format=@%cI", "--name-only", "--", "."], { encoding: "utf8", maxBuffer: 64 << 20, stdio: ["ignore", "pipe", "ignore"] });
     let at = null;
     for (const line of out.split("\n")) {
       if (line.startsWith("@")) at = Date.parse(line.slice(1));
-      else if (line.trim()) { const f = path.basename(line.trim()); if (!(f in seen)) seen[f] = at; }
+      else if (line.trim()) { const f = line.trim(); if (!(f in seen)) seen[f] = at; }
     }
   } catch {}
   return Object.fromEntries(files.map(f => [f, Math.max(seen[f] || 0, 0) || mtime(path.join(dir, f))]));
@@ -74,6 +77,11 @@ export function next(pm, { now = Date.now(), staleDays = 7, rivalDays = 30 } = {
     add("doctor", `${pm}/ is from an older Nosy (kaynaklar.json, Turkish names): rename it before anything else`, 100);
     return { type: "next", generated: new Date(now).toISOString(), setUp: false, picks };
   }
+  // A sources.json that is there but won't parse is not "missing": move-in would start over on top of the owner's file. doctor --check says where it breaks.
+  if (!K && fs.existsSync(path.join(pm, "sources.json"))) {
+    add("doctor", `${pm}/sources.json is there but can't be read (it isn't valid JSON, or isn't an object): \`${nosyCommand("doctor --check")}\` says where; Nosy won't write over it`, 100);
+    return { type: "next", generated: new Date(now).toISOString(), setUp: false, picks };
+  }
   if (!fs.existsSync(pm) || !K) {
     add("move-in", fs.existsSync(pm) ? `${pm}/sources.json is missing: Nosy doesn't know this repo yet` : `no ${pm}/ folder yet: Nosy hasn't moved in`, 100);
     return { type: "next", generated: new Date(now).toISOString(), setUp: false, picks };
@@ -88,6 +96,13 @@ export function next(pm, { now = Date.now(), staleDays = 7, rivalDays = 30 } = {
     if (age >= staleDays || moved >= 10)
       add("shipped", `the record is ${plural(age, "day")} old${moved ? ` and ${plural(moved, "commit")} landed on the integration branch since` : ""}`, 70 + Math.min(age, 20));
   }
+
+  // The first look (tour.mjs): a repo Nosy is set up for but has barely looked at. It covers shipped, psst,
+  // neighbors and the rest in one go with one list of questions, so it outranks each of them alone.
+  // Rival files live in <pm>/rivals, or in the folder sources.json `rivalsPath` names.
+  const rivalsAt = rivalsDir(pm, K), rivalOpts = { nested: rivalsAt !== path.join(pm, "rivals") }, touched = rivalTouched(rivalsAt, rivalOpts), names = Object.keys(touched);
+  { const thin = [!shippedAt, !fs.existsSync(path.join(pm, "map.md")), !asOf(state("lowhanging.json")), !asOf(state("psst-final.json")), !asOf(state("waves.json")), !names.length].filter(Boolean).length;
+    if (thin >= 4 && !readJson(state("tour.json"))) add("tour", `Nosy is set up here but has barely looked yet (${thin} of 6 first answers missing): one walk covers them, with one list of questions`, 95); }
 
   // The map every command reads first (commands/map.md): offered once setup is done.
   if (!fs.existsSync(path.join(pm, "map.md"))) add("map", "no product map yet: one page of what's live, beta or retired, and what only the owner knows, so answers stop contradicting each other", 52);
@@ -104,11 +119,10 @@ export function next(pm, { now = Date.now(), staleDays = 7, rivalDays = 30 } = {
     add("psst", finalAt ? "the cheap-wins list changed since it was checked: run psst's refuter again (psst.md step 3)" : "the cheap-wins list isn't checked yet: run psst's refuter (psst.md step 3) before acting on it", 48);
 
   // Over the fence.
-  const touched = rivalTouched(path.join(pm, "rivals")), names = Object.keys(touched);
   if (!names.length) add("neighbors", "no rival files yet: nothing to say what rivals shipped or how much of it we have", 45);
   else {
     const old = names.filter(f => days(now, touched[f]) >= rivalDays);
-    if (old.length) add("neighbors", `${plural(old.length, "rival")} not checked in ${rivalDays}+ days (${old.slice(0, 3).map(f => f.replace(/\.md$/, "")).join(", ")}${old.length > 3 ? "…" : ""})`, 40 + Math.min(old.length, 10));
+    if (old.length) add("neighbors", `${plural(old.length, "rival")} not checked in ${rivalDays}+ days (${old.slice(0, 3).map(f => path.posix.basename(f).replace(/\.md$/, "")).join(", ")}${old.length > 3 ? "…" : ""})`, 40 + Math.min(old.length, 10));
   }
 
   // Ahead: the roadmap waves follow the psst list.
@@ -152,6 +166,7 @@ export function next(pm, { now = Date.now(), staleDays = 7, rivalDays = 30 } = {
 // Grouped by Nosy's three directions: inside first, then over the fence, then ahead.
 export const MENU = [
   ["Set up", "move-in", "learn the product: repo, decisions, rivals, rules (once)"],
+  ["Set up", "tour", "the first look in one go: what Nosy reads and writes, the walk, one list of questions"],
   ["Set up", "map", "one page of live/beta/retired apps, screens ↔ code, what only the owner knows"],
   ["Set up", "doctor", "a pm/ from an older Nosy: old names and keys, fixed with --fix"],
   ["Inside", "shipped", "what landed, when, for which decision or request (peek + explicit links + recent merges)"],
@@ -172,7 +187,7 @@ export const MENU = [
 
 // The same steps without an agent (`nosy <cli>`): move-in's scripted part is `setup`, tea's is `page`, stakeout's is `weekly`, neighbors' is `watch`.
 // Commands with no script half show as the agent command.
-export const CLI = { doctor: "doctor", "move-in": "setup", shipped: "shipped", peek: "peek", psst: "psst", frontyard: "frontyard", canwe: "canwe", neighbors: "watch", bet: "bet place", score: "score", tea: "page", stakeout: "weekly" };
+export const CLI = { tour: "tour", doctor: "doctor", "move-in": "setup", shipped: "shipped", peek: "peek", psst: "psst", frontyard: "frontyard", canwe: "canwe", neighbors: "watch", bet: "bet place", score: "score", tea: "page", stakeout: "weekly" };
 
 // prefix: how the owner types a command here ("/nosy:" in the Claude Code plugin, "/nosy " as a skill); cli: plain `nosy` names.
 export function render(R, { prefix = "/nosy:", cli = false } = {}) {

@@ -61,6 +61,17 @@ function blobsAt(git, commit, paths) {
 // Branches with content the integration branch doesn't have. Only branches with a commit in the last `days`
 // days, at most `max` of them (newest first): a repo with 2,000 branches is mostly history. Nothing is written
 // to the repo: merge-tree's objects go to a throwaway object directory.
+export const PATHS_EACH = 500, PATHS_TOTAL = 40000;
+// Caps every branch's `paths` in place (see the comment where branchFacts calls it). Returns the list it was given.
+export function capPaths(out, { each = PATHS_EACH, total = PATHS_TOTAL } = {}) {
+  let budget = total;
+  for (const b of [...out].sort((x, y) => x.filesDiffer - y.filesDiffer)) {
+    const all = b.paths, floor = Math.min(all.length, 60), keep = Math.max(floor, Math.min(all.length, each, budget));
+    b.pathsTotal = all.length; if (keep < all.length) { b.paths = all.slice(0, keep); b.pathsTruncated = true; }
+    budget -= keep;
+  }
+  return out;
+}
 export function branchFacts(repo, base, { days = 60, max = 200, big = 20, openPr = new Set(), now = new Date().toISOString().slice(0, 10) } = {}) {
   const partial = isPartialClone(repo), treeless = partial && isTreeless(repo);
   let tmp = null, env = process.env;
@@ -72,16 +83,21 @@ export function branchFacts(repo, base, { days = 60, max = 200, big = 20, openPr
     } catch { tmp = null; }
   }
   const noFetch = partial ? noLazyFetchArgs(repo) : [];
-  const git = (...a) => sh("git", [...noFetch, "-C", repo, ...a], { env: { ...env, GIT_TERMINAL_PROMPT: "0" } });
+  const git = (...a) => sh("git", ["-c", "core.quotepath=off", ...noFetch, "-C", repo, ...a], { env: { ...env, GIT_TERMINAL_PROMPT: "0" } }); // quotepath off: a file named "café.ts" is listed as that, not as "caf\\303\\251.ts", so evidence paths match
   const baseSha = git("rev-parse", base).trim(), since = addDays(now, -days);
-  const all = git("for-each-ref", "--sort=-committerdate", "--format=%(refname:short)\t%(objectname:short)\t%(committerdate:short)\t%(authorname)", "refs/heads", "refs/remotes")
-    .trim().split("\n").filter(Boolean).map(l => { const [name, tip, date, author] = l.split("\t"); return { name, tip, date, author }; })
+  // `remote` / `branch`: a ref under refs/remotes names the remote it is on (any name, not only "origin") and the branch without it, so local-work.mjs can
+  // say "pushed" for a branch on a remote called "fork" and never mistake "fork/feat/x" for a local branch of that name.
+  const remotes = (() => { try { return git("remote").split("\n").map(r => r.trim()).filter(Boolean).sort((a, b) => b.length - a.length); } catch { return []; } })();
+  const all = git("for-each-ref", "--sort=-committerdate", "--format=%(refname:short)\t%(objectname:short)\t%(committerdate:short)\t%(authorname)\t%(refname)", "refs/heads", "refs/remotes")
+    .trim().split("\n").filter(Boolean).map(l => { const [name, tip, date, author, full = ""] = l.split("\t");
+      const rest = full.replace(/^refs\/remotes\//, ""), r = full.startsWith("refs/remotes/") ? remotes.find(x => rest.startsWith(`${x}/`)) : null;
+      return { name, tip, date, author, ...(r ? { remote: r, branch: rest.slice(r.length + 1) } : {}) }; })
     .filter(b => !/\/HEAD$|^origin$/.test(b.name));
   const recent = all.filter(b => b.date >= since), picked = new Map(recent.slice(0, max).map(b => [b.name, "recent"]));
   // Second product (Twenty): the largest unmerged branch (402 files) wasn't among the 200 newest. Always add
   // branches with an open PR, whatever their age, and the `big` unmerged ones furthest ahead (commit counts are
   // cheap: no file contents read, fine in a partial clone).
-  for (const b of all) if (openPr.has(b.name.replace(/^origin\//, ""))) picked.set(b.name, picked.get(b.name) || "open PR");
+  for (const b of all) if (openPr.has((b.branch ?? b.name).replace(/^origin\//, ""))) picked.set(b.name, picked.get(b.name) || "open PR");
   let unmerged = []; try { unmerged = git("branch", "-a", "--no-merged", baseSha, "--format=%(refname:short)").trim().split("\n").filter(Boolean); } catch {}
   const aheadOf = new Map();
   for (const n of unmerged) { if (picked.has(n) || /\/HEAD$/.test(n)) continue; try { aheadOf.set(n, +git("rev-list", "--count", `${baseSha}..${n}`).trim()); } catch {} }
@@ -126,9 +142,15 @@ export function branchFacts(repo, base, { days = 60, max = 200, big = 20, openPr
       }
       const IMG = /\.(png|jpe?g|gif|webp|svg|snap)$/i, images = files.filter(f => IMG.test(f.file)).length;
       files = files.filter(f => !IMG.test(f.file));
-      out.push({ ...b, ahead, nonMerge, unique, filesDiffer: files.length, images, conflicts, notLocal, files: files.slice(0, 60), subjects });
+      // `paths` is every file the branch still differs in (names only), so local-work.mjs can match a psst item's evidence file
+      // to a branch even when the branch is big; `files` stays the first 60 with their counts, for the page. Capped below.
+      out.push({ ...b, ahead, nonMerge, unique, filesDiffer: files.length, images, conflicts, notLocal, files: files.slice(0, 60), paths: files.map(f => f.file), subjects });
     }
   } finally { if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); }
+  // Memory and file size: 300 branches × 2,000 paths was a 30 MB branches.json that every reader parsed. At most PATHS_EACH names per branch and PATHS_TOTAL
+  // in all, the most focused branches (fewest files) served first (a 2,000-file branch matches everything and proves nothing). A branch cut short says
+  // so (`pathsTruncated`, `pathsTotal`) and never has fewer names than its `files` list (the first 60), so local-work still matches on those.
+  capPaths(out);
   const list = out.sort((a, b) => b.filesDiffer - a.filesDiffer || b.date.localeCompare(a.date));
   const notLocal = out.filter(b => b.notLocal).map(b => b.name);
   list.meta = { treeless, notLocal: notLocal.length, notLocalNames: notLocal.slice(0, 20), partial, days, max, big, since, total: all.length, recent: recent.length, checked: refs.length, openPr: refs.filter(b => b.why === "open PR").length, farAhead: refs.filter(b => b.why === "far ahead").length };
@@ -137,7 +159,7 @@ export function branchFacts(repo, base, { days = 60, max = 200, big = 20, openPr
 
 const KIND_RE = /^(feat|fix|docs|test|chore|refactor|polish|perf|style|build|ci|revert)\b/i;
 export function commitFacts(repo, base, now) {
-  const noFetch = noLazyFetchArgs(repo), git = (...a) => sh("git", [...noFetch, "-C", repo, ...a], { env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
+  const noFetch = noLazyFetchArgs(repo), git = (...a) => sh("git", ["-c", "core.quotepath=off", ...noFetch, "-C", repo, ...a], { env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
   const monthStart = now.slice(0, 8) + "01", weekFrom = addDays(now, -7), weekTo = addDays(now, -1);
   const from = monthStart < weekFrom ? monthStart : weekFrom;
   // Author date in the author's own time zone, non-merge, with the files each touched (a treeless clone has no

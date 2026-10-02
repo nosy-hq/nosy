@@ -13,7 +13,7 @@ const NOW = Date.parse("2026-09-28T12:00:00Z"), DAY = 864e5;
 const iso = t => new Date(t).toISOString();
 
 // A repo with `n` commits on main, one per day ending the day before NOW; `msg(i)` is each commit message.
-function repo(n, msg = i => `change ${i}`) {
+function repo(n, msg = i => `change ${i}`, { bare = false } = {}) {
   const root = temporary("nosy-next-"); dirs.push(root);
   const git = (...a) => execFileSync("git", ["-C", root, ...a], { stdio: "ignore", env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } });
   git("init", "-q", "-b", "main");
@@ -26,6 +26,9 @@ function repo(n, msg = i => `change ${i}`) {
   const pm = path.join(root, "pm");
   fs.mkdirSync(path.join(pm, "state"), { recursive: true });
   fs.writeFileSync(path.join(pm, "sources.json"), JSON.stringify({ repo: root, ref: "main" }));
+  // The tour has been taken: without this record a repo this bare is sent to `tour` first, which is tested
+  // on its own (tour.test.mjs); these tests are about the signal behind each other pick.
+  if (!bare) fs.writeFileSync(path.join(pm, "state", "tour.json"), JSON.stringify({ started: iso(NOW - 30 * DAY), approved: [], done: [] }));
   return pm;
 }
 const write = (pm, f, obj, at) => { const p = path.join(pm, f); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, typeof obj === "string" ? obj : JSON.stringify(obj)); if (at) fs.utimesSync(p, at / 1000, at / 1000); };

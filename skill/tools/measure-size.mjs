@@ -1,22 +1,32 @@
 // Measures size (S/M/L) and area ownership from git history: evidence, not a guess, for "how many days, whose area?"
 // Usage: node measure-size.mjs <pm> "<topic>" [extra words...] [--path <dir>]... [--day 180] [--json <file>]
 //        node measure-size.mjs <pm> --bulk <lowhanging.json> [--path <dir>]... [--json <file>]
+//        add --force-fetch to read line counts on a partial clone (slowly, see below)
 // Provides the evidence canwe.md wants for every gap's size (matrix step 11 prioritization, step 12 suggest-not-assign).
 // Patterns: Swarmia/Jellyfish's cycle time + PR-to-initiative mapping (grouping commits into a unit of work by
 // ref, active days = a cycle-time signal, the most-touched directory = the "initiative" area) and Linear's
 // estimate language ("DATE +/- N days", a confidence level) -> here, "S/M/L, a p25-p75 range, confidence".
 // Deterministic; the agent does the interpreting (the ccpm pattern).
+// Partial (blobless) clone: `git log --numstat` needs every changed file's contents, so on a blobless clone git fetched them
+// one by one (a real run wrote about 296 packs, 23 MiB, and hung). Unless --force-fetch is given, every git call here then runs with facts.mjs's
+// no-lazy-fetch arguments and the history is read name-only (`--name-only --no-renames`: trees, no contents): files touched, active days and
+// ownership still work, line counts are unknown (reported as such, never as 0), and the confidence is one level lower. A treeless clone has no
+// trees either, so it gets commits and active days only. A call that needs a fetch and fails is not repeated. A full clone is untouched.
 import fs from "node:fs"; import path from "node:path"; import { execFileSync, spawn } from "node:child_process"; import { patternsOfLoad, refRegex, groupKeyOf } from "./refs.mjs"; import { smallAscii, conceptGroupsOf as conceptGroupsOfCommon, idfSetup, langOfLoad } from "./text.mjs"; import { thresholds } from "./thresholds.mjs"; import { partialCloneNoticeOf } from "./integration-branch.mjs";
 import { readSources } from "./sources-file.mjs";
+import { isPartialClone, isTreeless, noLazyFetchArgs } from "./facts.mjs";
 const argv = process.argv.slice(2);
 const opt = (name, many) => { const out = []; let i; while ((i = argv.indexOf(name)) >= 0) { out.push(argv.splice(i, 2)[1]); if (!many) break; } return many ? out : out[0]; };
+const forceFetch = (i => i >= 0 && !!argv.splice(i, 1))(argv.indexOf("--force-fetch"));
 const jsonOut = opt("--json"), dayN = +(opt("--day") || 180), bulkFile = opt("--bulk");
 const paths = (opt("--path", true) || []).map(p => p.replace(/\/+$/, ""));
 const [pm = "pm", topicRaw = "", ...extra] = argv;
 const K = readSources(pm);
 langOfLoad(K); // sources.json's `language`, read once so conceptGroupsOfCommon's words()/root() below pick it up
 const ES = thresholds(K); // sources.json's optional `threshold` object, or the default
-const git = (...a) => execFileSync("git", ["-C", K.repo, ...a], { encoding: "utf8", maxBuffer: 256 << 20 });
+// a partial clone never asks the promisor remote for what isn't local (see the header).
+const partial = !forceFetch && isPartialClone(K.repo), treeless = partial && isTreeless(K.repo), noFetch = partial ? noLazyFetchArgs(K.repo) : [];
+const git = (...a) => execFileSync("git", [...noFetch, "-C", K.repo, ...a], { encoding: "utf8", maxBuffer: 256 << 20 });
 const t0 = Date.now();
 
 // on a large repo the git log --numstat pass below is the slow, silent part (Twenty:
@@ -27,27 +37,30 @@ const note = s => process.stderr.write(`measure-size: ${s}\n`);
 // said once, before the slow part, on a partial/shallow clone (integration-branch.mjs's
 // shared detector) - otherwise the "N/total commits…" progress above can itself sit silent for minutes on the
 // very first blob fetch, looking hung rather than slow.
-{ const p = partialCloneNoticeOf(K.repo); if (p) note(p); }
+if (partial) note(`partial clone: line counts are skipped so git doesn't fetch file contents one by one; history is read name-only${treeless ? " (a treeless clone: commits and active days only)" : ""}. --force-fetch reads the lines, slowly.`);
+else { const p = partialCloneNoticeOf(K.repo); if (p) note(p); }
 const LOG_FORMAT = "%x01%h%x1f%P%x1f%ad%x1f%an%x1f%s%x1f%b%x02";
 // One shared parser for every `git log --numstat` pass (the main window and, when needed, the ownership
 // window below) - a single place that turns the raw text into commit records.
-function parseLog(raw) {
+// `nameOnly`: the tail is a plain file list (no numstat columns): the files are known, the line counts are not.
+function parseLog(raw, nameOnly = false) {
   return raw.split("\x01").slice(1).map(ch => {
     const [head, tail = ""] = ch.split("\x02");
     const [h, P, nameValue, an, s, ...bR] = head.split("\x1f");
     const files = []; let add = 0, remove = 0;
-    for (const line of tail.split("\n")) { const m = line.match(/^(\d+|-)\t(\d+|-)\t(.+)$/); if (!m) continue; if (m[1] !== "-") add += +m[1]; if (m[2] !== "-") remove += +m[2]; files.push(m[3]); }
+    for (const line of tail.split("\n")) { if (nameOnly) { if (line.trim()) files.push(line); continue; } const m = line.match(/^(\d+|-)\t(\d+|-)\t(.+)$/); if (!m) continue; if (m[1] !== "-") add += +m[1]; if (m[2] !== "-") remove += +m[2]; files.push(m[3]); }
     return { h, day: nameValue.slice(0, 10), t: Date.parse(nameValue), an, s, b: bR.join("\x1f"), merge: P.trim().split(/\s+/).filter(Boolean).length > 1, add, remove, files };
   });
 }
 // Streams `git log --numstat` instead of blocking on execFileSync, so the slow part (Twenty-sized history)
 // can report "N/total commits…" to stderr while it runs, instead of sitting silent until it's killed.
 // `total` comes from a separate `git rev-list --count`, itself near-instant (no diff computation).
-function gitLogNumstat(days) {
+// mode: "numstat" (a full clone, or --force-fetch), "name-only" (a partial clone), "none" (commits only: a treeless clone).
+function gitLogNumstat(days, mode = "numstat") {
   let total = 0;
-  try { total = +execFileSync("git", ["-C", K.repo, "rev-list", "--count", `--since=${days}.days`, K.ref], { encoding: "utf8" }).trim() || 0; } catch {}
+  try { total = +execFileSync("git", [...noFetch, "-C", K.repo, "rev-list", "--count", `--since=${days}.days`, K.ref], { encoding: "utf8" }).trim() || 0; } catch {}
   return new Promise((resolve, reject) => {
-    const child = spawn("git", ["-C", K.repo, "log", `--since=${days}.days`, "--date=format:%Y-%m-%dT%H:%M:%S", "--format=" + LOG_FORMAT, "--numstat", K.ref]);
+    const child = spawn("git", [...noFetch, "-C", K.repo, "log", `--since=${days}.days`, "--date=format:%Y-%m-%dT%H:%M:%S", "--format=" + LOG_FORMAT, ...(mode === "numstat" ? ["--numstat"] : mode === "name-only" ? ["--name-only", "--no-renames"] : []), K.ref], { env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
     const chunks = []; let seen = 0, lastPrint = Date.now(), errText = "";
     child.stdout.on("data", d => {
       chunks.push(d);
@@ -104,8 +117,17 @@ function rejectFilter(topicText, similar) {
 
 // One git log --numstat call (target <10s on the first product; streamed with progress on a large repo like Twenty):
 // commit title, body, parent count (merge detection), +/- lines, files.
-const raw = await gitLogNumstat(dayN);
-const commits = parseLog(raw);
+let fileMode = !partial ? "numstat" : treeless ? "none" : "name-only", raw;
+try { raw = await gitLogNumstat(dayN, fileMode); }
+catch (e) {
+  // A full clone fails as it always did. A partial one whose trees aren't all here falls back to commits only: a different call that needs nothing
+  // from the remote, never the same one again.
+  if (!partial || fileMode === "none") throw e;
+  fileMode = "none"; note("some trees are not in this partial clone: files are not listed; commits and active days only.");
+  raw = await gitLogNumstat(dayN, "none");
+}
+const linesKnown = fileMode === "numstat", LINES_NOTE = "lines not counted (partial clone; --force-fetch reads them, slowly)";
+const commits = parseLog(raw, !linesKnown);
 
 // Units of work: grouped by ref. A merged PR title ("Merge pull request #N", squash "(#N)", "Merge #N") is
 // already caught by the #\d+ pattern; but the merge commit ITSELF (2 parents) is excluded from counting - its
@@ -175,7 +197,12 @@ function similarFind(concepts, filePath, N = 8, excludedRefs = []) {
 // similar + a narrow range = high, >=3 = medium, <3 = low -> (unverified) and falls back to the product-wide
 // baseline. With agents, work can finish in a day: if active days are low but commit/file count is high
 // (median >=10 commits or >=20 files), it's bumped up one notch - calendar days alone don't show intensity.
+// Without line counts the size rests on files touched and active days (which is all this estimate ever used), and the confidence drops a level.
 function resize(similar) {
+  const e = resizeCore(similar); if (linesKnown) return e;
+  return { ...e, confidence: e.confidence === "high" ? "medium" : "low", justification: `${e.justification} · ${LINES_NOTE}: the size rests on files and active days only, confidence one level lower${fileMode === "none" ? "; files not listed either (treeless or missing trees), so on active days alone" : ""}` };
+}
+function resizeCore(similar) {
   if (!base.is_count) return { size: "?", active_day_median: 0, range: [0, 0], confidence: "low", justification: `(unverified) no referenced (K/§/#) unit of work found in the last ${dayN} days; no evidence to estimate from.` };
   if (similar.length < 3) return { size: base.active_day_median <= 2 ? "S" : base.active_day_median <= 7 ? "M" : "L", active_day_median: base.active_day_median, range: [base.active_day_median, base.active_day_median], confidence: "low",
     justification: `(unverified) only ${similar.length} similar item(s) found; fell back to the product-wide baseline (${base.is_count} units of work, median ${base.active_day_median} active days).` };
@@ -256,15 +283,15 @@ if (!bulkFile) {
   const estimate = resize(similar), owner = ownershipFind(similar, paths), own = ownHistoryOf(ownRef);
   if (extracted) estimate.justification += ` · ${extracted} similar item(s) removed by the owner's/agent's rejection.`;
   let o = `# Size measurement · "${topicRaw}" · ${K.ref} · last ${dayN} days\n\nKeywords: ${words.join(", ") || "—"}\n\n`;
-  o += `## Estimate\n**${estimate.size}** · active-day median ${estimate.active_day_median} (p25-p75: ${estimate.range[0]}-${estimate.range[1]}) · confidence: ${estimate.confidence}\n\n${estimate.justification}\n\n${own ? ownLine(own) + "\n\n" : ""}`;
+  o += `## Estimate\n**${estimate.size}** · active-day median ${estimate.active_day_median} (p25-p75: ${estimate.range[0]}-${estimate.range[1]}) · confidence: ${estimate.confidence}\n\n${estimate.justification}\n\n${linesKnown ? "" : `_${LINES_NOTE[0].toUpperCase()}${LINES_NOTE.slice(1)}; the +/- column is n/a._\n\n`}${own ? ownLine(own) + "\n\n" : ""}`;
   o += `## Similar work (${similar.length})\n\n| Ref | Title | First | Last | Cal. days | Active days | Commits | Files | +/- | Who | Directories |\n|---|---|---|---|---|---|---|---|---|---|---|\n`;
-  for (const b of similar) o += `| ${b.ref} | ${b.title.replace(/\|/g, "/").slice(0, 70)} | ${b.first} | ${b.last} | ${b.calendar_day} | ${b.active_day} | ${b.commits.length} | ${b.files.length} | +${b.add}/-${b.remove} | ${b.who.join(", ")} | ${b.directorys.join(", ")} |\n`;
+  for (const b of similar) o += `| ${b.ref} | ${b.title.replace(/\|/g, "/").slice(0, 70)} | ${b.first} | ${b.last} | ${b.calendar_day} | ${b.active_day} | ${b.commits.length} | ${b.files.length} | ${linesKnown ? `+${b.add}/-${b.remove}` : "n/a"} | ${b.who.join(", ")} | ${b.directorys.join(", ")} |\n`;
   o += `\n## Suggestion: ownership (not an assignment)\n${owner.length ? owner.map(s => `- suggestion: ${s.who} (${s.pay}% of this area's commits, ${s.commit} commits)`).join("\n") : "- (unverified) not enough directory/commit data"}\n\n`;
   o += `## Baseline\nIn the last ${dayN} days: ${base.is_count} units of work, active-day median ${base.active_day_median}.\n\n${duration()}`;
   process.stdout.write(o);
   if (jsonOut) fs.writeFileSync(jsonOut, JSON.stringify({ type: "size", generated: new Date().toISOString(), topic: topicRaw, keys: words,
-    similar: similar.map(b => ({ ref: b.ref, title: b.title, first: b.first, last: b.last, calendar_day: b.calendar_day, active_day: b.active_day, commit: b.commits.length, file: b.files.length, add: b.add, remove: b.remove, who: b.who, directorys: b.directorys, score: b.score })),
-    estimate, owner, own, base }, null, 1));
+    similar: similar.map(b => ({ ref: b.ref, title: b.title, first: b.first, last: b.last, calendar_day: b.calendar_day, active_day: b.active_day, commit: b.commits.length, file: b.files.length, add: linesKnown ? b.add : null, remove: linesKnown ? b.remove : null, who: b.who, directorys: b.directorys, score: b.score })),
+    estimate, owner, own, base, lines_counted: linesKnown, partial_clone: partial }, null, 1));
 } else {
   const lh = JSON.parse(fs.readFileSync(bulkFile, "utf8"));
   const bulkItems = lh.items || [];
@@ -285,10 +312,10 @@ if (!bulkFile) {
     if (extracted) estimate.justification += ` · ${extracted} similar item(s) removed by the owner's/agent's rejection.`;
     return { title: m.title, ref, estimate, owner: ownershipFind(similar, paths), own: ownHistoryOf(refs) };
   });
-  let o = `# Size measurement · bulk (${items.length} items) · ${K.ref} · last ${dayN} days\n\n| Title | Ref | Size | p25-p75 | Confidence | Coverage | Spent (own ref) | Suggested owner |\n|---|---|---|---|---|---|---|---|\n`;
+  let o = `# Size measurement · bulk (${items.length} items) · ${K.ref} · last ${dayN} days\n\n${linesKnown ? "" : `_${LINES_NOTE[0].toUpperCase()}${LINES_NOTE.slice(1)}: sizes rest on files and active days, confidence one level lower._\n\n`}| Title | Ref | Size | p25-p75 | Confidence | Coverage | Spent (own ref) | Suggested owner |\n|---|---|---|---|---|---|---|---|\n`;
   for (const m of items) o += `| ${String(m.title).replace(/\|/g, "/").slice(0, 70)} | ${m.ref || "—"} | ${m.estimate.size} | ${m.estimate.range[0]}-${m.estimate.range[1]} | ${m.estimate.confidence} | ${m.estimate.coverage != null ? Math.round(m.estimate.coverage * 100) + "%" : "—"} | ${m.own ? `${m.own.active_day} days, ${m.own.commit} commits` : "—"} | ${m.owner[0] ? `${m.owner[0].who} ${m.owner[0].pay}%` : "—"} |\n`;
   o += `\n${duration()}`;
   process.stdout.write(o);
-  if (jsonOut) fs.writeFileSync(jsonOut, JSON.stringify({ type: "size-bulk", generated: new Date().toISOString(), items }, null, 1));
+  if (jsonOut) fs.writeFileSync(jsonOut, JSON.stringify({ type: "size-bulk", generated: new Date().toISOString(), items, lines_counted: linesKnown, partial_clone: partial }, null, 1));
 }
 ownCachePersist();

@@ -12,7 +12,7 @@ A 2 is a result, not a failure: the output says what was found. `publish` and `n
 
 ## Which commands run from the terminal
 
-Most of the 17 agent commands have a terminal twin that runs with no model: `npx github:nosy-hq/nosy <terminal command>` (or `nosy <terminal command>` once installed). The terminal part is the counting; the agent adds the judgment. Five have no twin and need the agent.
+Most of the 18 agent commands have a terminal twin that runs with no model: `npx github:nosy-hq/nosy <terminal command>` (or `nosy <terminal command>` once installed). The terminal part is the counting; the agent adds the judgment. Five have no twin and need the agent.
 
 | Command (in your agent) | Terminal command |
 |---|---|
@@ -25,10 +25,11 @@ Most of the 17 agent commands have a terminal twin that runs with no model: `npx
 | `bet` | `nosy bet place "<what>" --why "…" --estimate S` |
 | `score` | `nosy score` |
 | `move-in` | `nosy setup` (proposes `pm/sources.json`; the rest of move-in is the agent) |
-| `neighbors` | `nosy watch` (which rivals' public pages changed; the research is the agent) |
+| `tour` | `nosy tour` (the plan: what Nosy reads, writes and sends, the steps with their state, one list of questions. It runs no step itself; the agent does. `nosy tour approve <id>…`, `nosy tour skip <id>…` and `nosy tour done <id>` record progress in `pm/state/tour.json`) |
+| `neighbors` | `nosy watch` (which rivals' public pages changed; the research is the agent). Also `nosy tiers` (which rivals get a deep pass, which are only watched, and the token estimate), `nosy matrix-proposals` (sorts the cells the neighbor agents propose by evidence, `apply` writes the ones that earned it) and `nosy rivals-import` (copies rival research kept outside `pm/rivals` in) |
 | none | `nosy rival-demand` (what the users of your open-source rivals ask for most, from their public issues and Discussions; no slash command) |
 | none | `nosy todo` (what only a person can do, or said they would: `add`, `list`, `done`, `drop`, `show`; the agent files items through the skill or the `nosy_todo` MCP tool; no slash command) |
-| `tea` | `nosy page` |
+| `tea` | `nosy page` (`nosy page-adopt` for a hand-built page) |
 | `stakeout` | `nosy weekly` |
 | `overheard` | none: agent only |
 | `dresscode` | none: agent only |
@@ -42,10 +43,11 @@ Most of the 17 agent commands have a terminal twin that runs with no model: `npx
 
 | Command / script | Returns 2 when |
 |---|---|
-| `nosy doctor` (`doctor.mjs`) | a `pm/` from an older Nosy still has something to fix |
+| `nosy doctor` (`doctor.mjs`) | a `pm/` from an older Nosy still has something to fix (also after `--fix`, if something is left that needs a command) |
 | `nosy doctor --check` (`health.mjs`) | a hard failure in the install itself (✗): Node older than 18.17, git missing, a skill file missing or unreadable. Warnings (`!`) and notes (`–`) don't count. Local only: no network, writes nothing |
 | `nosy never-check` (`never-check.mjs`) | an added line or the command matches a `preread.never` rule |
-| `nosy sweep` (`rival-sweep.mjs`) | a registry page couldn't be read (login, 404, no text, no dates); the list still prints |
+| `nosy sweep` (`rival-sweep.mjs`) | a registry page couldn't be read (login, 404, no text, no dates, a 429); the list still prints. A failed store lookup does not count |
+| `nosy doctor --undo` | a file changed since the fix, so it was left alone (nothing to undo is a 1) |
 | `nosy find` (`facts.mjs find`) | the word appears nowhere: no tracked file, no issue or PR |
 | `nosy fields` (`fields.mjs`) | a type named isn't defined at the ref (Go structs, TypeScript interfaces/object types) |
 | `nosy cite-check` (`cite-check.mjs`) | a `file:line`, quote, commit or `#N` in the answer doesn't hold up |
@@ -57,6 +59,20 @@ Most of the 17 agent commands have a terminal twin that runs with no model: `npx
 | `audit-prd.mjs --strict` | a blocker finding |
 | `ai-note.mjs` | a name the AI invented (not in the design system) |
 | `collect-signals.mjs` | an export's message column couldn't be determined from its shape or header (never a silent zero-signal pass) |
+
+## Commands that only return 0 or 1
+
+These never return 2. Their findings are in the output; a 1 means the command stopped before it could do its job, and says why.
+
+| Command | Returns 1 when |
+|---|---|
+| `nosy tour` | `approve` or `done` without an id, or on a `pm/` folder that doesn't exist. Plain `nosy tour` in a repo with no `pm/sources.json` is a 0: it says to run `move-in` |
+| `nosy tiers` | there are no rival files in `pm/rivals` and no `rivals` in `sources.json` |
+| `nosy matrix-proposals` | `check` and `apply` have no `pm/state/matrix-proposals.json` or no matrix; `undo` has no backup in `pm/.backup/` |
+| `nosy page-adopt` | `pm/sources.json` is missing; there is no page (`--page`, else `pm/page.html`); `adopt --apply` without `--yes`; `refresh` on a page with no marked table; `undo` with no backup, or with a page changed by hand since the backup (add `--force` to restore anyway) |
+| `nosy rivals-import` | the folder to copy from (`--from`, or `rivalsPath` in `sources.json`) doesn't exist. A folder with no rival files is a 0: it says so |
+| `nosy publish` | no target, no token, a refused token file, a privacy finding, a refusal by Cloud, a send that arrived but whose matrix the dashboard did not draw, or (also in a dry run) a bad address or an oversize file |
+| `nosy doctor --undo` | there is no backup under `pm/.backup/`, or no `pm/` folder |
 
 Everything else is a report (`shipped`, `peek`, `psst`, `canwe`, `page`, …): 0 when it ran, 1 when it couldn't. Its findings are in the output, for the agent and you to judge.
 

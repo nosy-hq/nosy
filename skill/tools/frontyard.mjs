@@ -356,7 +356,7 @@ function works(pm, { pageFileOf, dayArg, siteDirOf, productDirOf } = {}) {
   //   table stakes:   present in at least 25% of active rivals → customers look for it when comparing
   // A rival file's "## Featured on their landing page" bullets ("- [20] …") show which rivals spotlight that step.
   let rival = null;
-  const MO = K.matrix ? matrixRead(K.matrix) : null;
+  const MO = K.matrix ? matrixRead(K.matrix, { codes: K.matrixCodes }) : null;
   if (MO) {
     const E = { distinguish: 0.1, desk: 0.25, ...(V.rival || {}) };
     const active = MO.products.filter(u => u !== MO.biz && !MO.oh.has(u));

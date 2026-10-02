@@ -187,3 +187,67 @@ test("issue.our left blank (find-sources wasn't sure): '–' not set, not a cras
   assert.match(r.output, /issue\.our.*–.*not set/);
   assert.doesNotMatch(r.output, /bad regex/);
 });
+
+// ---- the sources.json keys added for the first runs on real products (207): one clear row each, with the fix ----
+function withKeys(patch, { files = {} } = {}) {
+  const copyRoot = temporary("nosy-verifysetup-keys-"), copyPm = path.join(copyRoot, "pm"); // pm/ in a folder of its own: "../references" must not land in the shared temp folder
+  fs.cpSync(K.pm, copyPm, { recursive: true });
+  const kj = JSON.parse(fs.readFileSync(path.join(copyPm, "sources.json"), "utf8"));
+  Object.assign(kj, patch);
+  fs.writeFileSync(path.join(copyPm, "sources.json"), JSON.stringify(kj, null, 1));
+  for (const [f, c] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(copyPm, f)), { recursive: true }); fs.writeFileSync(path.join(copyPm, f), c); }
+  try { const r = run(path.join(Tool, "verify-setup.mjs"), [copyPm], { env: gh.env }); return { ...r, row: re => r.output.split("\n").filter(l => l.startsWith("|")).find(l => re.test(l)), rows: re => r.output.split("\n").filter(l => l.startsWith("|") && re.test(l)) }; } finally { clean(copyRoot); }
+}
+const cells = row => row.split("|").slice(1, -1).map(c => c.trim());
+
+test("team: an array of GitHub logins is ✓; one string works but says to write a list; anything else is ✗ with the shape to write", () => {
+  const good = withKeys({ team: ["ali", "@Veli", "ayse-k"] }); assert.deepEqual(cells(good.row(/^\| team /)).slice(0, 2), ["team", "✓"]); assert.equal(good.code, 0);
+  assert.equal(cells(withKeys({}).row(/^\| team /))[1], "–");
+  const one = cells(withKeys({ team: "ali" }).row(/^\| team /)); assert.equal(one[1], "~"); assert.match(one[2], /write a list/);
+  for (const [bad, want] of [[{ a: 1 }, /not a list \(it is object\)/], [[7, "ali"], /1 entry isn't a GitHub login/], [["ali@x.com", "a b"], /2 entries aren't a GitHub login.*no spaces or e-mail addresses/], [[], null], ["", /empty: write a list/], [null, /not a list \(it is null\)/]]) {
+    const r = withKeys({ team: bad }), c = cells(r.row(/^\| team /));
+    if (want) { assert.equal(c[1], "✗", JSON.stringify(bad)); assert.match(c[2], want); assert.equal(r.code, 2); } else assert.equal(c[1], "✓", "an empty list is a list");
+  }
+});
+
+test("rivalsPath: an existing folder with rival files is ✓ and says how many; one that doesn't exist is ✗ with where it looked; empty or unset is –", () => {
+  const RIVAL = "# Acme\n\n**Latest major announcement:** none\n";
+  const good = withKeys({ rivalsPath: "references" }, { files: { "../references/acme/competitive.md": RIVAL, "../references/notes.md": "# notes\n" } });
+  const g = cells(good.row(/^\| rivalsPath /)); assert.equal(g[1], "✓"); assert.match(g[2], /references: 1 rival file .*nosy rivals-import/);
+  const empty = cells(withKeys({ rivalsPath: "references" }, { files: { "../references/notes.md": "# notes\n" } }).row(/^\| rivalsPath /)); assert.equal(empty[1], "~"); assert.match(empty[2], /holds no rival-shaped markdown/);
+  const missing = withKeys({ rivalsPath: "references/nowhere" }), m = cells(missing.row(/^\| rivalsPath /));
+  assert.equal(m[1], "✗"); assert.match(m[2], /references\/nowhere isn't a folder \(looked in .*references\/nowhere\): fix the path/); assert.equal(missing.code, 2);
+  assert.equal(cells(withKeys({ rivalsPath: "" }).row(/^\| rivalsPath /))[1], "–");
+  assert.equal(cells(withKeys({ rivalsPath: 7 }).row(/^\| rivalsPath /))[1], "✗");
+  assert.equal(cells(withKeys({ rivalsPath: ["a"] }).row(/^\| rivalsPath /))[1], "✗");
+});
+
+test("matrixCodes: letters mapped to y p n u d are ✓; a target outside those five is ✗ and names it; mapping one of Nosy's own letters is ~", () => {
+  const good = cells(withKeys({ matrixCodes: { s: "d", f: "p" } }).row(/^\| matrixCodes /)); assert.equal(good[1], "✓"); assert.match(good[2], /2 of your letters mapped/);
+  const bad = withKeys({ matrixCodes: { s: "shipped", f: "p" } }), b = cells(bad.row(/^\| matrixCodes /));
+  assert.equal(b[1], "✗"); assert.match(b[2], /"s" → "shipped": each must map to one of y \(done\) p \(partial\) n \(missing\) u \(unknown\) d \(announced\)/); assert.equal(bad.code, 2);
+  const same = cells(withKeys({ matrixCodes: { y: "n" } }).row(/^\| matrixCodes /)); assert.equal(same[1], "~"); assert.match(same[2], /y already is Nosy's own code and is never remapped: remove it/);
+  assert.equal(cells(withKeys({ matrixCodes: ["s", "d"] }).row(/^\| matrixCodes /))[1], "✗");
+  assert.equal(cells(withKeys({ matrixCodes: null }).row(/^\| matrixCodes /))[1], "✗");
+});
+
+test("rivals.<slug>.tier and .stores.appStore: a row only for what is wrong, with the fix; a ✓ summary otherwise", () => {
+  const good = withKeys({ rivals: { acme: { name: "Acme", tier: "a", stores: { appStore: "id1234567", country: "tr" } }, beta: { tier: "B", stores: { appStore: "https://apps.apple.com/tr/app/beta/id7654321" } } } });
+  assert.equal(good.rows(/^\| rivals\./).length, 0); const s = cells(good.row(/^\| rivals /)); assert.equal(s[1], "✓"); assert.match(s[2], /2 in the registry, 2 with a tier, 2 with an App Store entry/);
+  const bad = withKeys({ rivals: { acme: { tier: "D", stores: { appStore: "notanid", country: "turkey" } }, beta: "x", cee: { tier: 3, stores: "x" } } });
+  assert.equal(bad.code, 2);
+  assert.match(cells(bad.row(/^\| rivals\.acme\.tier /))[2], /"D" isn't A, B or C \(it counts as A\): A deep research, B watch only, C reference/);
+  assert.match(cells(bad.row(/^\| rivals\.acme\.stores\.appStore /))[2], /"notanid" has no App Store id: use the number from the app's address \(id123456789\) or its apps\.apple\.com link/);
+  assert.match(cells(bad.row(/^\| rivals\.acme\.stores\.country /))[2], /"turkey" isn't a two-letter country code/);
+  assert.equal(cells(bad.row(/^\| rivals\.beta /))[1], "✗"); assert.equal(cells(bad.row(/^\| rivals\.cee\.tier /))[1], "✗"); assert.equal(cells(bad.row(/^\| rivals\.cee\.stores /))[1], "✗");
+  assert.equal(cells(withKeys({ rivals: [] }).row(/^\| rivals /))[1], "✗");
+});
+
+test("tour.tokensPerRival must be a positive number; language must be text", () => {
+  const good = cells(withKeys({ tour: { tokensPerRival: 80000 } }).row(/^\| tour\.tokensPerRival /)); assert.equal(good[1], "✓"); assert.match(good[2], /80,000 tokens per rival/);
+  for (const bad of [0, -5, "80000", null, Infinity]) { const r = withKeys({ tour: { tokensPerRival: bad } }); assert.equal(cells(r.row(/^\| tour\.tokensPerRival /))[1], "✗", String(bad)); assert.equal(r.code, 2); }
+  assert.match(cells(withKeys({ tour: { tokensPerRival: "x" } }).row(/^\| tour\.tokensPerRival /))[2], /isn't a positive number: write the tokens one rival's research cost you, e\.g\. 80000/);
+  assert.equal(cells(withKeys({ tour: [] }).row(/^\| tour /))[1], "✗");
+  assert.equal(cells(withKeys({ language: "Turkish" }).row(/^\| language /))[1], "✓");
+  for (const bad of [7, ["tr"], "", "  ", {}]) { const r = withKeys({ language: bad }); assert.equal(cells(r.row(/^\| language /))[1], "✗", JSON.stringify(bad)); assert.match(cells(r.row(/^\| language /))[2], /write the language's name, e\.g\. "Turkish", or its code, "tr"/); }
+});

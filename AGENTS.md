@@ -6,20 +6,21 @@ This file is the host-agnostic entry point for Codex, Cursor, Gemini CLI and any
 
 ## Commands
 
-Every command is active. Grouped by direction: set up `move-in`, `map`, `doctor` · inside `shipped`, `peek`, `overheard`, `psst`, `frontyard`, `dresscode` · over the fence `neighbors` · ahead `canwe`, `spill`, `scoop` · share `tea` · loop `stakeout`. `bet` and `score` are optional.
+Every command is active. Grouped by direction: set up `move-in`, `tour`, `map`, `doctor` · inside `shipped`, `peek`, `overheard`, `psst`, `frontyard`, `dresscode` · over the fence `neighbors` · ahead `canwe`, `spill`, `scoop` · share `tea` · loop `stakeout`. `bet` and `score` are optional.
 
 | Command | What it does | Steps |
 |---|---|---|
 | `move-in` | Introduces the product: repo, decision docs, rivals, rules, page. Opens the `pm/` folder. | `<skill>/commands/move-in.md` |
-| `doctor` | For a `pm/` from an older Nosy: `--fix` renames old files and keys; lists state files to re-run. Maintenance only. | `<skill>/commands/doctor.md` |
+| `tour` | The first look in one go: says what Nosy reads, writes and sends, plans the walk from what `pm/` holds, asks every question once. | `<skill>/commands/tour.md` |
+| `doctor` | For a `pm/` from an older Nosy: `--fix` lists, backs up to `pm/.backup/`, then renames old files and keys (`--undo` puts them back); lists state files to re-run. `--check` tests the install. Maintenance only. | `<skill>/commands/doctor.md` |
 | `map` | One page, `map.md` in the product's pm folder: live, beta and retired apps, screens ↔ code, deliberately-off features, outside claims vs inside, past audits. Every command reads it first. | `<skill>/commands/map.md` |
 | `shipped [7d]` | The record: what reached the integration branch, when, for which decision or request (linked only where a PR, commit or issue says so); plus what merged since the last run and what's close to merging. | `<skill>/commands/shipped.md` |
 | `peek` | What shipped recently, from git and issues, matched against request docs; surfaces "ready but not on screen" gaps. | `<skill>/commands/peek.md` |
 | `canwe <question>` | "Can we do this?" with a sized answer, from backend inventory, decisions, roadmap and rivals. | `<skill>/commands/canwe.md` |
-| `neighbors` | Scans rivals' sites, changelogs and announcements; updates rival files and the matrix. | `<skill>/commands/neighbors.md` |
-| `psst` | Ranks cheap, valuable work with evidence (the team's own next notes, screens waiting on the backend, backend ready with no screen, stale statuses, rival gaps, open issues), then checks it: receipts per item, work held on purpose kept off, a fresh-context refuter. The answer comes from what survived. | `<skill>/commands/psst.md` |
+| `neighbors` | Scans rivals' sites, changelogs and announcements; says the token cost first and researches only the rivals that changed (`nosy tiers`); proposed matrix cells are applied only with evidence (`nosy matrix-proposals`). | `<skill>/commands/neighbors.md` |
+| `psst` | Ranks cheap, valuable work with evidence (the team's own next notes, screens waiting on the backend, backend ready with no screen, stale statuses, rival gaps, open issues), then checks it: receipts per item, work held on purpose and work already on your own branches kept off, a fresh-context refuter. The answer comes from what survived. | `<skill>/commands/psst.md` |
 | `overheard [hours]` | Which open PRs and issues serve which decision, and whether they fit the roadmap. Not code review. | `<skill>/commands/overheard.md` |
-| `tea` | Builds and publishes the one-page decision page from `pm/`; the bets and shipped scoreboard on request. | `<skill>/commands/tea.md` |
+| `tea` | Builds and publishes the one-page decision page from `pm/`; the bets and shipped scoreboard on request. A hand-built page is kept current with `nosy page-adopt`. | `<skill>/commands/tea.md` |
 | `spill <topic>` | An evidence-based PRD or issue draft. Never sent out; stays a file under `pm/`. | `<skill>/commands/spill.md` |
 | `scoop` | Suggests the roadmap and work split; size is measured from past work. A suggestion, not an assignment. | `<skill>/commands/scoop.md` |
 | `dresscode` | Scores the design system in 20 areas with `file:line` evidence, tests whether an AI applies it without guessing, and turns 3-5 gaps into a plan against the roadmap. Not code review. | `<skill>/commands/dresscode.md` |
@@ -65,4 +66,4 @@ Agent-specific steps (Claude Code plugin or project skill, Cursor, Codex, Gemini
 
 One-command install (`npx github:nosy-hq/nosy install`): Claude Code, Codex, Cursor, Gemini CLI, Copilot, OpenCode, Kiro. By copying the skill folder (`npx skills add nosy-hq/nosy`, or by hand): Windsurf, Roo, Junie. Node 18.17 or newer and git are the only requirements. Installing changes no settings; it copies the skill folder into the project. If an install fails, don't retry in a loop: run `npx github:nosy-hq/nosy doctor --check` once and show its output to the user.
 
-The model-free counting in one command: `node skill/tools/nosy.mjs <setup|check|peek|inventory|psst|refute|decision|nudge|facts|find|cite-check|never-check|canwe|notes|page|weekly|notify|mcp>` (`help` lists them all). Most commands have a terminal twin that runs with no model (table in `docs/CLI-CONTRACT.md`); `overheard`, `dresscode`, `scoop`, `spill` and `map` are agent only. The same core runs as an MCP server (`nosy.mjs mcp`), a GitHub Action (`action.yml`) and a Slack/Discord notifier (`nosy.mjs notify`).
+The model-free counting in one command: `node skill/tools/nosy.mjs <setup|check|tour|peek|inventory|psst|refute|decision|nudge|facts|find|cite-check|never-check|canwe|notes|page|weekly|notify|mcp>` (`help` lists them all). Most commands have a terminal twin that runs with no model (table in `docs/CLI-CONTRACT.md`); `overheard`, `dresscode`, `scoop`, `spill` and `map` are agent only. The same core runs as an MCP server (`nosy.mjs mcp`), a GitHub Action (`action.yml`) and a Slack/Discord notifier (`nosy.mjs notify`).

@@ -13,9 +13,11 @@ In a Claude Code session, one command at a time:
 
 From the shell instead: `claude plugin marketplace add nosy-hq/nosy`, then `claude plugin install nosy@nosy`.
 
-**Check it worked.** `claude plugin list` shows `nosy@nosy` enabled (or `/plugin` → the **Installed** tab). Typing `/` lists `/nosy:peek`, `/nosy:psst` and the rest. Then open your repo and run `/nosy:nosy`: it prints which version is loaded, then suggests what to run (in a repo with no `pm/`, `move-in` comes first). Commands are always `/nosy:<command>` and the top-level skill is `/nosy:nosy`: Claude Code puts every plugin skill and command under the plugin's name, so a bare `/nosy` does not exist in the plugin.
+**Check it worked.** `claude plugin list` shows `nosy@nosy` enabled (or `/plugin` → the **Installed** tab). Typing `/` lists `/nosy:peek`, `/nosy:psst` and the rest. Then open your repo and run `/nosy:nosy`: it prints which version is loaded, then suggests what to run (in a repo with no `pm/`, `move-in` comes first).
 
-**If it broke.** `npx github:nosy-hq/nosy doctor --check` checks Node, git, gh, the skill files, the hooks and `pm/sources.json`. It reads local files only, writes nothing, and prints the fix next to every failing line. It exits 2 on a hard failure. Plain `nosy doctor` is a different job: with `--fix` it renames old file names and keys in a `pm/` written by an older Nosy.
+**First run.** `move-in` sets the repo up and ends with the tour. To run the tour yourself, in a repo that is new to Nosy or one that already has a `pm/`, ask your agent for Nosy's tour (its command is named `tour`; Claude Code lists it with the other Nosy commands) or run `nosy tour` in a terminal. It starts by saying what Nosy reads, writes and never sends, shows the steps and which are already current, then asks its questions once (the map's, what the rival research costs in tokens, a send to Nosy Cloud) instead of one per step. It writes only inside `pm/`, and before it rewrites one of its own files it copies it to `pm/.backup/` (git-ignored by its own `.gitignore`).
+
+**If it broke.** `npx github:nosy-hq/nosy doctor --check` checks Node, git, gh, the skill files, the hooks and `pm/sources.json`. It reads local files only, writes nothing, and prints the fix next to every failing line. It exits 2 on a hard failure. Plain `nosy doctor` is a different job: it finds old file names and keys in a `pm/` written by an older Nosy. `nosy doctor --fix` lists what it will change (only Nosy's own files inside `pm/`), copies what it rewrites to `pm/.backup/` and prints the undo line; `--fix --dry-run` only lists, and `nosy doctor --undo` puts it all back.
 
 **Update.** Claude Code does not update a plugin from a GitHub marketplace for you, so you stay on the version you installed until you ask. In a session:
 
@@ -39,7 +41,7 @@ Then start a **new session** (the running one keeps the old files), and `/nosy:n
 /plugin install nosy@nosy
 ```
 
-Other ways: [b) disable](#b-disable-or-remove) · [c) cloud sessions](#c-claude-code-on-the-web-and-cloud-sessions) · [d) scheduled runs](#d-scheduled-weekly-runs) · [e) claude.ai chat](#e-claudeai-chat-zip-upload) · [f) hooks](#f-turning-off-the-hooks) · [g) other agents](#g-other-coding-agents) · [h) terminal](#h-terminal-no-agent) · [i) MCP](#i-mcp-server) · [j) GitHub Action](#j-github-action-weekly) · [k) Slack and Discord](#k-slack-and-discord) · [l) Linear, Jira, GitHub issues](#l-linear-jira-github-issues)
+Other ways: [b) disable](#b-disable-or-remove) · [c) cloud sessions](#c-claude-code-on-the-web-and-cloud-sessions) · [d) scheduled runs](#d-scheduled-weekly-runs) · [e) claude.ai chat](#e-claudeai-chat-zip-upload) · [f) hooks](#f-turning-off-the-hooks) · [g) other agents](#g-other-coding-agents) · [h) terminal](#h-terminal-no-agent) · [i) MCP](#i-mcp-server) · [j) GitHub Action](#j-github-action-weekly) · [k) Slack and Discord](#k-slack-and-discord) · [l) Linear, Jira, GitHub issues](#l-linear-jira-github-issues) · [m) Share with your team](#m-share-with-your-team-optional)
 
 ## b) Disable or remove
 
@@ -99,7 +101,7 @@ It looks for the agents the project uses (a `.claude/`, `.cursor/`, `.gemini/`, 
 `npx github:…` runs a repo's code on your machine. Pin a release tag to say which code (replace with the latest release tag); without `#<tag>` you get the default branch as it is right now:
 
 ```
-npx github:nosy-hq/nosy#v0.18.0 install
+npx github:nosy-hq/nosy#v0.19.0 install
 ```
 
 - `--providers claude,codex,cursor,gemini,copilot,opencode,kiro` chooses; `--dry-run` shows first; `--global` uses your user folder (Claude Code `~/.claude/skills`, Codex `~/.agents/skills`).
@@ -117,6 +119,7 @@ The counting needs no model, so this works with no agent and in CI. Most command
 ```
 npx github:nosy-hq/nosy help        # or: node skill/tools/nosy.mjs help
 nosy setup .                        # proposes pm/sources.json (once)
+nosy tour                           # what Nosy reads, writes and sends; the steps; one list of questions
 nosy shipped 7d                     # what landed, for which decision, + merged recently / close to merging
 nosy bet place "bulk export" --why "30 customers asked" --estimate S   # prints Bet: nb-… for the PR
 nosy score                          # settles every bet from git
@@ -165,3 +168,14 @@ The message has this week's commit and PR counts, the top 3 things that could sh
 ## l) Linear, Jira, GitHub issues
 
 Nosy has no connector of its own. `spill` writes its draft to `pm/prd/`; if your agent has a Linear, Atlassian or GitHub connector, it shows the draft and asks before opening anything.
+
+## m) Share with your team (optional)
+
+`nosy publish` sends counts and structure of `pm/` (never quotes) to a Nosy Cloud dashboard, so your team can open it. It does nothing until you configure a target and say yes. What goes, key by key: [DATA.md](DATA.md).
+
+1. Set the address once: `cloud.url` in `pm/sources.json`, or `NOSY_CLOUD_URL`, or `--url <address>`.
+2. Make a token on the dashboard (**Connect your agent**, then **Make a token**). Save it in a text file that only you can read, so it never sits in a command line, your shell history or a chat: `~/.config/nosy/token` (`$XDG_CONFIG_HOME/nosy/token` if you set that), then `chmod 600` on it. A file that other users can read is refused and nothing is sent.
+3. `nosy publish --dry-run` lists the files that would go and connects to nothing (`--full` prints them).
+4. `nosy publish --yes` sends them. It looks for the token in `NOSY_CLOUD_TOKEN`, then `--token-file <path>`, then `NOSY_CLOUD_TOKEN_FILE`, then the default file above.
+
+After the send it prints what the dashboard says it read, for example the matrix as areas by rivals. If the dashboard drew no matrix, it says so and exits 1: the files arrived, but the page is not what you meant to publish. A secret or personal data in the files stops the send (`--allow-sensitive` overrides it, after you have read what it found).

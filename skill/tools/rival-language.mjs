@@ -40,7 +40,7 @@ function works(pmDir) {
   const empty = { type: "rival-language", generated: new Date().toISOString() };
   let K = {}; try { K = readSources(pmDir); } catch {}
   langOfLoad(K); // sources.json's `language`
-  const MO = K.matrix ? matrixRead(K.matrix) : null;
+  const MO = K.matrix ? matrixRead(K.matrix, { codes: K.matrixCodes }) : null;
   if (!MO) return { ...empty, matrix_missing: true };
   const rivalDir = path.join(pmDir, "rivals");
   if (!fs.existsSync(rivalDir)) return { ...empty, rivals_missing: true };

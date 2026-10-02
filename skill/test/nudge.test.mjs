@@ -25,6 +25,7 @@ function product() {
   fs.writeFileSync(path.join(pm, "sources.json"), JSON.stringify({ repo: root, ref: "main" }));
   fs.writeFileSync(path.join(pm, "matrix.json"), JSON.stringify(MATRIX));
   fs.writeFileSync(path.join(pm, "state", "waves.json"), JSON.stringify({ waves: [{ name: "Now", tasks: [{ title: "Single sign-on", reason_now: "2 deals asked for it" }] }] }));
+  fs.writeFileSync(path.join(pm, "state", "tour.json"), JSON.stringify({ started: "2026-09-01T00:00:00Z", approved: [], done: [] })); // the tour was taken; otherwise the next pick is `tour`
   commit(root, "chore: start");
   return { root, pm };
 }

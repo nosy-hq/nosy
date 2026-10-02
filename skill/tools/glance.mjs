@@ -22,7 +22,10 @@ const stepLabel = n => { const h = String(n).split(/[:(]/)[0].replace(/"/g, "").
 // A commit subject as a chip: "merge side/x:", "internal request 12:", "log:" prefixes and trailing refs go.
 const clean = t => String(t || "").replace(/^merge\s+\S+:\s*/i, "").replace(/^(internal requests?|iç talep)\s+[\d, and]+:\s*/i, "").replace(/^[a-z][\w-]*:\s*/i, "").replace(/\s*\((internal requests?|iç talep)[^)]*\)\s*$/i, "").replace(/^\w/, c => c.toUpperCase());
 // The team's own list says the owner decides this one.
-const OWNER_CALL = /\b(owner|bora)('s)? (call|decides|decision)\b|\bthe decision to\b|\bowner decides\b/i;
+const OWNER_CALL = /\b(owner)('s)? (call|decides|decision)\b|\bthe decision to\b|\bowner decides\b/i;
+
+// The reason a published "Not doing" card carries (the full reason is waves.json's, on the owner's machine).
+const offMeta = r => { const t = String(r || ""); return /knowingly/.test(t) ? "your standing call" : /^matrix:/.test(t) ? "decided in the matrix" : /^decision:/.test(t) ? "decided" : /^signal:/.test(t) ? "not doing" : ""; };
 
 // refsOnly: the shipped tags name the references, not the commit subjects (what `nosy publish` sends).
 export function glance(pm, { M = readJson(path.join(pm, "matrix.json")), nextPicks = null, refsOnly = false } = {}) {
@@ -43,7 +46,8 @@ export function glance(pm, { M = readJson(path.join(pm, "matrix.json")), nextPic
   if (steps.length && me && active.length) {
     const code = (p, no) => p === me ? me.codes?.[no] : p.codes?.[no]?.k;
     const strip = steps.map(s => { const us = code(me, s.no), ry = active.filter(p => code(p, s.no) === "y").length;
-      return { no: s.no, name: s.name, us, kind: us === "y" && !ry ? "only" : us !== "y" && ry ? "behind" : "shared", rivalsWithIt: ry }; });
+      const d = me.declined?.[s.no], declined = us !== "y" && (d === true || (typeof d === "string" && d.trim() !== "")); // the owner decided against it (matrix contract, read-matrix.mjs and Cloud: `true` or a non-empty reason): not "behind", not "missing"
+      return { no: s.no, name: s.name, us, kind: declined ? "declined" : us === "y" && !ry ? "only" : us !== "y" && ry ? "behind" : "shared", rivalsWithIt: ry }; });
     const ranked = active.map(p => ({ name: p.name.replace(/\s*\(.*$/, "").replace(/\s+—.*$/, ""), score: score(p.codes, steps) })).sort((a, b) => b.score - a.score);
     G.stand = { steps: steps.length, rivals: active.length, me: { name: me.name, score: score(me.codes, steps) }, top: ranked.slice(0, 4), strip };
     G.only = strip.filter(s => s.kind === "only"); G.behind = strip.filter(s => s.kind === "behind");
@@ -61,7 +65,9 @@ export function glance(pm, { M = readJson(path.join(pm, "matrix.json")), nextPic
     G.lanes = [
       { key: "now", name: nowT.length ? "Now" : "Next up", items: now },
       { key: "you", name: "Your call", items: call },
-      { key: "off", name: "Not doing", items: (W.outside || []).map(o => ({ title: o.title, meta: /knowingly/.test(o.reason || "") ? "your standing call" : cut(o.reason, 40) })) },
+      // refsOnly (what `nosy publish` sends): what the refuter dropped stays home (its titles and its `why` are the refuter's notes), and the reason
+      // is one of a few fixed phrases, never the text of a decision, a matrix note or a refuter's sentence.
+      { key: "off", name: "Not doing", items: (W.outside || []).filter(o => !refsOnly || !/psst refuter/.test(o.source || "")).map(o => ({ title: o.title, meta: refsOnly ? offMeta(o.reason) : /knowingly/.test(o.reason || "") ? "your standing call" : cut(o.reason, 40) })) },
     ].map(l => ({ ...l, total: l.items.length, items: l.items.slice(0, 3).map(i => ({ ...i, title: cut(i.title, 70) })) }));
     if (!G.lanes.some(l => l.total)) delete G.lanes;
   }
@@ -103,7 +109,7 @@ export function renderGlance(G, { esc }) {
   if (G.tiles.length) parts.push(`<section class="gl-tiles" aria-label="Key numbers">${G.tiles.map(t => `<div class="gl-tile ${t.key}"><span class="lab">${esc(t.label)}</span><span class="v">${esc(t.value)}${t.unit ? `<small>${esc(t.unit)}</small>` : ""}</span><span class="note">${esc(t.note)}</span></div>`).join("")}</section>`);
   const row = [];
   if (G.stand) { const s = G.stand, max = s.steps || 1, bar = (name, v, me) => `<div class="gl-b${me ? " me" : ""}"><span class="n">${esc(name)}</span><span class="t"><i style="width:${Math.round(Number(100 * v / max)) || 0}%"></i></span><span class="x">${esc(v)}</span></div>`;
-    row.push(`<section class="gl-panel" aria-labelledby="gl-st"><div><h3 id="gl-st">Where we stand</h3><p class="sub">Steps covered out of ${esc(s.steps)} (partial counts half) · ${esc(s.rivals)} active rival${s.rivals === 1 ? "" : "s"}</p></div><div class="gl-bars">${bar(s.me.name, s.me.score, true)}${s.top.map(t => bar(t.name, t.score)).join("")}</div><div class="gl-strip" role="img" aria-label="${esc(s.steps)} steps: ${G.only.length} only we have, ${G.behind.length} behind">${s.strip.map(x => `<span class="${x.kind}${x.us === "p" ? " part" : ""}" title="${esc(`${x.no}. ${x.name}: ${x.kind === "only" ? "only we have it" : x.kind === "behind" ? `${x.rivalsWithIt} rival${x.rivalsWithIt === 1 ? " has" : "s have"} it, we don't fully` : "shared"}`)}"></span>`).join("")}</div><div class="gl-legend"><span><i class="only"></i>only we have</span><span><i class="behind"></i>behind</span><span><i></i>shared</span></div>${G.only.length ? `<div class="gl-tags">${G.only.map(x => `<span>${esc(stepLabel(x.name))}</span>`).join("")}</div>` : ""}</section>`); }
+    row.push(`<section class="gl-panel" aria-labelledby="gl-st"><div><h3 id="gl-st">Where we stand</h3><p class="sub">Steps covered out of ${esc(s.steps)} (partial counts half) · ${esc(s.rivals)} active rival${s.rivals === 1 ? "" : "s"}</p></div><div class="gl-bars">${bar(s.me.name, s.me.score, true)}${s.top.map(t => bar(t.name, t.score)).join("")}</div><div class="gl-strip" role="img" aria-label="${esc(s.steps)} steps: ${G.only.length} only we have, ${G.behind.length} behind">${s.strip.map(x => `<span class="${x.kind}${x.us === "p" ? " part" : ""}" title="${esc(`${x.no}. ${x.name}: ${x.kind === "only" ? "only we have it" : x.kind === "behind" ? `${x.rivalsWithIt} rival${x.rivalsWithIt === 1 ? " has" : "s have"} it, we don't fully` : x.kind === "declined" ? "we decided against it" : "shared"}`)}"></span>`).join("")}</div><div class="gl-legend"><span><i class="only"></i>only we have</span><span><i class="behind"></i>behind</span><span><i></i>shared</span>${s.strip.some(x => x.kind === "declined") ? `<span><i class="declined"></i>decided against</span>` : ""}</div>${G.only.length ? `<div class="gl-tags">${G.only.map(x => `<span>${esc(stepLabel(x.name))}</span>`).join("")}</div>` : ""}</section>`); }
   if (G.lanes) row.push(`<section class="gl-panel" aria-labelledby="gl-rm"><div><h3 id="gl-rm">Roadmap</h3><p class="sub">From the checked list; reasons are under Waves</p></div><div class="gl-lanes">${G.lanes.map(l => `<div class="gl-lane ${l.key}"><div class="h"><b>${esc(l.name)}</b><span>${esc(l.total)}</span></div>${l.items.length ? l.items.map(i => `<div class="gl-card">${esc(i.title)}<span class="m">${i.size ? `<b>${esc(i.size)}</b>` : ""}${esc(i.meta || "")}</span></div>`).join("") : `<div class="gl-card empty">nothing here</div>`}${l.total > l.items.length ? `<span class="more">+${esc(l.total - l.items.length)} more</span>` : ""}</div>`).join("")}</div></section>`);
   if (row.length) parts.push(`<div class="gl-row${row.length === 1 ? " one" : ""}">${row.join("")}</div>`);
   if (G.todo?.items?.length) parts.push(`<section class="gl-panel" aria-labelledby="gl-td"><div><h3 id="gl-td">Waiting on people</h3><p class="sub">Only a person can do these; nobody else touches them. Close one with nosy todo done &lt;id&gt;.</p></div><div class="gl-todo">${G.todo.items.map(i => `<div class="gl-card"><span><b>${esc(i.who)}</b> ${esc(i.title)}</span><span class="m">${i.days ? `${esc(i.days)} day${i.days === 1 ? "" : "s"}` : "today"}</span></div>`).join("")}${G.todo.more ? `<span class="more">+${esc(G.todo.more)} more: nosy todo</span>` : ""}</div></section>`);
@@ -142,10 +148,10 @@ export const GLANCE_CSS = `
 .gl-b .x{font:500 12.5px/1 var(--mono);text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
 .gl-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(9px,1fr));gap:3px}
 .gl-strip span{aspect-ratio:1;max-width:100%;border-radius:3px;background:var(--bar-c);cursor:help}
-.gl-strip span.only{background:var(--ink)}.gl-strip span.behind{background:var(--mag)}
+.gl-strip span.only{background:var(--ink)}.gl-strip span.behind{background:var(--mag)}.gl-strip span.declined{background:var(--line,#c8c8c8)}
 .gl-legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--muted)}
 .gl-legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px;background:var(--bar-c)}
-.gl-legend i.only{background:var(--ink)}.gl-legend i.behind{background:var(--mag)}
+.gl-legend i.only{background:var(--ink)}.gl-legend i.behind{background:var(--mag)}.gl-legend i.declined{background:var(--line,#c8c8c8)}
 .gl-tags{display:flex;flex-wrap:wrap;gap:6px}.gl-tags span{font-size:12.5px;line-height:1.3;padding:5px 9px;border-radius:6px;background:var(--sea-soft)}
 .gl-lanes{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr));gap:10px}
 .gl-lane{display:grid;gap:8px;align-content:start;min-width:0}

@@ -70,7 +70,7 @@ function calculate(pm, { paths = [], quoteN = 2 } = {}) {
 
   // --- targets: matrix rows, roadmap items, request-doc items ---
   const targets = [];
-  const MO = K.matrix ? matrixRead(K.matrix) : null;
+  const MO = K.matrix ? matrixRead(K.matrix, { codes: K.matrixCodes }) : null;
   for (const r of MO?.lines || []) targets.push({ kind: "matrix", id: r.no ? `row ${r.no}` : null, title: r.feature, code: r.codes?.[MO.biz] ?? null, text: `${r.feature} ${r.not || ""}` });
   const roadmapPath = K.roadmap?.path || path.join(pm, "waves.md");
   const roadmap = fs.existsSync(roadmapPath) ? fs.readFileSync(roadmapPath, "utf8") : K.roadmap?.path ? show(K.roadmap.path) : "";

@@ -30,6 +30,9 @@ function product() {
     "export const toRecord = (d: RecordDTO) => ({ id: d.id });",
     "export const plain = 1; // nothing held here",
   ].join("\n") + "\n");
+  // Comments that point at an issue number; no decision names these files.
+  put("apps/web/entities/plan/mapper.ts", ["import type { PlanDTO } from './contract';", "// dropped: PlanDTO.label, issue to follow (#412).", "export const toPlan = (d: PlanDTO) => ({ id: d.id });"].join("\n") + "\n");
+  put("apps/web/entities/plan/both.ts", ["import type { PlanDTO } from './contract';", "// parked for K178; the issue is #412.", "export const toBoth = (d: PlanDTO) => ({ id: d.id });"].join("\n") + "\n");
   put("docs/NEEDS.md", [
     "# Needs", "",
     "### 26. A plan catalogue", "", "- **Status:** partial. A plan has no description, features or highlight.", "- **Needed:** `description`, `features[]`, `highlighted` on each plan.", "",
@@ -113,4 +116,53 @@ test("the code's own words at the evidence: a ref in the comment holds the item;
   assert.deepEqual(plainLine.gate?.because?.[0]?.decisions, ["K3"], "but K3 names the file, so it's still behind the gate");
   assert.equal(run.gate, null, "apps/agent/run.py: no comment, no decision naming agent/run.py");
   assert.match(formatMd(R), /⛔ Held on purpose until shown otherwise:\*\* the code at apps\/web\/entities\/record\/mapper\.ts:2 \(#385, decision K3\)/);
+});
+
+// a #N in the comment that is an issue in the facts is a ticket, not a parking sign.
+function ticketItems(pm, issues) {
+  fs.writeFileSync(path.join(pm, "state", "lowhanging.json"), JSON.stringify({ items: [
+    { score: 3, type: "Backend ready, not on screen", title: "plan label", evidence: "apps/web/entities/plan/mapper.ts:2", detail: [] },
+    { score: 3, type: "Backend ready, not on screen", title: "plan both", evidence: "apps/web/entities/plan/both.ts:2", detail: [] },
+  ] }));
+  if (issues) { fs.mkdirSync(path.join(pm, "state", "facts"), { recursive: true }); fs.writeFileSync(path.join(pm, "state", "facts", "github.json"), JSON.stringify({ items: issues })); }
+}
+
+test("a ref that is an OPEN issue in the facts: ticketed, not held; the receipt says tracked and ready", () => {
+  const { pm } = product();
+  ticketItems(pm, [{ n: 412, kind: "issue", state: "open", title: "plan label" }]);
+  const R = receipts(pm), label = R.items[0];
+  assert.equal(label.gate, null, "an open issue is a ticket, so nothing parks the item");
+  assert.deepEqual(label.ticketed, [{ ref: "#412", n: 412, state: "open" }]);
+  const md = formatMd(R);
+  assert.match(md, /\*\*Ticketed:\*\* issue #412 is open, so it is tracked and ready, not parked\./);
+  assert.match(md, /issue to follow \(#412\)/, "the comment itself is still quoted");
+});
+
+test("a ref that is a CLOSED issue: ticketed with a check-it-was-finished line, still not gated", () => {
+  const { pm } = product();
+  ticketItems(pm, [{ n: 412, kind: "issue", state: "closed", title: "plan label" }]);
+  const R = receipts(pm);
+  assert.equal(R.items[0].gate, null);
+  assert.deepEqual(R.items[0].ticketed, [{ ref: "#412", n: 412, state: "closed" }]);
+  assert.match(formatMd(R), /\*\*Ticketed\*\*, issue #412 is closed: check it was finished\./);
+});
+
+test("no matching issue (other issues only, #412 is a PR, or no github.json at all): held exactly as before", () => {
+  for (const issues of [[{ n: 7, kind: "issue", state: "open" }], [{ n: 412, kind: "pr", state: "open" }], null]) {
+    const { pm } = product();
+    ticketItems(pm, issues);
+    const R = receipts(pm);
+    assert.deepEqual(R.items[0].gate.because, [{ at: "apps/web/entities/plan/mapper.ts:2", refs: ["#412"], decisions: [] }], JSON.stringify(issues));
+    assert.deepEqual(R.items[0].ticketed, []);
+    assert.match(formatMd(R), /⛔ Held on purpose until shown otherwise:\*\* the code at apps\/web\/entities\/plan\/mapper\.ts:2 \(#412\)/);
+    assert.ok(!/Ticketed/.test(formatMd(R)));
+  }
+});
+
+test("a ticket does not release a comment that also carries another ref (K178)", () => {
+  const { pm } = product();
+  ticketItems(pm, [{ n: 412, kind: "issue", state: "open" }]);
+  const both = receipts(pm).items[1];
+  assert.deepEqual(both.gate.because, [{ at: "apps/web/entities/plan/both.ts:2", refs: ["K178"], decisions: [] }], "only the non-ticket ref is the reason");
+  assert.deepEqual(both.ticketed, [{ ref: "#412", n: 412, state: "open" }]);
 });

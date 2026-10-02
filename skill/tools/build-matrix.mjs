@@ -9,6 +9,7 @@
 import fs from "node:fs"; import path from "node:path";
 const pm = process.argv[2] || "pm";
 const dir = path.join(pm, "rivals");
+if (!fs.existsSync(dir)) { console.error(`Psst… no ${dir}/ yet: run /nosy:neighbors first (it writes one file per rival), or \`nosy rivals-import\` if your rival files live elsewhere (\`rivalsPath\` in sources.json).`); process.exit(1); }
 const files = fs.readdirSync(dir).filter(f => f.endsWith(".md") && !f.startsWith("_")).sort();
 
 const field = (src, k) => (src.match(new RegExp(`\\*\\*${k}:\\*\\*\\s*(.+)$`, "m")) || [, ""])[1].trim();
@@ -76,7 +77,10 @@ for (const f of files) {
   for (const line of md.split("\n")) {
     const m = line.match(/^\|\s*(\d{1,2})\s*\|\s*([^|]+?)\s*\|\s*([ypnud])\b[^|]*\|\s*(.*?)\s*\|?\s*$/i);
     if (!m) continue;
-    steps.set(m[1], m[2]); codes[m[1]] = { k: m[3].toLowerCase(), evidence: m[4] };
+    // A trailing `[verified: YYYY-MM-DD]` in the evidence cell is when someone last opened the rival's pages for this row (internal request 199,
+    // written by matrix-proposals apply). It travels as `verified_at`, so a rebuild from the rival tables doesn't lose it, and it is not part of the evidence text.
+    const vm = m[4].match(/\s*\[verified:\s*(\d{4}-\d{2}-\d{2})\]\s*$/);
+    steps.set(m[1], m[2]); codes[m[1]] = { k: m[3].toLowerCase(), evidence: vm ? m[4].slice(0, vm.index) : m[4], ...(vm ? { verified_at: vm[1] } : {}) };
   }
   if (Object.keys(codes).length) products.push({
     name: name, file: f, category: cat, codes: codes,

@@ -1,0 +1,65 @@
+{
+  "locale": "tr-TR",
+  "since": "{date} {time} tarihinden beri · {ref}",
+  "generated": "oluşturuldu {when}",
+  "eyebrow": "Otomatik · betik çıktısı",
+  "title": "Bugün ne çıktı, nerede ucuz iş var",
+  "intro": "Bu bölümü <code>collect-status</code> ve <code>lowhanging</code> yazdı; elle düzenlemeyin, her çalıştırmada yenilenir.",
+  "decision": {
+    "heading": "Sıradaki ürün kararı",
+    "checked": "Koda karşı kontrol edildi.",
+    "unchecked": "Henüz kontrol edilmedi: karara bağlamadan önce psst'in kontrol adımını çalıştırın.",
+    "same": " Commit sonrası dürtme ve <code>/nosy:nosy</code> (eklenti) ya da <code>/nosy</code> (beceri kurulumu) aynı kararı söyler.",
+    "source": " Kaynak: {source}."
+  },
+  "checkedList": {
+    "heading": "Bu hafta kontrol edilenler",
+    "stats": "{stands} geçerli · {weakened} düzeltildi · {refuted} kontrolden sonra elendi",
+    "fromReading": " · {n} kodu okuyarak",
+    "corrected": "düzeltildi"
+  },
+  "team": {
+    "heading": "Ekibin kendi listesinde",
+    "meta": "{files} · kodu anan en son paragraflar · {found}"
+  },
+  "delivery": {
+    "heading": "Teslimat",
+    "meta": "{range} · main'de {main}, açık PR'larda {pr} commit · son main <code>{lastMain}</code> · {generated}",
+    "draft": " (taslak)",
+    "commits": "{count} commit",
+    "last": ", son {last}",
+    "ref": "Ref",
+    "topic": "Son konu",
+    "none": "Bu aralıkta karar ya da madde referanslı commit yok.",
+    "note": "Karar ve madde referanslı gruplar; issue referansları ve referanssız {n} commit ayrıntılı raporda."
+  },
+  "cheap": {
+    "heading": "Düşük asılan meyve",
+    "full": " (tam liste)",
+    "unchecked": " (kontrol edilmedi)",
+    "meta": "{ref} · puan = değer / efor · soluk satır = açık bir PR'da · {generated}",
+    "score": "Puan",
+    "effort": "Efor",
+    "work": "İş",
+    "total": "Liste kanıttır; neyin yapılacağına karar veren kişi sahip çıkar. Toplam {n} madde.",
+    "nothing": "Bu sefer bir şey bulunamadı.",
+    "missing": " Eksik girdiler: {why}.",
+    "parked": " {n} madde listede yok: bir karar bunları bekletiyor.",
+    "inProgress": " {n} madde zaten yapılıyor."
+  },
+  "stale": {
+    "heading": "Eskimiş olabilir",
+    "meta": "{page} · elle yazılmış bir satır betiğin çıktısıyla çelişiyor · {generated}",
+    "type": "Tür",
+    "ref": "Ref",
+    "line": "Satır",
+    "evidence": "Kanıt",
+    "note": "find-stale'in bulduğu bir çelişki; sayfaya dokunulmadı, satırı sahibi düzeltir."
+  },
+  "design": {
+    "heading": "Tasarım sistemi",
+    "meta": "{ready} hazır · {partial} kısmi · {missing} eksik · {ask} sorulacak (20 alan) · {date}",
+    "item": "<b>{area}</b> · {status} — eksik: {missing}",
+    "note": "dresscode seçti: yol haritasına göre şu an önemli olan; ayrıntı pm/design/{date}.md içinde."
+  }
+}

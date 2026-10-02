@@ -63,3 +63,31 @@ test("line shape, Turkish keys (a Turkish-keyed pm/matris.json shape: urunler/sa
   assert.equal(line.codes["Acme Books"], "b");
   assert.equal(M.oh.size, 0);
 });
+
+// "we deliberately do not do this" is an owner decision, not a gap. The contract is at the top of read-matrix.mjs.
+test("owner decisions, line shape: a row's `declined: true` is exposed with its reason (decision, else not); only `true` counts", () => {
+  const M = matrixRead({ products: ["Us", "R1"], lines: [
+    { feature: "Kep integration", codes: { Us: "n", R1: "y" }, declined: true, decision: "Not doing: legal risk", not: "ignored when a decision exists" },
+    { feature: "Offline mode", codes: { Us: "n", R1: "y" }, declined: true, not: "Not on the roadmap" },
+    { feature: "Export", codes: { Us: "n", R1: "y" }, decision: "later" },
+    { feature: "Sharing", codes: { Us: "n", R1: "n" }, declined: "yes" },
+  ] });
+  assert.deepEqual(M.lines.map(l => l.declined), [true, true, false, false]);
+  assert.deepEqual(M.lines.map(l => l.declinedWhy), ["Not doing: legal risk", "Not on the roadmap", "", ""]);
+  assert.equal(M.lines[0].codes.Us, "n", "the code itself stays what the file says");
+});
+
+test("owner decisions, step shape: `biz.declined: { no: reason }` (a string, or true) is exposed per line", () => {
+  const M = matrixRead({ steps: [{ no: "1", name: "A" }, { no: "2", name: "B" }, { no: "3", name: "C" }, { no: "4", name: "D" }],
+    biz: { name: "Us", codes: { 1: "n", 2: "n", 3: "n", 4: "n" }, notes: { 1: "plain note" }, declined: { 1: "Decided against: legal", 2: true, 3: "   ", 4: false } },
+    products: [{ name: "R1", codes: { 1: "y", 2: "y", 3: "y", 4: "y" } }] });
+  assert.deepEqual(M.lines.map(l => l.declined), [true, true, false, false]);
+  assert.deepEqual(M.lines.map(l => l.declinedWhy), ["Decided against: legal", "", "", ""]);
+  assert.equal(M.lines[0].not, "plain note", "the note is untouched; the reason is its own field");
+});
+
+test("owner decisions: a matrix with none reads as before, every line `declined: false`", () => {
+  const M = matrixRead({ products: ["Us"], lines: [{ feature: "A", codes: { Us: "y" } }] });
+  assert.equal(M.lines[0].declined, false);
+  assert.equal(M.lines[0].declinedWhy, "");
+});

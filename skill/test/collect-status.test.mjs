@@ -190,3 +190,71 @@ test("no pm/waves.md at all -> no Wave column, no 'wave' key", () => {
   assert.doesNotMatch(output.markdown, /\| Wave \|/);
   assert.ok(!("wave" in output.json.groups[0]), "no waves file: groups should carry no 'wave' key at all");
 });
+
+// the first real run showed "307 open PRs" for a repo with 2. `pr` is not a PR count: it is every entry of the log that is
+// not a plain main commit, so it also holds the merge commits on main. The honest numbers are `openPrs` and `prCommits`, written beside it.
+test("openPrs counts the open PRs and prCommits their commits (the old `pr` is kept)", () => {
+  assert.equal(output.json.openPrs, 2, "two open PRs were listed");
+  assert.equal(output.json.prCommits, 2, "one commit each");
+  assert.equal(output.json.pr, 2, "the old field keeps its value when main has no merge commits in range");
+  assert.match(output.markdown, /on open PRs/);
+});
+
+let mergedK, mergedGh, mergedTmp, mergedJson;
+before(async () => {
+  mergedK = await fakeProductSetup();
+  const git = (...a) => execFileSync("git", ["-C", mergedK.repo, ...a], { encoding: "utf8" });
+  // A merge-commit workflow: three merges of already-closed PRs land on main inside the range.
+  for (const n of [1, 2, 3]) {
+    git("checkout", "-q", "-b", `side/merged-${n}`, "main");
+    fs.writeFileSync(path.join(mergedK.repo, `merged-${n}.txt`), `${n}\n`);
+    git("add", "-A"); git("commit", "-q", "-m", `work for pull request ${n}`);
+    git("checkout", "-q", "main");
+    git("merge", "--no-ff", "-q", `side/merged-${n}`, "-m", `Merge pull request #${900 + n} from fake/side-merged-${n}`);
+  }
+  mergedGh = fakeGhSetup(mergedK.gh);
+  mergedTmp = temporary("nosy-status-merged-");
+  const jsonPath = path.join(mergedTmp, "status.json");
+  const r = run(path.join(Tool, "collect-status.mjs"), [mergedK.repo, "2020-01-01", "main", "--json", jsonPath], { env: mergedGh.env });
+  assert.equal(r.code, 0, `collect-status (merged): unexpected exit code, stderr: ${r.error}`);
+  mergedJson = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
+});
+after(() => { clean(mergedK.root); clean(mergedGh.dir); clean(mergedTmp); });
+
+test("merge commits on main inflate `pr` but not openPrs or prCommits", () => {
+  assert.equal(mergedJson.openPrs, 2, "still two open PRs");
+  assert.equal(mergedJson.prCommits, 2, "still two commits on them");
+  assert.equal(mergedJson.pr, 5, "the old field counted the 3 merge commits on main as well: it never was a PR count");
+});
+
+test("openPrs is null, not 0, when gh could not be read", () => {
+  assert.equal(noRemoteOutput.json.openPrs, null);
+  assert.equal(noRemoteOutput.json.prCommits, 0);
+});
+
+// ---- a deleted author, and a list that hit gh's limit (review) ----
+test("a PR whose author account is gone is read (as ghost) and does not turn every PR into 'could not read'; 30 listed PRs are said to be capped", async () => {
+  const K2 = await fakeProductSetup(), dirs = [K2.root];
+  try {
+    const fx = JSON.parse(JSON.stringify(K2.gh));
+    fx.prListNoR[0].author = null;                       // gh's answer for a deleted account
+    fx.prListNoR[0].commits[0].authors = [];
+    const g1 = fakeGhSetup(fx); dirs.push(g1.dir);
+    const t = temporary("nosy-status-ghost-"); dirs.push(t);
+    const a = path.join(t, "a.json");
+    assert.equal(run(path.join(Tool, "collect-status.mjs"), [K2.repo, "2020-01-01", "origin/main", "--json", a], { env: g1.env }).code, 0);
+    const J = JSON.parse(fs.readFileSync(a, "utf8"));
+    assert.equal(J.noRemote, false, "gh was read");
+    assert.equal(J.openPrs, fx.prListNoR.length);
+    assert.equal(J.prs.find(p => p.n === 615).a, "ghost");
+    assert.ok(!("openPrsCapped" in J), "two PRs are not a full list");
+    // 30 PRs: the list is as long as gh was asked for, so it may be longer
+    while (fx.prListNoR.length < 30) { const c = JSON.parse(JSON.stringify(fx.prListNoR[1])); c.number = 700 + fx.prListNoR.length; fx.prListNoR.push(c); }
+    const g2 = fakeGhSetup(fx); dirs.push(g2.dir);
+    const b = path.join(t, "b.json");
+    assert.equal(run(path.join(Tool, "collect-status.mjs"), [K2.repo, "2020-01-01", "origin/main", "--json", b], { env: g2.env }).code, 0);
+    const C = JSON.parse(fs.readFileSync(b, "utf8"));
+    assert.equal(C.openPrs, 30);
+    assert.equal(C.openPrsCapped, true);
+  } finally { for (const d of dirs) clean(d); }
+});

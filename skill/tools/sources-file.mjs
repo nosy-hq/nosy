@@ -33,8 +33,99 @@ export function readSources(pm, { raw = false, cwd } = {}) {
   if (!raw && K && typeof K === "object" && !Array.isArray(K) && typeof K.repo === "string") {
     Object.defineProperty(K, "repoAsWritten", { value: K.repo, enumerable: false }); // messages quote what the file says
     K.repo = resolveRepo(pm, K.repo, { cwd });
+    // A relative `matrix` ("pm/matrix.json": find-sources writes it relative to the repo) is read from the repo, not from whatever folder Nosy was
+    // started in. Since pm/ is found by walking up (findPm), Nosy often runs from a subfolder, where the path as written points at nothing and every
+    // reader would say "no matrix". Only when it isn't there from the current folder but is in the repo: a file that resolves today is left exactly as written.
+    if (typeof K.matrix === "string" && K.matrix && !isAbs(K.matrix) && typeof K.repo === "string") {
+      const here = path.resolve(cwd || process.cwd(), K.matrix), there = path.resolve(K.repo, K.matrix);
+      if (!fs.existsSync(here) && fs.existsSync(there)) { Object.defineProperty(K, "matrixAsWritten", { value: K.matrix, enumerable: false }); K.matrix = there; }
+    }
   }
   return K;
 }
 // Same, but null when the file is missing or isn't JSON (for readers that treat that as "no sources yet").
 export function readSourcesSafe(pm, opts) { try { return readSources(pm, opts); } catch { return null; } }
+
+// Where this product's pm/ is. On a real product pm/ sat next to the repo folder, not inside it, so
+// commands worked from one folder only. In order:
+//   1. `explicit` (--pm or NOSY_PM) always wins, as written.
+//   2. ./pm when it holds sources.json (or the old kaynaklar.json, so `doctor` can still run on an old pm/): "pm", as before.
+//   3. the first <ancestor>/pm that holds one of them, nearest ancestor first: its absolute path.
+//   4. "pm", as before (the commands that create it, `setup`, `move-in`, still write there).
+// A caller that wants to say which one it chose compares the result with "pm": anything else without an `explicit` came from step 3.
+const hasSources = dir => ["sources.json", "kaynaklar.json"].some(f => fs.existsSync(path.join(dir, f)));
+export function findPm(cwd = process.cwd(), { explicit } = {}) {
+  if (explicit) return explicit;
+  const start = path.resolve(cwd);
+  if (hasSources(path.join(start, "pm"))) return "pm";
+  for (let d = path.dirname(start); ; d = path.dirname(d)) {
+    if (hasSources(path.join(d, "pm"))) return path.join(d, "pm");
+    if (path.dirname(d) === d) break;
+  }
+  return "pm";
+}
+
+// ---- Rival files kept somewhere else ----
+// A real product kept its rival research in references/<name>/competitive-*.md, so `doctor` said "no rival files yet" and
+// `neighbors` started from zero. sources.json `rivalsPath` (a folder, relative to the folder that holds pm/, or absolute)
+// says where they are; nothing else in pm/ moves.
+const isDir = p => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
+// The rival folder: K.rivalsPath when it is set and exists, else <pm>/rivals (as written, so callers' output is unchanged).
+export function rivalsDir(pm, K) {
+  const d = rivalsPathAbs(pm, K);
+  return d && isDir(d) ? d : path.join(pm, "rivals");
+}
+// What `rivalsPath` names, made absolute from the folder that holds pm/ (whether or not it exists), or null when it isn't set.
+// pm relative or absolute gives the same answer (path.resolve against the process folder first).
+export function rivalsPathAbs(pm, K) {
+  const p = K && typeof K.rivalsPath === "string" ? K.rivalsPath.trim() : "";
+  return p ? path.resolve(path.dirname(path.resolve(pm)), p) : null;
+}
+// Is this markdown a rival file? By its own structure, from the rival template (templates/rival.md): the "Latest major announcement"
+// field or heading, a "Position relative to …" heading, or the matrix table (3+ rows whose code column holds a single status letter,
+// y p n u d, in every filled row). Nosy writes these files itself, so its template's headings are the structure; nothing is read
+// from the rival's or the product's own prose.
+const RIVAL_MARK = /^[ \t]*(?:[-*][ \t]+)?(?:#{1,6}[ \t]*)?\**[ \t]*(?:Latest major announcement|Position relative to)\b/mi;
+export function rivalDoc(text) {
+  const t = stripBom(text);
+  if (RIVAL_MARK.test(t)) return true;
+  const rows = t.split("\n").filter(l => /^\s*\|.*\|\s*$/.test(l)).map(l => l.trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim()));
+  const width = Math.max(0, ...rows.map(r => r.length));
+  for (let col = 1; col < width; col++) {
+    const cells = rows.map(r => r[col]).filter(c => c != null && c !== "" && !/^:?-{2,}:?$/.test(c));
+    const codes = cells.filter(c => /^[ypnud]$/i.test(c));
+    if (codes.length >= 3 && codes.length >= cells.length - 1) return true; // all but the header cell
+  }
+  return false;
+}
+const SKIP_DIRS = new Set(["node_modules", ".git", "vendor"]);
+// Every .md under `dir` as "/"-joined paths relative to it, depth-first, never entering SKIP_DIRS (a rivalsPath of "." must not list a
+// node_modules tree first and filter it afterwards: fs.readdirSync's `recursive` option does that, and exists only from Node 18.17).
+// Symbolic links to folders are not followed (a link back up the tree would never end); `depth` bounds the rest.
+function walkMarkdown(dir, rel = "", depth = 8, out = []) {
+  let entries; try { entries = fs.readdirSync(path.join(dir, rel), { withFileTypes: true }); } catch { return out; }
+  for (const e of entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+    const r = rel ? `${rel}/${e.name}` : e.name;
+    if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name) && depth > 0) walkMarkdown(dir, r, depth - 1, out); }
+    else if (e.name.endsWith(".md") && !e.name.startsWith("_")) out.push(r);
+  }
+  return out;
+}
+const RIVAL_READ_MAX = 1 << 20; // a rival file is a page or two of tables; a megabyte of markdown is something else
+// The rival files in a rival folder, as paths relative to it ("/" separators). The default <pm>/rivals is flat, every .md but the
+// `_`-prefixed template (as always). A configured rivalsPath may nest (references/<name>/competitive-x.md) and hold other
+// documents, so there it is recursive and only rival-shaped files count.
+export function rivalFiles(dir, { nested = false } = {}) {
+  try {
+    if (!nested) return fs.readdirSync(dir).filter(f => f.endsWith(".md") && !f.startsWith("_"));
+    return walkMarkdown(dir).filter(f => { try { const p = path.join(dir, f); return fs.statSync(p).size <= RIVAL_READ_MAX && rivalDoc(fs.readFileSync(p, "utf8")); } catch { return false; } });
+  } catch { return []; }
+}
+
+// ---- The team's own GitHub logins (2 Oct) ----
+// sources.json `team`: an array of logins (or one string) of the people who build the product. An issue one of them opens is a work item,
+// not a customer asking: collect-signals keeps it out of demand, lowhanging keeps it out of "issue opened against us". Case and a leading
+// "@" don't matter. One reader here so the two can't drift.
+const loginKey = x => String(x ?? "").trim().replace(/^@/, "").toLowerCase();
+export const teamLogins = K => new Set([].concat(K && K.team !== undefined && K.team !== null ? K.team : []).filter(x => typeof x === "string").map(loginKey).filter(Boolean));
+export const isTeamLogin = (logins, login) => { const k = loginKey(login); return !!k && logins.has(k); };

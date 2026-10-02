@@ -11,7 +11,7 @@
 import fs from "node:fs"; import path from "node:path"; import crypto from "node:crypto"; import { execFileSync } from "node:child_process"; import { matrixRead } from "./read-matrix.mjs"; import { patternsOfLoad } from "./refs.mjs"; import { small, smallAscii, root, ascii, langOfLoad } from "./text.mjs"; import { thresholds } from "./thresholds.mjs";
 import { mask } from "./mask.mjs";
 import { windowText } from "./demand.mjs";
-import { readSources } from "./sources-file.mjs";
+import { readSources, teamLogins as teamLoginsOf, isTeamLogin } from "./sources-file.mjs";
 
 const argv = process.argv.slice(2);
 const ji = argv.indexOf("--json"); const jsonOut = ji >= 0 ? argv.splice(ji, 2)[1] : null;
@@ -300,18 +300,24 @@ for (const file of files) { let rows = [];
 
 const GhLimit = 200;
 let ghWindow = null;
+// `team` in sources.json: GitHub logins of the people who build the product (an array, or one string; case
+// and a leading @ don't matter). An issue they open is a work item (a task or a note to self), not a customer asking: it is kept
+// out of the signals, so it never counts as demand or as a customer. It is still matched to targets and reported as `workItems`.
+const teamLogins = teamLoginsOf(K); // the one reader (sources-file.mjs); lowhanging.mjs uses the same rule
+const workItemsRaw = [];
 if (GH && K.issue?.repo) { try {
     const js = JSON.parse(execFileSync("gh", ["issue", "list", "-R", K.issue.repo, "--state", "all", "--limit", String(GhLimit), "--json", "number,title,body,createdAt,author,labels"], { encoding: "utf8", maxBuffer: 64 << 20 }));
     const sourceNameOf = `gh:${K.issue.repo}`;
     for (const it of js) { const text = `${it.title} · ${(it.body || "").slice(0, 2000)}`;
-      rawSignals.push({ text, date: dateParse(it.createdAt), customerRaw: it.author?.login || null, file: sourceNameOf, line: `#${it.number}`, format: "github" }); }
+      const row = { text, date: dateParse(it.createdAt), customerRaw: it.author?.login || null, file: sourceNameOf, line: `#${it.number}`, format: "github" };
+      if (isTeamLogin(teamLogins, it.author?.login)) workItemsRaw.push(row); else rawSignals.push(row); }
     // The window is part of every count taken from these issues: it is the newest GhLimit issues (open and closed), so a
     // count moves when issues arrive. Recorded here so every place that prints a demand number can say what it was counted over.
     const stamps = js.map(it => Date.parse(it.createdAt)).filter(Number.isFinite);
     ghWindow = { kind: "github issues", limit: GhLimit, count: js.length, states: "open and closed", complete: js.length < GhLimit,
       oldest: stamps.length ? new Date(Math.min(...stamps)).toISOString().slice(0, 10) : null, newest: stamps.length ? new Date(Math.max(...stamps)).toISOString().slice(0, 10) : null,
       as_of: new Date().toISOString().slice(0, 10) };
-    sources.push({ path: sourceNameOf, format: "github", signal: js.length, window: ghWindow });
+    sources.push({ path: sourceNameOf, format: "github", signal: js.length - workItemsRaw.length, window: ghWindow });
   } catch (e) { warnings.push(`gh issue list could not be read: ${String(e.message).slice(0, 120)}`); } }
 else if (GH) warnings.push("--gh was given but sources.json has no issue.repo");
 
@@ -341,10 +347,13 @@ const duplicateN = Object.values(duplicate).reduce((a, b) => a + b, 0), nearDupl
 if (duplicateN) warnings.push(`${duplicateN} exact-duplicate texts counted as one signal (${Object.entries(duplicate).map(([k, v]) => `${k} ${v}`).join(", ")})`);
 if (nearDuplicateN) warnings.push(`${nearDuplicateN} near-duplicates (only the number, date, hash, or link differs) counted as one signal (${Object.entries(nearDuplicate).map(([k, v]) => `${k} ${v}`).join(", ")})`);
 signals.forEach(s => { s.order = tokenOrder(s.text); s.words = [...new Set(s.order)]; });
+// Team-authored issues: same text clean-up, no duplicate rules (they are not counted), kept apart from every demand number.
+const workItems = workItemsRaw.filter(s => s.text && s.text.trim()).map(s => ({ text: s.text.trim().replace(/\s+/g, " "), line: s.line, date: s.date || null }));
+workItems.forEach(s => { s.order = tokenOrder(s.text); s.words = [...new Set(s.order)]; });
 
 // --- targets: matrix rows + request-document items + decisions + psst (lowhanging.json) ---
 const goals = [];
-if (K.matrix && fs.existsSync(K.matrix)) { const M = matrixRead(K.matrix); // both matrix formats
+if (K.matrix && fs.existsSync(K.matrix)) { const M = matrixRead(K.matrix, { codes: K.matrixCodes }); // both matrix formats
   if (M) { const us = M.biz;
     for (const r of M.lines) { const code = us ? (r.codes?.[us] ?? null) : null;
       const ref = (r.not || "").match(refRe)?.[0]?.replace(/\s+/g, " ") || null;
@@ -367,7 +376,7 @@ if (fs.existsSync(lowPath)) { const L = JSON.parse(fs.readFileSync(lowPath, "utf
 goals.forEach(h => h._low = smallAscii(h.text));
 
 // --- matching: rarity-weighted (idf, over the target text), word-start, linear penalty for a long target ---
-const vocab = [...new Set(signals.flatMap(s => s.words))];
+const vocab = [...new Set([...signals, ...workItems].flatMap(s => s.words))];
 const N = goals.length || 1;
 const idf = Object.fromEntries(vocab.map(w => { const df = goals.filter(h => reOf(w).test(h._low)).length; return [w, df ? Math.log((N + 1) / df) : 0]; }));
 const avgLen = goals.reduce((s, h) => s + h._low.length, 0) / N || 1;
@@ -382,13 +391,20 @@ const Threshold = K.signal?.threshold ?? ES.signalThreshold;
 
 goals.forEach(h => h.signals = []);
 const unmatchedOnes = [];
-for (const s of signals) {
-  const cand = goals.map(h => { let sc = 0; for (const w of s.words) if (reOf(w).test(h._low)) sc += idf[w] || 0;
+const candidatesOf = s => goals.map(h => { let sc = 0; for (const w of s.words) if (reOf(w).test(h._low)) sc += idf[w] || 0;
     return { h, sc: sc / Math.max(1, h._low.length / avgLen) }; })
     .filter(x => x.sc >= Threshold).sort((a, b) => b.sc - a.sc).slice(0, 2);
+for (const s of signals) {
+  const cand = candidatesOf(s);
   if (!cand.length) { unmatchedOnes.push(s); continue; }
   for (const { h, sc } of cand) h.signals.push({ s, sc });
 }
+// Work items go through the same matching, but only to be counted per target: they never enter h.signals, so no count, customer,
+// trend or example above includes them.
+const workByGoal = new Map(); let workMatched = 0;
+for (const s of workItems) { const cand = candidatesOf(s); if (cand.length) workMatched++; for (const { h } of cand) workByGoal.set(h, (workByGoal.get(h) || 0) + 1); }
+const workItemsOut = workItems.length ? { count: workItems.length, matched: workMatched,
+  goals: [...workByGoal].map(([h, count]) => ({ type: h.type, ref: h.ref, title: h.title, count })).sort((a, b) => b.count - a.count).slice(0, 20) } : null;
 
 // "Now" is the end of today (UTC), so the trend numbers do not move between two runs on the same day.
 const DayMs = Day * 864e5, Now = new Date().setUTCHours(23, 59, 59, 999);
@@ -429,6 +445,7 @@ if (themes.length < 10) aggregate(candidateSetup(s => s.words));
 let o = `# Demand signal · ${new Date().toISOString().slice(0, 10)} · ${signals.length} signals (${files.length} files${GH ? " + gh" : ""}), ${goalsOut.length} targets matched, ${unmatchedOnes.length} unmatched\n\n`;
 o += `Sources: ${sources.map(k => `${k.path} (${k.format}, ${k.signal})`).join(" · ") || "—"}\n\n`;
 if (ghWindow) o += `GitHub window: ${windowText(ghWindow)}. A count from these issues is a topic cluster of related issues within this window, not the number of times one thing was asked.\n\n`;
+if (workItemsOut) o += `Team-authored issues (sources.json \`team\`): ${workItemsOut.count} are work items, not demand: left out of every count above (${workItemsOut.matched} match a target).\n\n`;
 if (warnings.length) o += `Warnings: ${warnings.join(" · ")}\n\n`;
 const prepares = goalsOut.filter(h => h.ready);
 if (prepares.length) { o += `## Demand + ready (${prepares.length})\n\nBackend is ready or the screen is missing, and the customer wants it — can be done now.\n\n| Target | Ref | Signals | Customers | Last${Day}d/previous |\n|---|---|---|---|---|\n`;
@@ -442,7 +459,7 @@ o += `\nPrivacy: email, phone, national ID, IBAN, card number, and URL token/key
 process.stdout.write(o);
 if (jsonOut) fs.writeFileSync((fs.mkdirSync(path.dirname(jsonOut), { recursive: true }), jsonOut), JSON.stringify({ type: "signal", generated: new Date().toISOString(), sources,
   total: signals.length, matching: signals.length - unmatchedOnes.length, goals: goalsOut, themes, unmatched: unmatchedOnes.length,
-  unrecognized: unrecognizedFiles }, null, 1));
+  unrecognized: unrecognizedFiles, ...(workItemsOut ? { workItems: workItemsOut } : {}) }, null, 1));
 // Exit contract (docs/CLI-CONTRACT.md): 2 = ran, found something that needs a look. An export whose columns
 // couldn't be confidently mapped is exactly that - never a silent 0-signals pass.
 process.exitCode = unrecognizedFiles.length ? 2 : 0;

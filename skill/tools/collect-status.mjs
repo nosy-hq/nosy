@@ -1,6 +1,7 @@
 // Groups commits in a git range by their references (#issue, §item, K-decision).
 // Usage: node collect-status.mjs <repo> <start-ref|date> [end-ref] [--json <file>] [--pm <pm folder>]
 // Output: markdown (stdout); if --json is given, the same data is written for the page section (auto-section.mjs).
+// The JSON's `pr` is not the number of open PRs: use `openPrs` (PRs listed) and `prCommits` (their commits); see the write below.
 // If --pm is given, reference patterns are read from that product's sources.json under `refs` (refs.mjs); otherwise falls back to the first product + generic patterns.
 // If end-ref is omitted, it's detected with integration-branch.mjs: the branch with the most merged PRs in the
 // last 90 days (some projects merge to a branch other than the default one before releasing — internal request
@@ -41,15 +42,16 @@ const log = logRaw.split("\x1e").map(r => r.replace(/^\n+/, "")).filter(Boolean)
 // No remote / no gh / offline: gh can't read PRs at all in a lot of real repos (this
 // one included - no GitHub remote). That used to print a "PR could not be read: <raw error>" line and stop
 // there; now it's one quiet note plus a local-branch fallback for "close to merging" (see below), same as recent.mjs.
-const prs = [];
+const prs = [], PR_LIMIT = 30;
 let noRemote = false;
 try {
   const sinceMs = /^\d{4}-\d{2}-\d{2}/.test(from || "") ? Date.parse(from + (/\d:\d/.test(from) ? "" : "T00:00:00")) : 0;
-  const js = JSON.parse(execFileSync("gh", ["pr", "list", "--state", "open", "--limit", "30", "--json", "number,title,author,isDraft,commits"], { cwd: repo, encoding: "utf8", maxBuffer: 256 << 20 }));
+  const js = JSON.parse(execFileSync("gh", ["pr", "list", "--state", "open", "--limit", String(PR_LIMIT), "--json", "number,title,author,isDraft,commits"], { cwd: repo, encoding: "utf8", maxBuffer: 256 << 20 }));
   for (const p of js) {
     const own = (p.commits || []).filter(c => !/^Merge /.test(c.messageHeadline) && Date.parse(c.committedDate) >= sinceMs);
-    prs.push({ n: p.number, t: p.title, a: p.author.login, draft: p.isDraft, count: own.length, last: own.at(-1)?.committedDate });
-    for (const c of own) log.push({ h: c.oid.slice(0, 9), d: local(c.committedDate), iso: c.committedDate, a: (c.authors?.[0]?.login || c.authors?.[0]?.name || p.author.login), s: fullTitle(c), where: `#${p.number}` });
+    const login = p.author?.login || "ghost"; // a deleted account comes back without an author: one such PR must not make every PR "unreadable"
+    prs.push({ n: p.number, t: p.title, a: login, draft: p.isDraft, count: own.length, last: own.at(-1)?.committedDate });
+    for (const c of own) log.push({ h: c.oid.slice(0, 9), d: local(c.committedDate), iso: c.committedDate, a: (c.authors?.[0]?.login || c.authors?.[0]?.name || login), s: fullTitle(c), where: `#${p.number}` });
   }
 } catch { noRemote = true; }
 const localBranches = noRemote
@@ -88,7 +90,13 @@ o += `\n- **Dependency updates:** ${deps.length} commits (${deps.map(c => (c.s.m
 o += `\n## Without a reference (${none.length})\n\n${[...types].map(([k, n]) => `${k} ${n}`).join(" · ")}\n\n`;
 for (const c of none.filter(c => !/^(chore\(deps\)|test|style|Merge)/.test(c.s)).slice(0, 25)) o += `- \`${c.h}\` ${c.a}: ${c.s.slice(0, 120)}\n`;
 process.stdout.write(o);
-if (jsonOut) fs.writeFileSync((fs.mkdirSync(path.dirname(jsonOut), { recursive: true }), jsonOut), JSON.stringify({ type: "state", generated: new Date().toISOString(), range: range.join(" "), ...(toReason ? { endRef: to, endRefReason: toReason } : {}), main: mainN, pr: log.length - mainN, lastMain: log.find(c => c.where === "main")?.h || null,
+if (jsonOut) fs.writeFileSync((fs.mkdirSync(path.dirname(jsonOut), { recursive: true }), jsonOut), JSON.stringify({ type: "state", generated: new Date().toISOString(), range: range.join(" "), ...(toReason ? { endRef: to, endRefReason: toReason } : {}), main: mainN,
+  // `pr` is NOT a count of open PRs (Cloud showed "307 open PRs" for 2). It is log.length - mainN: the commits of open PRs
+  // plus every merge commit on main in the range (a merge-commit workflow has hundreds). Kept as it was, for older readers; the honest
+  // numbers are the two next to it: `prCommits` (non-merge commits on open PRs, the figure the markdown prints) and `openPrs` (how many
+  // open PRs gh listed, at most 30 because of --limit, and `openPrsCapped: true` says the list hit that limit, so "30" is "30 or more"; null when gh
+  // could not be read, so "0" is never claimed without knowing).
+  pr: log.length - mainN, prCommits: log.filter(c => !c.merge).length - mainN, openPrs: noRemote ? null : prs.length, ...(!noRemote && prs.length >= PR_LIMIT ? { openPrsCapped: true } : {}), lastMain: log.find(c => c.where === "main")?.h || null,
   prs: prs.map(p => ({ n: p.n, t: p.t, a: p.a, draft: p.draft, count: p.count, last: p.last ? local(p.last) : null })),
   noRemote, localBranches: localBranches.map(b => ({ branch: b.branch, ahead: b.ahead, last: local(b.last), author: b.author, subject: b.subject, refs: b.refs })),
   groups: [...groups].sort((a, b) => order(a[0]) - order(b[0])).map(([r, cs]) => ({ ref: r, n: cs.length, where: [...new Set(cs.map(c => c.where))], who: [...new Set(cs.map(c => c.a))], last: cs[0].d, topic: cs[cs.length - 1].s, ...(waveCol ? { wave: waveInfo.map.get(r) || "—" } : {}) })),

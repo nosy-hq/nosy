@@ -203,3 +203,73 @@ test("a copy of the skill installed by `nosy install` checks healthy on its own 
   assert.match(r.output, /✓ skill copies found: Claude Code here/);
   assert.match(r.output, /– no hooks here \(the skill without the plugin\).*\/plugin install nosy@nosy adds them/);
 });
+
+// first run on a real product, `doctor` called a pm/ fine while its matrix still had old keys and its page an old marker.
+test("pm/ contents: the matrix is read the way publish reads it, the page's old marker is named, optional setup is listed", async () => {
+  const root = plugin(), cwd = tmp("nosy-cwd-"), go = () => checkPlugin(root, { cwd });
+  put(cwd, { "a.txt": "x" }); git(cwd, "init", "-q", "-b", "main"); git(cwd, "add", "-A"); git(cwd, "commit", "-qm", "first");
+  // A matrix keyed in another language: Nosy reads it, the dashboard can't read the file itself.
+  put(cwd, { "pm/sources.json": { repo: ".", ref: "main", page: "page.html" }, "pm/matrix.json": { urunler: ["Biz", "Rakip"], satirlar: [{ ozellik: "Dışa aktar", kodlar: { Biz: "y", Rakip: "p" } }] } });
+  const tr = line(await go(), /matrix\.json is keyed in another language \(1 areas\)/);
+  assert.equal(tr.level, "warn");
+  assert.match(tr.fix, /neighbors.*English keys/);
+  // Codes the owner's own: a note with the mapping hint; mapped through matrixCodes it is just a note of what was mapped.
+  put(cwd, { "pm/matrix.json": { products: ["Us", "R"], lines: [{ feature: "A", codes: { Us: "y", R: "n" } }, { feature: "B", codes: { Us: "y", R: "z" } }] } });
+  const unk = line(await go(), /matrix\.json: .*still unknown to the dashboard: z \(1\)/);
+  assert.equal(unk.level, "note");
+  assert.match(unk.fix, /matrixCodes/);
+  put(cwd, { "pm/matrix.json": { products: ["Us", "R"], lines: [{ feature: "A", codes: { Us: "y", R: "n" } }] } });
+  assert.equal(line(await go(), /matrix\.json reads: 1 areas × 1 rival/).level, "ok");
+  // The page's old marker.
+  put(cwd, { "pm/page.html": "<main><!-- pm:otomatik -->x<!-- /pm:otomatik --></main>" });
+  const marker = line(await go(), /has the old marker pm:otomatik/);
+  assert.equal(marker.level, "warn");
+  assert.match(marker.fix, /<!-- pm:auto -->/);
+  // Optional setup, one line.
+  const opt = line(await go(), /optional setup: rivals \(none yet\) – · research tool not chosen – · no Cloud target – · no map\.md –/);
+  assert.equal(opt.level, "note");
+  put(cwd, { "pm/rivals/acme.md": "x", "pm/map.md": "x", "pm/sources.json": { repo: ".", ref: "main", research: { tool: "web" }, cloud: { url: "https://example.test" } } });
+  assert.match(line(await go(), /optional setup:/).what, /rivals \(1 file\) ✓ · research tool chosen ✓ · Cloud target set ✓ · map\.md ✓/);
+  // None of these is a hard failure.
+  assert.equal(exitCode(await go()), 0);
+});
+
+// ---- review of 2 Oct: pm/ is found the way every command finds it, odd sources.json values are a line each, a broken matrix file never stops the check ----
+test("doctor --check finds pm/ above the folder it runs in, and an explicit --pm still wins", async () => {
+  const root = plugin(), proj = tmp("nosy-proj-");
+  put(proj, { "a.txt": "x" }); git(proj, "init", "-q", "-b", "main"); git(proj, "add", "-A"); git(proj, "commit", "-qm", "first");
+  put(proj, { "pm/sources.json": { repo: ".", ref: "main" } });
+  const deeper = path.join(proj, "apps", "web"); fs.mkdirSync(deeper, { recursive: true });
+  const R = await checkPlugin(root, { cwd: deeper });
+  assert.ok(line(R, /sources\.json reads; repo \. at main resolves/), R.lines.map(l => l.what).join(" | "));
+  assert.equal(line(R, /no pm\/ here/), undefined);
+  const none = await checkPlugin(root, { cwd: tmp("nosy-elsewhere-") });
+  assert.ok(line(none, /no pm\/ here/), "nothing above: still 'not moved in', a note");
+  const viaArg = await checkPlugin(root, { cwd: tmp("nosy-elsewhere-"), pm: path.join(proj, "pm") });
+  assert.ok(line(viaArg, /sources\.json reads/));
+});
+
+test("sources.json values of the wrong type are lines, never a crash: repo as a number or a list, matrix and page as numbers, matrixCodes as a list", async () => {
+  const root = plugin(), cwd = tmp("nosy-cwd-");
+  put(cwd, { "a.txt": "x" }); git(cwd, "init", "-q", "-b", "main"); git(cwd, "add", "-A"); git(cwd, "commit", "-qm", "first");
+  for (const repo of [7, ["."], { a: 1 }, true]) {
+    put(cwd, { "pm/sources.json": { repo, ref: "main" } });
+    const R = await checkPlugin(root, { cwd });
+    const l = line(R, /`repo` isn't text/); assert.ok(l, JSON.stringify(repo)); assert.equal(l.level, "fail"); assert.match(l.fix, /path of the product's git folder/);
+    assert.equal(exitCode(R), 2);
+  }
+  put(cwd, { "pm/sources.json": { repo: ".", ref: 12, matrix: 5, page: 9, matrixCodes: ["s"], research: 4, cloud: "x" } });
+  const R = await checkPlugin(root, { cwd });
+  assert.ok(R.lines.length > 5, "the check ran to the end");
+  assert.ok(line(R, /optional setup:/));
+});
+
+test("a matrix file that can't be read, or whose reader throws, is one warning and the rest of the check still runs", async () => {
+  const root = plugin(), cwd = tmp("nosy-cwd-");
+  put(cwd, { "a.txt": "x" }); git(cwd, "init", "-q", "-b", "main"); git(cwd, "add", "-A"); git(cwd, "commit", "-qm", "first");
+  put(cwd, { "pm/sources.json": { repo: ".", ref: "main" }, "pm/matrix.json": "{ half written", "pm/page.html": "<html></html>" });
+  const R = await checkPlugin(root, { cwd });
+  const l = line(R, /matrix\.json can't be read as a matrix/); assert.ok(l, R.lines.map(x => x.what).join(" | ")); assert.equal(l.level, "warn");
+  assert.ok(line(R, /optional setup:/), "and the check went on");
+  assert.equal(exitCode(R), 0, "a damaged matrix is a warning, not a hard failure");
+});

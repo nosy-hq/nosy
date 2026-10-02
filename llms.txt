@@ -7,8 +7,8 @@ Nosy is a product manager that lives inside your coding agent. It reads your bac
 ## What it reads, writes and sends
 
 - Reads: Nosy reads your code, git history, GitHub issues and PRs including their text (titles, bodies, comments and author logins, through your own `gh`), your decision and roadmap docs, and public web pages.
-- Writes: Nosy writes to your `pm/` folder, plus a few named files: temporary files, a first-run marker, the skill folders `nosy install` copies and files you name with a flag. The optional weekly GitHub Action commits and pushes `pm/state/` and the decision page only if you set `commit: "true"`.
-- Sends: Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed, and GitHub through your own `gh`, including a read-only lookup of the `#N` issues your agent's answer cites (`NOSY_CITE_GH=0` turns that off), and, when you run `nosy rival-demand`, the public issues and Discussions of the open-source rivals you name. `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes).
+- Writes: Nosy writes to your `pm/` folder, plus a few named files: temporary files, a first-run marker, the skill folders `nosy install` copies, a hand-built page of yours when you run `nosy page-adopt` (after a copy in `pm/.backup/`) and files you name with a flag. The optional weekly GitHub Action commits and pushes `pm/state/` and the decision page only if you set `commit: "true"`.
+- Sends: Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed (and Apple's public app lookup for a rival whose store id you set), and GitHub through your own `gh`, including a read-only lookup of the `#N` issues your agent's answer cites (`NOSY_CITE_GH=0` turns that off), and, when you run `nosy rival-demand`, the public issues and Discussions of the open-source rivals you name. `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes).
 - No telemetry. The full list is in docs/DATA.md (see Links).
 
 ## Install
@@ -24,7 +24,7 @@ Nosy is a product manager that lives inside your coding agent. It reads your bac
 npx github:nosy-hq/nosy install
 ```
 
-Send the two Claude Code commands one at a time. Then, with the plugin, run `/nosy:move-in` (plugin commands are always `/nosy:<command>`, the top-level skill is `/nosy:nosy`). With the skill-only install, type `/nosy` (Codex: `$nosy`). Or ask your agent to run Nosy commands.
+Send the two Claude Code commands one at a time. Then, with the plugin, run `/nosy:move-in`; it ends with `/nosy:tour`, which says first what Nosy reads, writes and sends, then asks its questions once (plugin commands are always `/nosy:<command>`, the top-level skill is `/nosy:nosy`). With the skill-only install, type `/nosy` (Codex: `$nosy`). Or ask your agent to run Nosy commands.
 
 ## Paste to your agent
 

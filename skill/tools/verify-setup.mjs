@@ -10,7 +10,9 @@ import { Default as THRESHOLD_DEFAULT } from "./thresholds.mjs";
 import { decisionsOfRead } from "./read-decisions.mjs";
 import { frontendAppsFind } from "./inventory.mjs";
 import { sourcesProblem } from "./hints.mjs";
-import { readSources } from "./sources-file.mjs";
+import { readSources, rivalsPathAbs, rivalFiles } from "./sources-file.mjs";
+import { appStoreOf } from "./rival-sweep.mjs";
+import { tierOf } from "./rival-tiers.mjs";
 const argv = process.argv.slice(2), fix = argv.includes("--fix"), pm = argv.find(a => !a.startsWith("--")) || "pm";
 const kf = path.join(pm, "sources.json"), rows = [];
 const ok = (what, result, note = "") => rows.push({ what, result, note });
@@ -110,7 +112,8 @@ if (K.preread) {
 for (const r of K.preread?.never || []) rx(`never: ${r.name}`, r.pattern);
 // Product language: a general row even when preread.decisions isn't set (glossary.
 // notDoing/measurement below also feed canwe.mjs's word matching, not only read-decisions.mjs).
-ok("language", K.language ? "✓" : "–", K.language ? `"${K.language}" — read-decisions.mjs/text.mjs use it instead of guessing per text` : "not set; text.mjs detects per text (script), read-decisions.mjs assumes English/Turkish only");
+if (K.language !== undefined && (typeof K.language !== "string" || !K.language.trim())) ok("language", "✗", `not text (it is ${Array.isArray(K.language) ? "a list" : K.language === "" || typeof K.language === "string" ? "empty" : typeof K.language}): write the language's name, e.g. "Turkish", or its code, "tr"`);
+else ok("language", K.language ? "✓" : "–", K.language ? `"${K.language}" — read-decisions.mjs/text.mjs use it instead of guessing per text` : "not set; text.mjs detects per text (script), read-decisions.mjs assumes English/Turkish only");
 // Glossary: the {"source term": ["target term", ...]} shape gather-evidence.mjs's
 // two-way expansion needs. `notDoing`/`measurement`, `design`/`prd` (internal request
 // 105/106, entries shaped "<field>:<word>", read by dresscode/read-design.mjs and audit-prd.mjs), and
@@ -171,13 +174,54 @@ if (K.inventory) {
     missing.length ? `${missing.length} frontend-shaped app(s) not listed in inventory.frontend: ${missing.slice(0, 8).join(", ")}${missing.length > 8 ? "…" : ""}` : `${detected.length} frontend-shaped app(s) detected, all listed`);
 }
 // Matrix
-if (K.matrix) { try { JSON.parse(fs.readFileSync(K.matrix, "utf8")); const MO = matrixRead(K.matrix); ok("matrix", MO ? "✓" : "✗", MO ? `${MO.lines.length} rows × ${MO.products.length} products (${MO.format} shape${MO.oh.size ? `, ${MO.oh.size} dead rival(s) excluded from the count` : ""})` : "unrecognized shape: has neither lines nor steps (lowhanging's 4th signal won't work)"); } catch (e) { ok("matrix", "✗", `${K.matrix}: ${e.message.slice(0, 60)}`); } }
+if (K.matrix) { try { JSON.parse(fs.readFileSync(K.matrix, "utf8")); const MO = matrixRead(K.matrix, { codes: K.matrixCodes }); ok("matrix", MO ? "✓" : "✗", MO ? `${MO.lines.length} rows × ${MO.products.length} products (${MO.format} shape${MO.oh.size ? `, ${MO.oh.size} dead rival(s) excluded from the count` : ""})` : "unrecognized shape: has neither lines nor steps (lowhanging's 4th signal won't work)"); } catch (e) { ok("matrix", "✗", `${K.matrix}: ${e.message.slice(0, 60)}`); } }
 // Issue repo
 if (K.issue) { try { execFileSync("gh", ["repo", "view", K.issue.repo, "--json", "name"], { stdio: "ignore" }); ok("issue.repo", "✓", K.issue.repo); } catch { ok("issue.repo", "✗", `${K.issue.repo} couldn't be read with gh`); } if (K.issue.our) rx("issue.our", K.issue.our); else ok("issue.our", "–", "not set (optional: a title prefix for your own team's issues; find-sources leaves it blank when it isn't sure)"); }
+// Keys added for the first runs on real products (207). One row each; a ✗ row says what to write instead.
+// team: GitHub logins of the people who build the product. Their issues are work items, not demand (collect-signals.mjs, lowhanging.mjs).
+if (K.team === undefined) ok("team", "–", "not set (optional: your own GitHub logins, so your own issues aren't counted as customers asking)");
+else if (typeof K.team === "string") ok("team", K.team.trim() ? "~" : "✗", K.team.trim() ? `"${K.team}" works as one login; write a list, ["${K.team.trim().replace(/^@/, "")}", …]` : 'empty: write a list of GitHub logins, ["ali", "veli"]');
+else if (!Array.isArray(K.team)) ok("team", "✗", `not a list (it is ${K.team === null ? "null" : typeof K.team}): write ["login", "login"]`);
+else { const bad = K.team.filter(x => typeof x !== "string" || !/^@?[A-Za-z0-9][A-Za-z0-9-]*$/.test(x.trim()));
+  ok("team", bad.length ? "✗" : "✓", bad.length ? `${bad.length} entr${bad.length === 1 ? "y isn't" : "ies aren't"} a GitHub login (${bad.slice(0, 3).map(x => JSON.stringify(x)).join(", ")}): letters, digits and dashes, no spaces or e-mail addresses` : `${K.team.length} login${K.team.length === 1 ? "" : "s"}: their issues count as work items, not demand`); }
+// rivalsPath: a folder (relative to the folder that holds pm/, or absolute) that already holds the rival research.
+if (K.rivalsPath === undefined || K.rivalsPath === "") ok("rivalsPath", "–", "not set (rival files are read from pm/rivals)");
+else if (typeof K.rivalsPath !== "string") ok("rivalsPath", "✗", `not text (it is ${Array.isArray(K.rivalsPath) ? "a list" : typeof K.rivalsPath}): a folder path, e.g. "references/competitors"`);
+else { const at = rivalsPathAbs(pm, K); let isDirectory = false; try { isDirectory = fs.statSync(at).isDirectory(); } catch {}
+  if (!isDirectory) ok("rivalsPath", "✗", `${K.rivalsPath} isn't a folder (looked in ${at}): fix the path (it is read from the folder that holds pm/), or remove \`rivalsPath\``);
+  else { const n = rivalFiles(at, { nested: true }).length; ok("rivalsPath", n ? "✓" : "~", n ? `${K.rivalsPath}: ${n} rival file${n === 1 ? "" : "s"} (\`nosy rivals-import\` copies them into pm/rivals)` : `${K.rivalsPath} exists but holds no rival-shaped markdown (a "Latest major announcement" field, a "Position relative to" heading, or a feature table)`); } }
+// matrixCodes: the owner's own cell letters → y p n u d. Only those five are words Nosy has.
+if (K.matrixCodes !== undefined) {
+  const M = K.matrixCodes, own = ["y", "p", "n", "u", "d"];
+  if (!M || typeof M !== "object" || Array.isArray(M)) ok("matrixCodes", "✗", `not an object (it is ${Array.isArray(M) ? "a list" : M === null ? "null" : typeof M}): map your letters to Nosy's, {"s": "d", "f": "p"}`);
+  else { const bad = Object.entries(M).filter(([, v]) => !own.includes(v)), same = Object.keys(M).filter(k => own.includes(k));
+    ok("matrixCodes", bad.length ? "✗" : same.length ? "~" : "✓", bad.length ? `${bad.map(([k, v]) => `${JSON.stringify(k)} → ${JSON.stringify(v)}`).slice(0, 4).join(", ")}: each must map to one of y (done) p (partial) n (missing) u (unknown) d (announced)` : same.length ? `${same.join(", ")} already ${same.length === 1 ? "is" : "are"} Nosy's own code${same.length === 1 ? "" : "s"} and is never remapped: remove ${same.length === 1 ? "it" : "them"}` : `${Object.keys(M).length} of your letters mapped to Nosy's`); }
+}
+// rivals.<slug>.tier (A deep, B watch only, C reference) and rivals.<slug>.stores.appStore (the app's number or its apps.apple.com link).
+if (K.rivals !== undefined) {
+  if (!K.rivals || typeof K.rivals !== "object" || Array.isArray(K.rivals)) ok("rivals", "✗", `not an object (it is ${Array.isArray(K.rivals) ? "a list" : K.rivals === null ? "null" : typeof K.rivals}): { "<slug>": { "name": …, "tier": "A" } }`);
+  else { let tiers = 0, stores = 0;
+    for (const [slug, R] of Object.entries(K.rivals)) {
+      if (!R || typeof R !== "object" || Array.isArray(R)) { ok(`rivals.${slug}`, "✗", `not an object: { "name": …, "tier": "A" }`); continue; }
+      if (R.tier !== undefined) { tiers++; if (!tierOf(R.tier)) ok(`rivals.${slug}.tier`, "✗", `${JSON.stringify(R.tier)} isn't A, B or C (it counts as A): A deep research, B watch only, C reference`); }
+      if (R.stores !== undefined) {
+        if (!R.stores || typeof R.stores !== "object" || Array.isArray(R.stores)) { ok(`rivals.${slug}.stores`, "✗", `not an object: { "appStore": "id123456789", "country": "tr" }`); continue; }
+        if (R.stores.appStore !== undefined) { stores++; if (!appStoreOf(R.stores)) ok(`rivals.${slug}.stores.appStore`, "✗", `${JSON.stringify(R.stores.appStore)} has no App Store id: use the number from the app's address (id123456789) or its apps.apple.com link`); }
+        if (R.stores.country !== undefined && !/^[A-Za-z]{2}$/.test(String(R.stores.country).trim())) ok(`rivals.${slug}.stores.country`, "✗", `${JSON.stringify(R.stores.country)} isn't a two-letter country code ("us" is used): "tr", "de", …`);
+      }
+    }
+    ok("rivals", "✓", `${Object.keys(K.rivals).length} in the registry${tiers ? `, ${tiers} with a tier` : ""}${stores ? `, ${stores} with an App Store entry` : ""}`); }
+}
+// tour.tokensPerRival: your own figure for what one rival's research costs, in tokens (otherwise about 98,000, from one earlier run).
+if (K.tour !== undefined) {
+  if (!K.tour || typeof K.tour !== "object" || Array.isArray(K.tour)) ok("tour", "✗", `not an object (it is ${Array.isArray(K.tour) ? "a list" : K.tour === null ? "null" : typeof K.tour}): { "tokensPerRival": 80000 }`);
+  else if (K.tour.tokensPerRival !== undefined) ok("tour.tokensPerRival", typeof K.tour.tokensPerRival === "number" && Number.isFinite(K.tour.tokensPerRival) && K.tour.tokensPerRival > 0 ? "✓" : "✗",
+    typeof K.tour.tokensPerRival === "number" && Number.isFinite(K.tour.tokensPerRival) && K.tour.tokensPerRival > 0 ? `${K.tour.tokensPerRival.toLocaleString("en-US")} tokens per rival: used in the cost shown before research starts` : `${JSON.stringify(K.tour.tokensPerRival)} isn't a positive number: write the tokens one rival's research cost you, e.g. 80000`);
+}
 // Auto-section data
 for (const f of ["status.json", "lowhanging.json"]) { const p = path.join(pm, "state", f); ok(`state/${f}`, fs.existsSync(p) ? "✓" : "–", fs.existsSync(p) ? `${fs.statSync(p).mtime.toLocaleString("en-US")}` : "not there yet (the auto-section on the page stays empty)"); }
 
-if (changed) { if (K.repoAsWritten !== undefined) K.repo = K.repoAsWritten; } // write back what the file said, not the resolved path
+if (changed) { if (K.repoAsWritten !== undefined) K.repo = K.repoAsWritten; if (K.matrixAsWritten !== undefined) K.matrix = K.matrixAsWritten; } // write back what the file said, not the resolved paths
 if (changed) fs.writeFileSync(kf, JSON.stringify(K, null, 1) + "\n");
 print(); process.exit(rows.some(r => r.result === "✗") ? 2 : 0);
 function print() { console.log(`# sources.json verification · ${kf}\n\n| What | Result | Note |\n|---|---|---|\n${rows.map(r => `| ${r.what} | ${r.result} | ${String(r.note).replace(/\|/g, "/")} |`).join("\n")}${changed ? "\n\nsources.json updated." : ""}`); }

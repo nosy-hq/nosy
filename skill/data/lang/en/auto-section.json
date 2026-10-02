@@ -1,0 +1,65 @@
+{
+  "locale": "en-US",
+  "since": "since {date} {time} · {ref}",
+  "generated": "generated {when}",
+  "eyebrow": "Automatic · script output",
+  "title": "What shipped today, what's cheap",
+  "intro": "This section was written by <code>collect-status</code> and <code>lowhanging</code>; don't edit it by hand, it's refreshed on every run.",
+  "decision": {
+    "heading": "Next product decision",
+    "checked": "Checked against the code.",
+    "unchecked": "Not checked yet: run psst's check step before committing to it.",
+    "same": " The after-commit nudge and <code>/nosy:nosy</code> (plugin) or <code>/nosy</code> (skill install) say the same one.",
+    "source": " Source: {source}."
+  },
+  "checkedList": {
+    "heading": "Checked this week",
+    "stats": "{stands} stand · {weakened} corrected · {refuted} dropped after checking",
+    "fromReading": " · {n} from reading the code",
+    "corrected": "corrected"
+  },
+  "team": {
+    "heading": "On the team's own list",
+    "meta": "{files} · the latest paragraphs that cite the code · {found}"
+  },
+  "delivery": {
+    "heading": "Delivery",
+    "meta": "{range} · {main} on main, {pr} commits on open PRs · last main <code>{lastMain}</code> · {generated}",
+    "draft": " (draft)",
+    "commits": "{count} commits",
+    "last": ", last {last}",
+    "ref": "Ref",
+    "topic": "Latest topic",
+    "none": "No decision- or item-referenced commits in this range.",
+    "note": "Decision- and item-referenced groups; issue references and {n} commits without a reference are in the detailed report."
+  },
+  "cheap": {
+    "heading": "Low-hanging fruit",
+    "full": " (full list)",
+    "unchecked": " (unchecked)",
+    "meta": "{ref} · score = value / effort · faded row = in an open PR · {generated}",
+    "score": "Score",
+    "effort": "Effort",
+    "work": "Work",
+    "total": "The list is evidence; a decision-maker owns what gets done. {n} items total.",
+    "nothing": "Nothing found this time.",
+    "missing": " Missing inputs: {why}.",
+    "parked": " {n} left off: a decision parks them.",
+    "inProgress": " {n} already in progress."
+  },
+  "stale": {
+    "heading": "May be stale",
+    "meta": "{page} · a hand-written line conflicts with the script's output · {generated}",
+    "type": "Type",
+    "ref": "Ref",
+    "line": "Line",
+    "evidence": "Evidence",
+    "note": "A conflict found by find-stale; the page wasn't changed, the owner fixes the line."
+  },
+  "design": {
+    "heading": "Design system",
+    "meta": "{ready} ready · {partial} partial · {missing} missing · {ask} to ask (20 fields) · {date}",
+    "item": "<b>{area}</b> · {status} — missing: {missing}",
+    "note": "Picked by dresscode, what's important right now against the roadmap; detail at pm/design/{date}.md."
+  }
+}

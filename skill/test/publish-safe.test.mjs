@@ -8,7 +8,7 @@ import http from "node:http";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { temporary, clean, Tool } from "./helpers.mjs";
-import { safeStatus, safeDiff, safeLowhanging, safeSummary, withoutIssueTitle, authorNames } from "../tools/publish-safe.mjs";
+import { safeStatus, safeDiff, safeLowhanging, safePsstFinal, finalIsCurrent, safeSummary, safeRuns, safeGlance, withoutIssueTitle, authorNames, branchNames, PayloadKeys } from "../tools/publish-safe.mjs";
 
 const PUBLISH = path.join(Tool, "publish.mjs");
 let tmp, pm, server, url, got;
@@ -168,4 +168,141 @@ test("the summary's second section is never scanned or sent (only the first goes
   const r = await run([d, "--url", url, "--yes"], { NOSY_CLOUD_TOKEN: "nsy_good" });
   assert.equal(r.code, 0, r.error);
   assert.ok(!got.body.files["pm/summary.md"].includes("jamie"));
+});
+
+// ---- honest labels, the checked list, the held items ----
+// First run on a real product: "307 open PRs" (really 2), items the owner had held or the refuter had dropped under "Could come next".
+const BRANCH = "side/quincy-secret-branch", CHECKED_AT = "src/zebra/secret-path.go:42", DROPPED = "Dropped zebra idea nobody should read";
+const FINAL = { type: "psstFinal", generated: "2026-09-30T10:00:00Z", stats: { drafted: 4, stands: 1, weakened: 1, refuted: 2, precision: 0.25, fromList: 2, fromReading: 0 },
+  items: [
+    { id: 1, title: "orders · 3 fields", claim: "the long claim", size: "S", type: "Backend ready, not on screen", evidence: ["api/orders.go:10"], receipt: 3, verdict: "stands", checked: [CHECKED_AT] },
+    { id: 2, title: `#12 ${ISSUE_TITLE}`, claim: "c", size: "M", size_before: "S", type: "Issue opened against us", evidence: [`${AUTHOR} · 2026-09-29`], receipt: 1, verdict: "weakened", fix: `M: partly on ${BRANCH}`, why: `${AUTHOR} wrote it on ${BRANCH}`, checked: [CHECKED_AT] }],
+  dropped: [{ id: 3, title: DROPPED, why: `already on ${BRANCH}`, checked: [CHECKED_AT] }] };
+const RECEIPTS = { type: "receipts", ref: "main", items: [
+  { rank: 1, type: "Issue opened against us", title: `#12 ${ISSUE_TITLE}`, gate: null },
+  { rank: 3, type: "Backend ready, not on screen", title: "Orders · 3 Fields", gate: { held: true, because: [{ at: "api/orders.go:9", refs: ["#385"], decisions: [] }] } },
+  { rank: 2, type: "Shipped, not tied to any plan", title: "web · 2 features in the last 30 days", gate: null }] };
+
+test("unit: status carries the honest PR numbers when it has them, and stays as it was when it does not", () => {
+  const S = safeStatus({ ...STATUS, pr: 307, prCommits: 17, openPrs: 2 });
+  assert.deepEqual([S.pr, S.prCommits, S.openPrs], [307, 17, 2]);
+  assert.equal(safeStatus({ ...STATUS, openPrs: null }).openPrs, null, "gh could not be read: null stays null, never a made-up 0");
+  assert.ok(!("prCommits" in safeStatus(STATUS)) && !("openPrs" in safeStatus(STATUS)), "an older status file adds nothing");
+  assert.match(PayloadKeys["pm/state/status.json"], /pr \(commits on open PRs plus merges on main, not a PR count\), prCommits, openPrs/);
+});
+
+test("unit: the raw list leaves out what the receipts hold on purpose, and says how many (leftOut)", () => {
+  const L = safeLowhanging(LOW, RECEIPTS);
+  assert.equal(L.leftOut, 1);
+  assert.deepEqual(L.items.map(i => i.title), ["#12", "web · 2 features in the last 30 days"], "matched by title, case does not matter");
+  assert.equal(safeLowhanging(LOW).leftOut, 0);
+  assert.equal(safeLowhanging(LOW).items.length, 3, "without receipts nothing is dropped: it cannot know");
+  assert.equal(safeLowhanging(LOW, { items: [{ title: "orders · 3 fields", gate: { held: false } }, { title: "web · 2 features in the last 30 days", gate: null }] }).leftOut, 0, "only gate.held counts");
+  assert.equal(safeLowhanging(LOW, { oops: true }).items.length, 3, "a receipts file in an unexpected shape drops nothing");
+});
+
+test("unit: the checked list leaves as title, size, type, verdict and evidence; never the check lists, dropped titles, free text, receipts or branches", () => {
+  const F = safePsstFinal(FINAL), text = JSON.stringify(F);
+  assert.deepEqual(Object.keys(F).sort(), ["generated", "items", "stats", "type"]);
+  assert.deepEqual(F.stats, { drafted: 4, stands: 1, weakened: 1, refuted: 2 }, "only counts");
+  assert.deepEqual(F.items[0], { title: "orders · 3 fields", size: "S", type: "Backend ready, not on screen", verdict: "stands", evidence: ["api/orders.go:10"] }, "evidence references as written");
+  assert.deepEqual(F.items[1], { title: "#12", size: "M", type: "Issue opened against us", verdict: "weakened", evidence: ["2026-09-29"] }, "an issue title reduces to #N and its author goes");
+  for (const w of [CHECKED_AT, DROPPED, BRANCH, AUTHOR, ISSUE_TITLE, "long claim", "receipt", "dropped", "checked\""]) assert.ok(!text.includes(w), `${w} must not leave`);
+  assert.deepEqual(safePsstFinal({ items: [{ title: "x", type: "Shipped, not tied to any plan", evidence: [`abc1234 ${SUBJECT}`] }] }).items[0].evidence, [], "commit subjects never leave");
+  assert.match(PayloadKeys["pm/state/psst-final.json"], /no file:line check lists, no dropped titles, no receipts/);
+});
+
+test("unit: the checked list counts as current only when it is as new as the raw list", () => {
+  const d = path.join(tmp, "fresh-check", "pm"); const st = f => path.join(d, "state", f);
+  write(st("lowhanging.json"), { ...LOW, generated: "2026-09-30T09:00:00Z" });
+  assert.equal(finalIsCurrent(d), false, "no checked list yet");
+  write(st("psst-final.json"), { ...FINAL, generated: "2026-09-30T10:00:00Z" });
+  assert.equal(finalIsCurrent(d), true, "newer");
+  write(st("psst-final.json"), { ...FINAL, generated: "2026-09-30T09:00:00Z" });
+  assert.equal(finalIsCurrent(d), true, "as new as");
+  write(st("psst-final.json"), { ...FINAL, generated: "2026-09-30T08:59:59Z" });
+  assert.equal(finalIsCurrent(d), false, "older than the list it checked");
+  fs.rmSync(st("lowhanging.json"));
+  assert.equal(finalIsCurrent(d), true, "no raw list at all: the checked one stands");
+});
+
+test("publish: a current checked list goes (cut down), the held item is left out of the raw list, and the notes say both", async () => {
+  const d = path.join(tmp, "checked", "pm"); fs.cpSync(pm, d, { recursive: true });
+  write(path.join(d, "state", "lowhanging.json"), { ...LOW, generated: "2026-09-30T09:00:00Z" });
+  write(path.join(d, "state", "psst-final.json"), FINAL);
+  write(path.join(d, "state", "receipts.json"), RECEIPTS);
+  got = null;
+  const dry = await run([d, "--url", url, "--dry-run"]);
+  assert.match(dry.output, /pm\/state\/psst-final\.json .*after the refuter checked it/);
+  assert.match(dry.output, /1 item on the list is held on purpose \(pm\/state\/receipts\.json\), so it was left out of the list sent\./);
+  const r = await run([d, "--url", url, "--yes"], { NOSY_CLOUD_TOKEN: "nsy_good" });
+  assert.equal(r.code, 0, r.error);
+  assert.ok("pm/state/psst-final.json" in got.body.files);
+  const sent = JSON.stringify(got.body);
+  for (const w of [CHECKED_AT, DROPPED, BRANCH, AUTHOR, ISSUE_TITLE]) assert.ok(!sent.includes(w), `${w} must not be sent`);
+  assert.equal(JSON.parse(got.body.files["pm/state/lowhanging.json"]).leftOut, 1);
+  assert.ok(!JSON.parse(got.body.files["pm/state/lowhanging.json"]).items.some(i => i.title === "orders · 3 fields"), "the held item is not in the raw list that is sent");
+  assert.deepEqual(JSON.parse(got.body.files["pm/state/psst-final.json"]).items.map(i => i.title), ["orders · 3 fields", "#12"]);
+});
+
+test("publish: a checked list older than the raw list is not sent, and the note says to run psst again", async () => {
+  const d = path.join(tmp, "stale-check", "pm"); fs.cpSync(pm, d, { recursive: true });
+  write(path.join(d, "state", "lowhanging.json"), { ...LOW, generated: "2026-09-30T11:00:00Z" });
+  write(path.join(d, "state", "psst-final.json"), FINAL);
+  got = null;
+  const r = await run([d, "--url", url, "--yes"], { NOSY_CLOUD_TOKEN: "nsy_good" });
+  assert.equal(r.code, 0, r.error);
+  assert.ok(!("pm/state/psst-final.json" in got.body.files), "stale: left out, so the dashboard shows the raw list");
+  assert.match(r.output, /psst-final\.json is older than pm\/state\/lowhanging\.json, so it is not sent .* run psst again/);
+});
+
+test("publish: a name in the checked list stops the send like anywhere else (the scan covers the new file)", async () => {
+  const d = path.join(tmp, "named-check", "pm"); fs.cpSync(pm, d, { recursive: true });
+  write(path.join(d, "state", "psst-final.json"), { ...FINAL, items: [{ title: `${AUTHOR} should look at orders`, size: "S", type: "x", verdict: "stands", evidence: [] }] });
+  got = null;
+  const r = await run([d, "--url", url, "--yes"], { NOSY_CLOUD_TOKEN: "nsy_good" });
+  assert.equal(r.code, 1, r.error);
+  assert.equal(got, null, "nothing may be sent");
+});
+
+// ---- review of the 2 Oct 2026 change set ----
+test("unit: a signal change keeps its count and loses the customer who rode along in the detail", () => {
+  const D = safeDiff({ type: "diff", changes: [
+    { area: "signal", type: "fresh", severity: "medium", title: "Acme Corp wants SSO", detail: "2 requests · Acme Corp", reason: "New demand target.", source: "signals.json" },
+    { area: "signal", type: "changed", severity: "medium", title: "Acme Corp wants SSO", detail: "2 → 5 requests (+3)", reason: "Demand went up." }] });
+  assert.deepEqual(D.changes.map(c => [c.title, c.detail]), [["New demand target", "2 requests"], ["Demand target changed", "2 → 5 requests (+3)"]]);
+});
+
+test("unit: the checked list as psst writes it (no `type`): an issue's words, a login and a commit subject do not ride along; references do", () => {
+  const F = safePsstFinal({ generated: "g", stats: { drafted: 2, stands: 2 }, items: [
+    { id: 1, title: "#44 Customer says export is slow", size: "S", evidence: ["src/export.ts:12", "octocat · 2026-09-30", "abc1234 fix: customer words", "side/branch-name", "pm/request.md §5"], verdict: "stands", checked: ["x"], fix: "y", why: "z", claim: "c" },
+    { id: 2, title: "Plain title", size: "M", evidence: "api/a.go:3-9", verdict: "weakened" }] });
+  assert.equal(F.items[0].title, "#44");
+  assert.deepEqual(F.items[0].evidence, ["src/export.ts:12", "2026-09-30", "pm/request.md §5"]);
+  assert.deepEqual(F.items[1].evidence, ["api/a.go:3-9"]);
+  assert.deepEqual(Object.keys(F.items[0]).sort(), ["evidence", "size", "title", "type", "verdict"]);
+});
+
+test("unit: the first screen loses the decision's why; the shipped record's open-PR cap passes through", () => {
+  assert.equal(safeGlance({ decision: { title: "#7 Words", why: "corrected: on side/x", checked: true, checks: [] }, tiles: [] }).decision.why, "");
+  assert.equal(safeStatus({ groups: [], openPrs: 30, openPrsCapped: true, prCommits: 4 }).openPrsCapped, true);
+  assert.ok(!("openPrsCapped" in safeStatus({ groups: [], openPrs: 2 })));
+});
+
+test("unit: run history keeps five fields and numbers only; branch names are the owner's unmerged ones, shaped like a branch", () => {
+  assert.equal(safeRuns('{"zaman":"z","label":"l","ref":"main","lastMain":null,"folder":"f","extra":"x","numbers":{"a":1,"b":"two"}}\nnot json\n'), '{"zaman":"z","label":"l","ref":"main","lastMain":null,"numbers":{"a":1}}\n');
+  assert.equal(safeRuns(""), "");
+  const d = temporary("nosy-names-"); const q = path.join(d, "pm"); fs.mkdirSync(path.join(q, "state", "facts"), { recursive: true });
+  fs.writeFileSync(path.join(q, "state", "facts", "branches.json"), JSON.stringify({ branches: [{ branch: "side/pricing", author: "Dana Branch" }, { branch: "origin/main" }, { branch: "release" }, { branch: "fix-login-flow" }, { branch: "wip" }, { branch: "a/b" }] }));
+  fs.writeFileSync(path.join(q, "state", "receipts.json"), JSON.stringify({ items: [{ local: [{ branch: "side/receipt-one", author: "Quill Receiptman" }], edits: [{ branch: "side/edits" }] }] }));
+  try {
+    assert.deepEqual(branchNames(q).sort(), ["fix-login-flow", "side/edits", "side/pricing", "side/receipt-one"].sort());
+    assert.deepEqual(authorNames(q).sort(), ["Dana Branch", "Quill Receiptman"]);
+  } finally { clean(d); }
+});
+
+test("unit: a summary keeps nothing from before its first heading; a file with no heading is cut to 40 lines", () => {
+  assert.equal(safeSummary("preamble\n- stray bullet\n## A\n- one\n## B\n- two\n"), "## A\n- one\n");
+  assert.equal(safeSummary("\uFEFF## A\n- one\n"), "## A\n- one\n");
+  assert.equal(safeSummary(Array.from({ length: 90 }, (_, i) => `l${i}`).join("\n")).split("\n").filter(Boolean).length, 40);
 });

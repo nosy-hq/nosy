@@ -80,3 +80,13 @@ test("apply: a refuter that numbered the items instead of copying text ids still
   assert.equal(R.ok, true, JSON.stringify(R.problems));
   assert.deepEqual(R.dropped.map(d => d.id), ["source"]);
 });
+
+test("psst-refute runs as a command when the skill is reached through a symlink (the project skill link), instead of silently doing nothing", async () => {
+  const fsx = await import("node:fs"), pathx = await import("node:path"), h = await import("./helpers.mjs");
+  const dir = h.temporary("nosy-link-");
+  try {
+    const link = pathx.join(dir, "tools"); fsx.symlinkSync(h.Tool, link);
+    const r = h.run(pathx.join(link, "psst-refute.mjs"), []); // no arguments: the usage line, which reads no pm/
+    assert.equal(r.code, 1); assert.match(r.error, /usage: psst-refute\.mjs pack\|apply/);
+  } finally { h.clean(dir); }
+});

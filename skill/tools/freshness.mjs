@@ -8,7 +8,7 @@
 // files whose "Latest major announcement" doesn't start with `date — text` or whose Status is empty.
 // Usage: node freshness.mjs <pm> [--page <page.html>] [--json <file>] [--strict]   (--strict: exit code 1 if there's a ✗)
 import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process";
-import { readSources } from "./sources-file.mjs";
+import { readSources } from "./sources-file.mjs"; import { generatedOf } from "./auto-section.mjs";
 
 const argv = process.argv.slice(2);
 const opt = k => { const i = argv.indexOf(k); return i >= 0 ? argv.splice(i, 2)[1] : null; };
@@ -179,12 +179,14 @@ if (pagePath && fs.existsSync(pagePath)) {
   const html = fs.readFileSync(pagePath, "utf8");
   const autoM = html.match(/<!-- pm:auto -->([\s\S]*?)<!-- \/pm:auto -->/);
   if (autoM) {
-    const embedded = newestDate(allDates(autoM[1]));
+    // The block's own ISO time (data-generated, written by auto-section.mjs in any language) comes first; a block from an older
+    // Nosy has none, so its text is parsed for English month names as before (a Turkish block of that age can't be dated).
+    const stamped = generatedOf(html.slice(autoM.index, autoM.index + autoM[0].length)), embedded = stamped || newestDate(allDates(autoM[1]));
     if (newestInput && embedded) {
       const AUTO_THRESHOLD = 0.02; // ~28 min: rounding slack for the page's "D MMM HH:MM" minute precision, not real staleness
       const diff = day(newestInput - embedded); automaticStale = diff > AUTO_THRESHOLD;
-      add({ name: "page: auto section", path: pagePath, age_days: +diff.toFixed(2), threshold: AUTO_THRESHOLD, status: automaticStale ? "✗" : "✓", reason: `section says ${fmtHour(embedded)} · newest input ${fmtHour(newestInput)} (section is ${Math.round(diff * 24 * 60)} min behind the input)`, command: automaticStale ? "automatic-section" : null });
-    } else add({ name: "page: auto section", path: pagePath, status: "–", reason: newestInput ? "no date found in the section" : "state/lowhanging has no generated field", command: null });
+      add({ name: "page: auto section", path: pagePath, age_days: +diff.toFixed(2), threshold: AUTO_THRESHOLD, status: automaticStale ? "✗" : "✓", reason: `section ${stamped ? "generated" : "says"} ${fmtHour(embedded)} · newest input ${fmtHour(newestInput)} (section is ${Math.round(diff * 24 * 60)} min behind the input)`, command: automaticStale ? "auto-section" : null });
+    } else add({ name: "page: auto section", path: pagePath, status: "–", reason: newestInput ? "the section carries no generation time (re-run `auto-section.mjs` on the page to stamp it)" : "state/lowhanging has no generated field", command: null });
   } else add({ name: "page: auto section", path: pagePath, status: "–", reason: "no <!-- pm:auto --> marker", command: null });
 
   const newestOnPage = newestDate(allDates(html));
@@ -226,7 +228,7 @@ if (typeStale("state") || !typeInfo.state) addOrder("peek");
 if (!typeInfo.lowHanging) addOrder("psst");
 if (typeStale("lowHanging") || (typeInfo.state?.generated && typeInfo.lowHanging?.generated && typeInfo.state.generated > typeInfo.lowHanging.generated)) addOrder("psst"); // the input (status) is newer than the output (lowhanging)
 if (matrixStale || rivalStale) addOrder("neighbors");
-if (automaticStale) addOrder("automatic-section");
+if (automaticStale) addOrder("auto-section");
 if (pageStale) addOrder("tea"); // if lowhanging/status is newer than the page
 for (const type of Object.keys(typeInfo)) if (!["state", "lowHanging"].includes(type) && typeStale(type)) addOrder(Command[type] || `re-run the step that produces ${type}`);
 const orderLast = order.slice(0, 4);

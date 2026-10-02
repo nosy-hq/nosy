@@ -12,6 +12,7 @@
 The rows are **your product's own rows**, the same numbers and names as `pm/matrix.json` (move-in writes them from your features, in the owner's words). Copy them here unchanged in every rival file; a row a rival has that you don't becomes a suggestion to the owner, not a new row.
 Codes: y yes · p partial · n no · u not found · d announced, not shipped. Each row needs evidence (a url or a short summary of the sentence on the page).
 "y" only for what is usable TODAY: "released/GA" in docs or changelog, on the pricing page, or actually testable. "Coming soon," waitlist, invite-only beta, or blog/press release only → "d". We count a rival by what it shipped, not what it announced.
+A page's own date (a sitemap `lastmod`, "last updated", a post date) is when it was touched, not when something shipped. A trailing `[verified: YYYY-MM-DD]` in the Evidence cell is the day the page was last opened for that row (`nosy matrix-proposals apply` writes it; `build-matrix` reads it back). Leave the Code column as it is until `nosy matrix-proposals check` has said "apply" for the cell.
 
 | # | Step | Code | Evidence |
 |---|---|---|---|

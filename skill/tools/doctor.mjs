@@ -5,17 +5,24 @@
 //   mention  the owner should know, nothing to decide now (both the old and the new name exist: merge by hand)
 //   route    a command owns it (no sources.json → move-in; a state file with old keys → re-run what writes it)
 // Old names come from skill/data/lang/tr/renames.json (generated from docs/RENAMES.md, the English migration).
-// Usage: node doctor.mjs <pm> [--fix] [--json <file>]
+// `--fix` is never silent about what it touches: it lists the changes, copies what it will rewrite to
+// pm/.backup/doctor-<stamp>/ (git-ignored by its own .gitignore), says whose files these are (Nosy's own, inside pm/: never the
+// repo, the product code or the text of the owner's notes), and prints the one line that undoes it. `--fix --dry-run` stops after
+// the list. `--undo` puts the last fix back (a file changed since is left alone unless `--force`).
+// Usage: node doctor.mjs <pm> [--fix [--dry-run]] [--json <file>]
+//        node doctor.mjs <pm> --undo [--force]
 //        node doctor.mjs --check [<pm>] [--json <file>]   is my install healthy? (Node, git, gh, skill files, hooks, pm/sources.json;
 //                                                       skill/tools/health.mjs; each ✗ line carries its fix)
 // Exit: 0 nothing found · 2 findings remain · 1 couldn't read the pm folder. Read-only without --fix.
 import fs from "node:fs"; import path from "node:path"; import { fileURLToPath } from "node:url";
+import crypto from "node:crypto";
 import { next as nextPicks } from "./next.mjs"; import { parseJson } from "./sources-file.mjs"; // parseJson: the shared reader (a UTF-8 BOM is not a typo)
 
 // --check is a different question and has to work when this file's own data is what's broken: hand it over before reading anything.
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url) && process.argv.includes("--check")) {
   const { main } = await import("./health.mjs"); process.exit(await main(process.argv.slice(2)));
 }
+const BACKUP = ".backup";
 const R = JSON.parse(fs.readFileSync(new URL("../data/lang/tr/renames.json", import.meta.url), "utf8"));
 const FILES = R.files || {}, FOLDERS = R.folders || {}, KEYS = R.keys || {}, WORDS = R.words || {};
 // A state file's command, for "re-run what writes it" (names after renaming).
@@ -66,7 +73,7 @@ export function examine(pm) {
   if (!fs.existsSync(pm) || !fs.statSync(pm).isDirectory()) return { error: `no folder at ${pm}`, findings };
   // 1. Old file and folder names, deepest first so a folder's own files are named before it moves.
   const walk = (dir, rel = "") => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {
-    if (e.name === ".git" || e.name === "node_modules") return [];
+    if (e.name === ".git" || e.name === "node_modules" || e.name === BACKUP) return [];
     const r = rel ? `${rel}/${e.name}` : e.name;
     return e.isDirectory() ? [...walk(path.join(dir, e.name), r), { rel: r, dir: true }] : [{ rel: r, dir: false }];
   });
@@ -112,22 +119,84 @@ export function examine(pm) {
   return { findings };
 }
 
-export function fix(pm, R) {
-  const done = [];
+// What --fix would do, in order: the sources.json rewrite, then the renames. Each step names the file it changes.
+export function plan(pm, R) {
+  const steps = [];
   const src = ["sources.json", "kaynaklar.json"].map(f => path.join(pm, f)).find(f => fs.existsSync(f));
-  if (src && R.findings.some(f => f.id === "old-key" || f.id === "old-path")) {
+  if (src && R.findings.some(f => f.id === "old-key" || f.id === "old-path")) steps.push({ kind: "rewrite", file: path.basename(src), summary: `${path.basename(src)}: keys and paths renamed` });
+  for (const f of R.findings.filter(f => f.id === "old-name")) {
+    const to = path.join(path.dirname(f.path), path.basename(f.to)).replace(/^\.\//, "");
+    steps.push({ kind: "rename", from: f.path, to, summary: `${f.path} → ${to}` });
+  }
+  return steps;
+}
+
+export const SCOPE = "These are Nosy's own files inside pm/ (names and keys an older Nosy wrote). Your repo, your product code and the text of your notes are not touched.";
+const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
+const stamp = d => d.toISOString().replace(/[-:]/g, "").replace(/\..*$/, "").replace("T", "-");
+
+// Applies the plan. Returns the list of what was done (as before); `.backup` is the folder holding the copy and the manifest
+// `undo` reads. Backs up before writing; nothing changes when there is nothing to do.
+export function fix(pm, R, { now = new Date() } = {}) {
+  const steps = plan(pm, R), done = [];
+  if (!steps.length) return done;
+  let dir = path.join(pm, BACKUP, `doctor-${stamp(now)}`);
+  for (let n = 2; fs.existsSync(dir); n++) dir = path.join(pm, BACKUP, `doctor-${stamp(now)}-${n}`); // two fixes in one second keep both copies
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(pm, BACKUP, ".gitignore"), "*\n"); // the copies never show up in git status or a commit
+  const manifest = { type: "doctorBackup", at: now.toISOString(), steps: [] };
+  // The manifest is written even when a step throws halfway (a locked file, a folder that can't move): what was already done stays undoable.
+  try {
+  const src = ["sources.json", "kaynaklar.json"].map(f => path.join(pm, f)).find(f => fs.existsSync(f));
+  if (src && steps.some(x => x.kind === "rewrite")) {
+    fs.copyFileSync(src, path.join(dir, path.basename(src)));
     let K = parseJson(fs.readFileSync(src, "utf8"));
     K = renameKeys(K)[0]; K = renamePaths(K);
     fs.writeFileSync(src, JSON.stringify(K, null, 1) + "\n");
+    manifest.steps.push({ kind: "rewrite", file: path.basename(src), backup: path.basename(src), after: sha(src) });
     done.push(`${path.basename(src)}: keys and paths renamed`);
   }
   // Deepest paths first (the walk already lists a folder after its contents).
   for (const f of R.findings.filter(f => f.id === "old-name")) {
     const from = path.join(pm, f.path), to = path.join(pm, path.dirname(f.path), path.basename(f.to));
     if (!fs.existsSync(from) || fs.existsSync(to)) continue;
-    fs.renameSync(from, to); done.push(`${f.path} → ${path.join(path.dirname(f.path), path.basename(f.to)).replace(/^\.\//, "")}`);
+    fs.renameSync(from, to);
+    const rel = path.join(path.dirname(f.path), path.basename(f.to)).replace(/^\.\//, "");
+    manifest.steps.push({ kind: "rename", from: f.path, to: rel });
+    done.push(`${f.path} → ${rel}`);
   }
+  } finally { fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify(manifest, null, 1)); }
+  done.backup = dir;
   return done;
+}
+
+// Puts the last doctor fix back: renames reversed (last first), rewritten files restored from their copy. A file changed since the
+// fix is left alone and reported, unless `force`. Returns { ok, restored: [...], skipped: [...], from }.
+export function undo(pm, { force = false } = {}) {
+  const root = path.join(pm, BACKUP);
+  const manifestOf = d => { try { const m = JSON.parse(fs.readFileSync(path.join(root, d, "manifest.json"), "utf8")); return m && typeof m === "object" && Array.isArray(m.steps) ? m : null; } catch { return null; } };
+  const runs = fs.existsSync(root) ? fs.readdirSync(root).filter(d => d.startsWith("doctor-") && fs.existsSync(path.join(root, d, "manifest.json"))).sort() : [];
+  const unreadable = runs.filter(d => !manifestOf(d));
+  const last = [...runs].reverse().find(d => { const m = manifestOf(d); return m && !m.undone; });
+  if (!last) return { ok: false, error: unreadable.length && unreadable.length === runs.length ? `the doctor backup in ${root} has a manifest that can't be read (${unreadable.join(", ")}): the copies in it can be put back by hand` : runs.length ? "every doctor fix here has been undone already" : `no doctor fix to undo under ${root}` };
+  const dir = path.join(root, last), M = manifestOf(last), restored = [], skipped = [];
+  for (const st of [...M.steps].reverse()) {
+    if (st.kind === "rename") {
+      const from = path.join(pm, st.from), to = path.join(pm, st.to);
+      if (fs.existsSync(to) && !fs.existsSync(from)) { fs.renameSync(to, from); restored.push(`${st.to} → ${st.from}`); }
+      else if (!fs.existsSync(to) && fs.existsSync(from)) continue; // already back (a half-finished undo run again)
+      else skipped.push(`${st.to}: ${fs.existsSync(to) ? `${st.from} exists again` : "it is gone"}`);
+    } else if (st.kind === "rewrite") {
+      // After a rename back the file has its old name (kaynaklar.json); it is the one the copy was taken from.
+      const cur = path.join(pm, st.file), copy = path.join(dir, st.backup);
+      const target = fs.existsSync(cur) ? cur : null;
+      if (!target) { skipped.push(`${st.file}: not there to restore`); continue; }
+      if (!force && sha(target) !== st.after) { skipped.push(`${st.file}: changed since the fix (use --force to put the old copy back anyway)`); continue; }
+      fs.copyFileSync(copy, target); restored.push(`${st.file}: old keys and paths restored`);
+    }
+  }
+  if (!skipped.length || force) { M.undone = new Date().toISOString(); fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify(M, null, 1)); }
+  return { ok: !skipped.length, restored, skipped, from: dir };
 }
 
 export function render(R, { fixed = null } = {}) {
@@ -149,12 +218,26 @@ export function render(R, { fixed = null } = {}) {
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2);
   const take = k => { const i = argv.indexOf(k); return i >= 0 ? argv.splice(i, 2)[1] : null; };
-  const jsonOut = take("--json"), doFix = argv.includes("--fix");
-  const pm = argv.filter(a => a !== "--fix")[0] || "pm";
+  const jsonOut = take("--json"), doFix = argv.includes("--fix"), dry = argv.includes("--dry-run"), doUndo = argv.includes("--undo"), force = argv.includes("--force");
+  const pm = argv.filter(a => !a.startsWith("--"))[0] || "pm";
+  const { nosyCommand } = await import("./hints.mjs");
+  if (doUndo) {
+    if (!fs.existsSync(pm)) { console.error(render({ error: `no folder at ${pm}`, findings: [] })); process.exit(1); }
+    const U = undo(pm, { force });
+    if (U.error) { console.error(U.error); process.exit(1); }
+    console.log([`Put back from ${U.from}:`, ...U.restored.map(x => `  ✓ ${x}`), ...(U.skipped.length ? ["Left alone:", ...U.skipped.map(x => `  - ${x}`)] : [])].join("\n"));
+    process.exit(U.ok ? 0 : 2);
+  }
   let R = examine(pm), fixed = null;
   if (R.error) { console.error(render(R)); process.exit(1); }
-  if (doFix) { fixed = fix(pm, R); R = examine(pm); }
-  if (jsonOut) { fs.mkdirSync(path.dirname(jsonOut), { recursive: true }); fs.writeFileSync(jsonOut, JSON.stringify({ type: "doctor", generated: new Date().toISOString(), fixed, ...R }, null, 1)); }
+  const steps = doFix ? plan(pm, R) : [];
+  if (doFix && steps.length) {
+    console.log(`${dry ? "Would change" : "Changing"} ${steps.length} thing${steps.length === 1 ? "" : "s"} (only inside ${pm}):\n${steps.map(x => `  - ${x.summary}`).join("\n")}\n${SCOPE}\n`);
+    if (dry) { console.log(`Nothing was changed. \`${nosyCommand("doctor --fix")}\` applies it, after copying what it rewrites to ${path.join(pm, BACKUP)}/.`); }
+  }
+  if (doFix && !dry) { fixed = fix(pm, R); R = examine(pm); }
+  if (jsonOut) { fs.mkdirSync(path.dirname(jsonOut), { recursive: true }); fs.writeFileSync(jsonOut, JSON.stringify({ type: "doctor", generated: new Date().toISOString(), fixed, backup: fixed?.backup || null, ...R }, null, 1)); }
   console.log(render(R, { fixed }));
+  if (fixed?.backup) console.log(`\nBacked up first: ${fixed.backup}. To put it all back: \`${nosyCommand("doctor --undo")}\`.`);
   process.exitCode = R.findings.some(f => f.severity !== "stale") ? 2 : 0; // stale outputs are mentioned, not failures
 }

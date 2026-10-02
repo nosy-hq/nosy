@@ -10,8 +10,24 @@ const jsonOut = opt("--json"), day = +(opt("--day") || 14), [pm = "pm", page] = 
 if (!page) { console.error("Usage: node find-stale.mjs <pm> <page.html> [--json <file>]"); process.exit(1); }
 const K = readSources(pm);
 const html = fs.readFileSync(page, "utf8");
+// Blanks a span but keeps its newlines, so reported line numbers stay the file's own.
+const blank = m => m.replace(/[^\n]/g, " ");
+// What is not the page's own prose: code is not a claim about status. On a real page 5 of 7 findings
+// were dead symbol definitions inside <script> and sentences that describe a merge. Skipped, by structure (no word lists):
+// <script>/<style>/<pre>/<code> content, fenced code blocks (``` or ~~~, closed by the same fence or the end of the file),
+// and inline code spans (a backtick run closed by a run of the same length on the same line).
+function notProse(text) {
+  const t = text.replace(/<(script|style|pre|code)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, blank);
+  let fence = null;
+  return t.split("\n").map(l => {
+    const f = l.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (fence) { const close = l.match(/^ {0,3}(`{3,}|~{3,})\s*$/); if (close && close[1][0] === fence[0] && close[1].length >= fence.length) fence = null; return blank(l); }
+    if (f) { fence = f[1]; return blank(l); }
+    return l.replace(/(`+)(?!`)[^\n]*?[^`\n]\1(?!`)/g, blank);
+  }).join("\n");
+}
 // The auto section is the script's own output; don't scan it.
-const clean = html.replace(/<!-- pm:auto -->[\s\S]*?<!-- \/pm:auto -->/, m => m.replace(/[^\n]/g, " "));
+const clean = notProse(html.replace(/<!-- pm:auto -->[\s\S]*?<!-- \/pm:auto -->/, blank));
 const lines = clean.split("\n").map((l, i) => ({ no: i + 1, t: l.replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/g, " ").replace(/\s+/g, " ") }));
 const finding = [];
 
@@ -64,7 +80,7 @@ for (const s of lines) {
 // Merge lines for the same ref
 const one = new Map(); for (const b of finding) { const k = b.type + b.ref; if (one.has(k)) one.get(k).lines.push(...b.lines); else one.set(k, { ...b }); }
 const list = [...one.values()].map(b => ({ ...b, lines: [...new Set(b.lines)].sort((a, c) => a - c) }));
-let o = `# Stale-line scan · ${path.basename(page)} · ${K.ref}\n\nThe page was not modified. Line numbers are the HTML file's lines; the auto section wasn't scanned.\n\n`;
+let o = `# Stale-line scan · ${path.basename(page)} · ${K.ref}\n\nThe page was not modified. Line numbers are the HTML file's lines; the auto section, scripts, styles and code (blocks, spans, <code>/<pre>) weren't scanned.\n\n`;
 o += list.length ? `| Type | Ref | Line | Evidence |\n|---|---|---|---|\n${list.map(b => `| ${b.type} | ${b.ref} | ${b.lines.slice(0, 12).join(", ")}${b.lines.length > 12 ? " …" : ""} | ${b.not.replace(/\|/g, "/")} |`).join("\n")}\n` : "No lines look stale.\n";
 process.stdout.write(o);
 if (jsonOut) fs.writeFileSync((fs.mkdirSync(path.dirname(jsonOut), { recursive: true }), jsonOut), JSON.stringify({ type: "stale", generated: new Date().toISOString(), page: path.basename(page), findings: list }, null, 1));

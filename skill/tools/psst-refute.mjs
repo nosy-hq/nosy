@@ -20,7 +20,7 @@ export function pack(pm, draftFile = path.join(pm, "state", "psst-draft.json")) 
   const D = readJson(draftFile), R = readJson(path.join(pm, "state", "receipts.json"));
   if (!D?.items?.length) throw new Error(`no draft items in ${draftFile}`);
   const byRank = new Map((R?.items || []).map(r => [r.rank, r]));
-  let o = `# Refute this list\n\nYou are checking a product manager's draft answer to "which cheap, valuable work can we ship this week?". For each item, try to break it against the code at ${R?.ref || "the product's ref"}: is every claim true, is it already done, deliberately held (a decision, a code comment with a ref), overruled by a later decision, or bigger than its size says (other apps, missing fields, a migration)? "Nothing wrong" is a valid finding, but list what you checked, with file:line.\n`;
+  let o = `# Refute this list\n\nYou are checking a product manager's draft answer to "which cheap, valuable work can we ship this week?". For each item, try to break it against the code at ${R?.ref || "the product's ref"}: is every claim true, is it already done (merged, or written on a local branch or in a working tree: see "Written locally"), deliberately held (a decision, a code comment with a ref), overruled by a later decision, or bigger than its size says (other apps, missing fields, a migration)? "Nothing wrong" is a valid finding, but list what you checked, with file:line.\n`;
   for (const it of D.items) {
     const r = it.receipt != null ? byRank.get(it.receipt) : null;
     o += `\n---\n\n## Item ${it.id}: ${it.title}\n\n(Use \`"id": ${JSON.stringify(it.id)}\` for this item.)\n\n**Claim:** ${it.claim}\n\n**Size claimed:** ${it.size || "(none)"}\n\n**Cited:** ${(it.evidence || []).join(", ") || "(nothing)"}\n`;
@@ -29,6 +29,8 @@ export function pack(pm, draftFile = path.join(pm, "state", "psst-draft.json")) 
       for (const c of r.code || []) if (c.text?.length) o += `\n**Code at ${c.at}:**\n${c.text.map(l => `> ${l}`).join("\n")}\n`;
       if (r.needs?.length) o += `\n**The screen's own need:** ${r.needs.join(" · ")}\n`;
       for (const s of r.request || []) o += `\n**Request §${s.no}** (${s.file}:${s.line}):\n${s.text.split("\n").slice(0, 12).map(l => `> ${l}`).join("\n")}\n`;
+      for (const x of r.local || []) o += `\n**Written locally${x.strength === "weak" ? ` (weak match: ${x.weakBecause || "a shared file"})` : ""}:** branch \`${x.branch}\`${x.author ? ` by ${x.author}` : ""}, ${x.ahead} commit${x.ahead === 1 ? "" : "s"} ahead (last ${x.date}), differs from the integration branch in ${x.hit.length ? x.hit.join(", ") : "no listed file"}${x.refs?.length ? `; its commits name ${x.refs.join(", ")}` : ""}; ${x.where}. Read it (\`git diff <integration branch>...${x.branch}\`): if it already does what the item proposes, the item is refuted ("already written, not pushed"); if it does part, weakened to what's left.\n`;
+      for (const e of r.edits || []) o += `\n**Uncommitted edits** in ${e.where}${e.branch ? ` (\`${e.branch}\`)` : ""}: ${e.hit.join(", ")}. Look at \`git diff\` there before saying the item is untouched.\n`;
       if (r.decisions?.length) o += `\n**Decisions:** ${r.decisions.map(d => `${d.no} (${d.date}) ${d.at}`).join("; ")}\n`;
       for (const h of r.history || []) o += `\n${h.merged ? "✓" : "✗"} ${h.kind} \`${h.name}\` (${h.date}) ${h.merged ? "merged" : "not merged"}${h.olderThan?.length ? `, older than ${h.olderThan.join(", ")}` : ""}\n`;
       for (const x of r.reach || []) o += `\n\`${x.id}\` in ${x.in.map(a => a.app).join(", ")}${x.notIn.length ? `; not in ${x.notIn.slice(0, 6).join(", ")}` : ""}\n`;
@@ -88,7 +90,7 @@ export function formatMd(R) {
   return o;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) { // realpath: a skill reached through a symlink (the project skill link) still runs
   const [cmd, pm = "pm", ...rest] = process.argv.slice(2), take = k => { const i = rest.indexOf(k); return i >= 0 ? rest[i + 1] : null; };
   try {
     if (cmd === "pack") { const r = pack(pm, take("--draft") || undefined); console.log(`Refute packet: ${r.out} (${r.items} items). Give it to the nosy-refuter sub-agent; save its JSON to ${path.join(pm, "state", "refute.json")}.`); }

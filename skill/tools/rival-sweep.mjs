@@ -13,9 +13,16 @@
 // Registry shape: "rivals": { "<slug>": { "name": "RivalOne", "site": "https://…", "releases": ["https://…"],
 //   "news": ["…"], "blog": ["…"], "login": ["a page that needs a login, not fetched"],
 //   "browser": ["a page that opens in a browser but blocks scripts (403, an error page), not fetched"] } }
+// A registry entry may also carry `stores: { "appStore": "<numeric id or an apps.apple.com url>", "country": "tr" }`: the
+// sweep then asks https://itunes.apple.com/lookup?id=<id>&country=<cc> (Apple's public JSON API, no key) and lists the app's CURRENT version,
+// its release date and its release notes as one entry, grade primary, labelled with the version they belong to. The lookup answers only for the
+// current version, so those notes are never attached to any other version (release notes of 1.3.3 had been matched to 1.3.4 once): a version a
+// registry page mentions is kept as that page's own entry. A failed or empty lookup is a quiet "store lookup failed" in the unreadable list: it
+// never stops the sweep and doesn't change the exit code. The Chrome Web Store has no stable public API and is not scraped.
+// A site that answers 429 is not asked again for the rest of the run: its other pages are listed as "rate limited, not read".
 // Dates without a year ("Sep 23") take the window's year (the year before when that falls after the window).
 // Usage: node rival-sweep.mjs <pm> [--days 30] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--only slug,…] [--json <file>]
-// Exit: 0 swept · 2 a page in the registry couldn't be read (the list still prints) · 1 no registry / no sources.json.
+// Exit: 0 swept · 2 a page in the registry couldn't be read (the list still prints; a failed store lookup doesn't count) · 1 no registry / no sources.json.
 import fs from "node:fs"; import path from "node:path"; import { fileURLToPath } from "node:url";
 import { sourcesProblem } from "./hints.mjs";
 import { readSources } from "./sources-file.mjs";
@@ -84,29 +91,69 @@ async function fetchText(url, timeout = 20000) {
   try {
     const r = await fetch(url, { signal: ctl.signal, redirect: "follow", headers: { "user-agent": "Mozilla/5.0 (Nosy rival-sweep; public pages only)", accept: "text/html,*/*" } });
     const body = await r.text();
-    return { status: r.status, url: r.url, text: textOf(body) };
+    return { status: r.status, url: r.url, text: textOf(body), raw: body }; // raw: the store lookup is JSON, which textOf would mangle
   } catch (e) { return { status: 0, error: e.name === "AbortError" ? "timeout" : String(e.message || e) }; }
   finally { clearTimeout(t); }
 }
 
+// The numeric App Store id and country from `stores`: "6446", "id6446", or an apps.apple.com / itunes.apple.com url (its /tr/ path is the country).
+export function appStoreOf(stores) {
+  const raw = stores && stores.appStore != null ? String(stores.appStore).trim() : ""; if (!raw) return null;
+  const id = (raw.match(/(?:\/id|[?&]id=|^id)(\d{3,})/) || raw.match(/^(\d{3,})$/) || [])[1]; if (!id) return null;
+  const want = String(stores.country || (raw.match(/[?&]country=([a-z]{2})\b/i) || raw.match(/apple\.com\/([a-z]{2})\//i) || [])[1] || "us").trim().toLowerCase();
+  const cc = /^[a-z]{2}$/.test(want) ? want : "us"; // two letters or "us": whatever else the registry says never reaches the query string
+  return { id, country: cc, url: `https://itunes.apple.com/lookup?id=${id}&country=${cc}` };
+}
+// One lookup answer → the current version's entry, or the reason there isn't one. Never throws.
+export function storeEntryOf(raw, { from, to }) {
+  let J; try { J = JSON.parse(raw); } catch { return { problem: "store lookup failed (the answer isn't JSON)" }; }
+  const a = J && Array.isArray(J.results) ? J.results[0] : null;
+  if (!a) return { problem: "store lookup failed (no app under that id and country)" };
+  const version = String(a.version ?? "").trim();
+  // Notes without the version they belong to would be matched to whichever version the reader has in mind: not offered at all.
+  if (!version) return { problem: "store lookup failed (the answer names no version)" };
+  const date = /^\d{4}-\d{2}-\d{2}/.test(String(a.currentVersionReleaseDate || "")) ? String(a.currentVersionReleaseDate).slice(0, 10) : null;
+  const notes = String(a.releaseNotes || "").replace(/\s+/g, " ").trim();
+  const store = { name: a.trackName || null, version, date, notes: notes.slice(0, 600), grade: "primary", url: a.trackViewUrl || null };
+  const inWindow = !!date && date >= from && date <= to;
+  return { store, entries: inWindow ? [{ date, version, grade: "primary", source: "appStore", text: `v${version} (App Store, current version)${notes ? `: ${notes.slice(0, 280)}` : ": no release notes given"}` }] : [] };
+}
+
+const hostKey = u => { try { return new URL(u).hostname.replace(/^www\./, "").toLowerCase(); } catch { return String(u); } };
 export async function sweep(rivals, { from, to, fetcher = fetchText, only = [] } = {}) {
-  const out = [];
+  const out = [], limited = new Set(); // hosts that said 429: not asked again in this run
+  const get = async url => {
+    const host = hostKey(url);
+    if (limited.has(host)) return { status: 429, skipped: true };
+    const r = await fetcher(url);
+    if (r && r.status === 429) limited.add(host);
+    return r || { status: 0, error: "no answer" };
+  };
   for (const [slug, R] of Object.entries(rivals)) {
     if (only.length && !only.includes(slug)) continue;
     const pages = [];
     for (const kind of ["releases", "news", "blog"]) for (const url of [].concat(R[kind] || [])) {
-      const r = await fetcher(url);
+      const r = await get(url);
       const ok = r.status >= 200 && r.status < 300 && r.text && r.text.split(/\s+/).length > 60;
       const all = ok ? datesIn(r.text, { to }).length : 0, entries = ok ? entriesIn(r.text, from, to) : [];
       pages.push({ kind, url, status: r.status, ok, datesOnPage: all, entries,
-        problem: !ok ? (r.error || (r.status >= 400 ? `HTTP ${r.status}` : "almost no text (JavaScript-only page?)")) : !all ? "no dates on the page: read it by hand" : null });
+        problem: r.status === 429 ? "rate limited, not read" : !ok ? (r.error || (r.status >= 400 ? `HTTP ${r.status}` : "almost no text (JavaScript-only page?)")) : !all ? "no dates on the page: read it by hand" : null });
     }
+    const app = appStoreOf(R.stores);
+    if (app) {
+      let r; try { r = await get(app.url); } catch (e) { r = { status: 0, error: String(e.message || e) }; }
+      const page = { kind: "appStore", url: app.url, status: r.status, ok: false, quiet: true, datesOnPage: 0, entries: [], country: app.country, problem: null };
+      if (r.status === 429) page.problem = "rate limited, not read";
+      else if (!(r.status >= 200 && r.status < 300)) page.problem = `store lookup failed (${r.error || `HTTP ${r.status}`})`;
+      else { const E = storeEntryOf(r.raw ?? r.text ?? "", { from, to }); if (E.problem) page.problem = E.problem; else { page.ok = true; page.store = E.store; page.entries = E.entries; page.datesOnPage = E.store.date ? 1 : 0; } }
+      pages.push(page);
+    } else if (R.stores && R.stores.appStore != null && String(R.stores.appStore).trim()) pages.push({ kind: "appStore", url: String(R.stores.appStore), status: 0, ok: false, quiet: true, datesOnPage: 0, entries: [], country: null, problem: "store lookup failed (no App Store id in that value: use the number from the app's address, id123456789)" });
     out.push({ slug, name: R.name || slug, site: R.site || null, login: [].concat(R.login || []), browser: [].concat(R.browser || []), pages });
   }
   return out;
 }
 
-const KIND = { releases: "release notes → shipped if listed there", news: "newsroom → announced unless it says available", blog: "blog → announced, or content" };
+const KIND = { releases: "release notes → shipped if listed there", news: "newsroom → announced unless it says available", blog: "blog → announced, or content", appStore: "App Store lookup, primary → shipped: the current version only" };
 export function render(S, { from, to }) {
   const L = [`# Rival sweep · ${from} – ${to}`, "",
     "Leads, not verdicts: open each entry, then decide shipped / announced / movement (funding, hires, partnerships). Then one web search per rival for press its own pages don't carry (\"<name> <month> <year>\"), and say which pages couldn't be read.", ""];
@@ -114,7 +161,11 @@ export function render(S, { from, to }) {
     const n = R.pages.reduce((s, p) => s + p.entries.length, 0);
     L.push(`## ${R.name}: ${n} dated entr${n === 1 ? "y" : "ies"} in the window${R.site ? ` · ${R.site}` : ""}`);
     for (const p of R.pages) {
-      L.push(`- ${p.kind}: ${p.url}${p.problem ? ` — **not read: ${p.problem}**` : ` (${KIND[p.kind]}; ${p.datesOnPage} dates on the page)`}`);
+      if (p.kind === "appStore") {
+        // The version, its date and its notes travel together: notes of the current version are never read as another version's.
+        L.push(`- appStore (${p.country}): ${p.url}${p.problem ? ` — ${p.quiet ? "not read" : "**not read**"}: ${p.problem}` : ` (${KIND.appStore}) · ${p.store.name || "app"} v${p.store.version}, released ${p.store.date || "(date not given)"}${p.entries.length ? "" : " (outside the window)"}`}`);
+        if (p.store && !p.entries.length && p.store.notes) L.push(`  - v${p.store.version} · ${p.store.notes.slice(0, 200)}`);
+      } else L.push(`- ${p.kind}: ${p.url}${p.problem ? ` — **not read: ${p.problem}**` : ` (${KIND[p.kind]}; ${p.datesOnPage} dates on the page)`}`);
       for (const e of p.entries.slice(0, 25)) L.push(`  - ${e.date} · ${e.text}`);
       if (p.entries.length > 25) L.push(`  - … ${p.entries.length - 25} more in the JSON`);
     }
@@ -139,5 +190,5 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, JSON.stringify({ generated: new Date().toISOString(), from, to, rivals: S }, null, 1));
   console.log(render(S, { from, to }));
-  process.exitCode = S.some(R => R.pages.some(p => !p.ok)) ? 2 : 0;
+  process.exitCode = S.some(R => R.pages.some(p => !p.ok && !p.quiet)) ? 2 : 0; // a store lookup that failed is a note, not a page the registry couldn't read
 }

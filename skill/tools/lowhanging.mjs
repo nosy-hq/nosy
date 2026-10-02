@@ -8,7 +8,7 @@
 import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { matrixRead } from "./read-matrix.mjs"; import { thresholds } from "./thresholds.mjs";
 import { demandLoad, demandFor, demandLine, trendWord, isCluster, windowText } from "./demand.mjs";
 import { advice } from "./hints.mjs";
-import { readSources } from "./sources-file.mjs";
+import { readSources, teamLogins, isTeamLogin } from "./sources-file.mjs";
 const argv = process.argv.slice(2), ji = argv.indexOf("--json"), jsonOut = ji >= 0 ? argv.splice(ji, 2)[1] : null;
 const pm = argv[0] || "pm";
 const K = readSources(pm);
@@ -88,7 +88,7 @@ if (K.request) {
 
 // (4) Matrix
 // read-matrix.mjs reads both formats; an acquired/closed rival doesn't count as "common".
-const MO = K.matrix ? matrixRead(K.matrix) : null;
+const MO = K.matrix ? matrixRead(K.matrix, { codes: K.matrixCodes }) : null;
 if (MO) {
   const us = MO.biz;
   // "Common" threshold scales with rival count: 3 (old constant) at 5+ active rivals, at least 2 and half of them for a product with fewer rivals.
@@ -118,7 +118,7 @@ const defaultBugLabels = ["bug"];
 const securityLabels = new Set((K.issue?.labels?.security || defaultSecurityLabels).map(s => String(s).toLowerCase()));
 const bugLabels = new Set((K.issue?.labels?.bug || defaultBugLabels).map(s => String(s).toLowerCase()));
 const cveRe = /\bCVE-\d{4}-\d+\b|\bGHSA-[a-z0-9]{4,}(?:-[a-z0-9]{4,}){0,3}\b/i;
-let riskNote = null;
+let riskNote = null, teamNote = null;
 if (K.issue) {
   try {
     let js;
@@ -128,7 +128,11 @@ if (K.issue) {
       // Older gh / repos without issue types: retry without the field rather than failing the whole signal.
       js = JSON.parse(execFileSync("gh", ["issue", "list", "-R", K.issue.repo, "--state", "open", "--limit", "60", "--json", "number,title,author,updatedAt,body,labels"], { encoding: "utf8" }));
     }
-    const ours = js.filter(i => new RegExp(K.issue.our, "i").test(i.title));
+    // `team` in sources.json (same rule as collect-signals.mjs): an issue one of your own people opened is a work item, not
+    // a request from outside. It is left out of "issue opened against us" (and the risk count), and said once so the omission is visible.
+    const team = teamLogins(K), mine = js.filter(i => isTeamLogin(team, i.author?.login));
+    if (mine.length) teamNote = `${mine.length} open issue${mine.length === 1 ? "" : "s"} opened by your own team (sources.json \`team\`) ${mine.length === 1 ? "is" : "are"} left out: ${mine.length === 1 ? "it is a work item" : "they are work items"}, not a request from outside (${mine.slice(0, 8).map(i => `#${i.number}`).join(", ")}${mine.length > 8 ? ", …" : ""}).`;
+    const ours = js.filter(i => !isTeamLogin(team, i.author?.login) && new RegExp(K.issue.our || "", "i").test(i.title));
     let securityN = 0, bugN = 0; const riskRefs = [];
     for (const i of ours) {
       const labelNames = (i.labels || []).map(l => String(l?.name ?? l).toLowerCase());
@@ -140,8 +144,8 @@ if (K.issue) {
         riskRefs.push(`#${i.number}`);
         continue;
       }
-      const item = (i.body.match(/^\s*(?:\d+\.|-|\*\*m\.\d)/gm) || []).length;
-      add({ ref: `#${i.number}`, type: "Issue opened against us", title: `#${i.number} ${i.title}`, evidence: `${i.author.login} · ${i.updatedAt.slice(0, 10)}`, detail: [`${item} items`], value: 2, effort: item > 6 ? 3 : item > 2 ? 2 : 1 });
+      const item = ((i.body || "").match(/^\s*(?:\d+\.|-|\*\*m\.\d)/gm) || []).length;
+      add({ ref: `#${i.number}`, type: "Issue opened against us", title: `#${i.number} ${i.title}`, evidence: `${i.author?.login || "unknown"} · ${String(i.updatedAt || "").slice(0, 10)}`, detail: [`${item} items`], value: 2, effort: item > 6 ? 3 : item > 2 ? 2 : 1 });
     }
     const riskTotal = securityN + bugN;
     if (riskTotal) riskNote = `Reported risks, not ranked: ${riskTotal} (security ${securityN}, bugs ${bugN}) — Nosy doesn't triage code; see ${riskRefs.join(", ")}.`;
@@ -255,6 +259,7 @@ if (D?.window && items.some(i => i.demand?.cluster)) o += `\nDemand from GitHub 
 if (!D) o += `\nNo demand data yet (pm/state/signals.json): drop support/interview/survey exports in pm/signal/ and run collect-signals, or \`nosy psst\` does it when that folder has files.\n`;
 if (supersededNote) o += `\n${supersededNote}\n`;
 if (riskNote) o += `\n${riskNote}\n`;
+if (teamNote) o += `\n${teamNote}\n`;
 o += `\n## Detail\n\n`;
 items.slice(0, 15).forEach((i, n) => { if (i.detail?.length) o += `**${n + 1}. ${i.title}**\n${i.detail.map(a => `- ${a}`).join("\n")}\n\n`; });
 process.stdout.write(o);
