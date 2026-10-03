@@ -7,6 +7,8 @@ What has shipped is in [CHANGELOG.md](CHANGELOG.md). Nosy builds the block below
 
 ### Later
 
+- Cloud: the live GitHub path caches for a few minutes and uses the viewer's own token.
+- Cloud: the GitHub Action publishes to the dashboard on a schedule, with a README badge.
 - Tracker sync that writes back: a move on the board moves the item in Nosy too (opt-in, previewed).
 - Tell the people who asked from a GitHub App, not only from your own login.
 <!-- /nosy:roadmap -->
