@@ -179,6 +179,7 @@ export const MENU = [
   ["Ahead", "canwe", "\"can we do X?\": sized, with evidence, remembered"],
   ["Ahead", "spill", "a PRD your agents can build from"],
   ["Ahead", "scoop", "the roadmap in waves, sized from history"],
+  ["Share", "roadmap", "Now / Next / Later as a block of ROADMAP.md, proposed as a PR"],
   ["Share", "tea", "the decision page"],
   ["Loop", "stakeout", "the weekly run: shipped → psst → neighbors → scoop → tea"],
   ["Extra", "bet", "optional: record a bet with a size, to score later"],
@@ -187,7 +188,7 @@ export const MENU = [
 
 // The same steps without an agent (`nosy <cli>`): move-in's scripted part is `setup`, tea's is `page`, stakeout's is `weekly`, neighbors' is `watch`.
 // Commands with no script half show as the agent command.
-export const CLI = { tour: "tour", doctor: "doctor", "move-in": "setup", shipped: "shipped", peek: "peek", psst: "psst", frontyard: "frontyard", canwe: "canwe", neighbors: "watch", bet: "bet place", score: "score", tea: "page", stakeout: "weekly" };
+export const CLI = { tour: "tour", roadmap: "roadmap", doctor: "doctor", "move-in": "setup", shipped: "shipped", peek: "peek", psst: "psst", frontyard: "frontyard", canwe: "canwe", neighbors: "watch", bet: "bet place", score: "score", tea: "page", stakeout: "weekly" };
 
 // prefix: how the owner types a command here ("/nosy:" in the Claude Code plugin, "/nosy " as a skill); cli: plain `nosy` names.
 export function render(R, { prefix = "/nosy:", cli = false } = {}) {

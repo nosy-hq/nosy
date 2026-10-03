@@ -233,3 +233,25 @@ test("held items wait on the owner, refuted ones go outside, checked ones lead N
     for (const [f, b] of Object.entries(saved)) { const p = path.join(st, f); if (b) fs.writeFileSync(p, b); else fs.rmSync(p, { force: true }); }
   }
 });
+
+test("a refuter list older than the psst list is left out of the waves with a line on stderr; a current one is used", () => {
+  const st = path.join(K.pm, "state"); fs.mkdirSync(st, { recursive: true });
+  const saved = Object.fromEntries(["lowhanging.json", "lowhanging.filtered.json", "receipts.json", "psst-final.json"].map(f => [f, fs.existsSync(path.join(st, f)) ? fs.readFileSync(path.join(st, f)) : null]));
+  const item = { score: 3, effort: "S", type: "Backend ready, not on screen", title: "review · 1 fields", evidence: "web/review.ts:24", detail: [], ref: null };
+  const final = generated => JSON.stringify({ generated, items: [{ id: "a", title: "Finished work the refuter once passed", verdict: "stands", size: "S", evidence: ["a.ts:1"], receipt: null }], dropped: [] });
+  try {
+    fs.rmSync(path.join(st, "lowhanging.filtered.json"), { force: true }); fs.rmSync(path.join(st, "receipts.json"), { force: true });
+    const build = (listed, checked) => {
+      fs.writeFileSync(path.join(st, "lowhanging.json"), JSON.stringify({ generated: listed, items: [item] })); fs.writeFileSync(path.join(st, "psst-final.json"), final(checked));
+      const out = path.join(tmp, "waves-stale.json"), r = run(path.join(Tool, "build-waves.mjs"), [K.pm, "--json", out]);
+      assert.equal(r.code, 0, r.error); return { r, titles: JSON.parse(fs.readFileSync(out, "utf8")).waves.flatMap(w => w.tasks).map(t => t.title) };
+    };
+    const old = build("2026-10-03T15:00:00Z", "2026-09-30T16:00:00Z");
+    assert.ok(!old.titles.includes("Finished work the refuter once passed"), "a checked list from before the last psst run is not trusted");
+    assert.match(old.r.error, /older than the psst list \(2026-10-03\).*nosy refute pack/);
+    const fresh = build("2026-10-03T15:00:00Z", "2026-10-03T15:05:00Z");
+    assert.ok(fresh.titles.includes("Finished work the refuter once passed")); assert.doesNotMatch(fresh.r.error, /older than the psst list/);
+  } finally {
+    for (const [f, b] of Object.entries(saved)) { const p = path.join(st, f); if (b) fs.writeFileSync(p, b); else fs.rmSync(p, { force: true }); }
+  }
+});

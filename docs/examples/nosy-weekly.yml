@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read           # change to write only if you set commit: "true" below
-  pull-requests: read
+  contents: read           # change to write if you set commit: "true" or roadmap: "true" below
+  pull-requests: read      # change to write if you set roadmap: "true" (it opens or updates one PR)
   issues: read
 
 jobs:
@@ -23,3 +23,4 @@ jobs:
           slack-webhook: ${{ secrets.NOSY_SLACK_WEBHOOK }}      # optional
           discord-webhook: ${{ secrets.NOSY_DISCORD_WEBHOOK }}  # optional
           commit: "false"   # "true" makes the Action commit pm/state/ and pm/page.html and push them. pm/state/ can hold issue and PR text.
+          roadmap: "false"  # "true" proposes ROADMAP.md as a pull request each week (updates the open one). Needs pm/sources.json "roadmap": {}, permissions contents: write + pull-requests: write, and the repo setting that lets Actions create pull requests.

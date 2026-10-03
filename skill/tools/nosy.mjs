@@ -3,8 +3,8 @@
 // from every agent, from CI (GitHub Action), and from the MCP server; the judgment call still belongs to the agent.
 // Counting happens in the script, judgment in the agent, memory in pm/.
 // Usage: node nosy.mjs <command> [--pm <pm folder>] [...]      (via npx: `npx nosy <command>`)
-// Commands: next (the default), tour, facts, find, sweep, matrix-proposals, tiers, cite-check, team-next, fields, receipts, refute, decision, nudge, install, update, uninstall, doctor, setup, check, explain, shipped, peek, inventory, gates, metrics, frontyard, signals, watch, rival-demand, psst, bet, score, todo, canwe, notes, page, page-adopt, weekly, notify, publish, mcp, help.
-// No dependencies; uses git and (if present) gh. The commands that write outward are `notify` (only to the given webhook) and `publish` (opt-in: counts and structure only, to a Nosy Cloud you configured, after the privacy scan); `watch` only reads public rival pages (plain GET).
+// Commands: next (the default), tour, roadmap, facts, find, sweep, matrix-proposals, tiers, cite-check, team-next, fields, receipts, refute, decision, nudge, install, update, uninstall, doctor, setup, check, explain, shipped, ship-notes, peek, inventory, gates, metrics, frontyard, signals, watch, rival-demand, rival-signals, psst, bet, score, todo, canwe, notes, page, page-adopt, weekly, notify, publish, mcp, help.
+// No dependencies; uses git and (if present) gh. The commands that write outward are `notify` (only to the given webhook), `ship-notes --yes` (one comment per issue that asked, on GitHub) and `publish` (opt-in: counts and structure only, to a Nosy Cloud you configured, after the privacy scan); `watch` only reads public rival pages (plain GET).
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -146,6 +146,8 @@ const Commands = {
   // the only command besides notify that goes to the network, and it only reads public pages.
   // After a run, rival-tiers.mjs logs the states (pm/history/watch-states.jsonl): the watch keeps only its latest snapshot, and "changed 3 times in 4" needs the history.
   watch: () => { if (!fs.existsSync(path.join(pm, "rivals"))) return (console.log(`Psst… no ${path.join(pm, "rivals")}/ yet: ${typeof sources()?.rivalsPath === "string" && sources().rivalsPath.trim() ? `\`${nosyCommand("rivals-import")}\` copies the rival files from \`rivalsPath\` in, then run this again` : "run neighbors first"}.`), { code: 0 }); const r = script("watch-rivals.mjs", [pm, ...args, "--json", path.join(pm, "state", "watch.json")]); if (r.code === 0) script("rival-tiers.mjs", ["record", pm], { silent: true }); return r; },
+  // Did a rival grow? Public counters (GitHub, npm, App Store, open roles) with history: run | init | note | notes. Reads public APIs only, never LinkedIn.
+  "rival-signals": () => { const [sub, ...rest] = args, named = sub && !sub.startsWith("--"); return script("rival-signals.mjs", [named ? sub : "run", pm, ...(named ? rest : args)]); },
   // Rival demand: what the users of open-source rivals ask for (open issues and Discussions, by votes), from their public trackers.
   // Repos: --repos, sources.json rivalRepos, or GitHub links in pm/rivals/*.md. Discussions need gh or GH_TOKEN. No model.
   "rival-demand": () => script("rival-demand.mjs", [pm, ...args, "--json", path.join(pm, "state", "rival-demand.json")]),
@@ -187,6 +189,9 @@ const Commands = {
   tour: () => script("tour.mjs", [pm, ...args]), // `args` has --pm taken out wherever it stood (`nosy --pm x tour` too)
   // Rival research kept outside pm/rivals, copied in (rivals-import.mjs): `--from <folder>` or sources.json `rivalsPath`; `--dry-run` lists.
   "rivals-import": () => script("rivals-import.mjs", [pm, ...args]),
+  // The roadmap, in the repo (roadmap.mjs): a preview of the Now / Next / Later block, `--check` (is ROADMAP.md current on the
+  // integration branch), `--pr --yes` (a pull request that edits only that block, or updates the one still open; nothing is pushed without --yes), `--lang <code>`.
+  roadmap: () => sourceRequired() && script("roadmap.mjs", [pm, ...process.argv.slice(3).filter((a, i, all) => a !== "--pm" && all[i - 1] !== "--pm")]),
   // Bets (N3): `bet` places one and prints its id; `score` settles every bet from git (explicit links only).
   bet: () => {
     if (!args.length) { console.error('Usage: nosy bet place "<what>" --why "…" --estimate S|M|L [--rests-on K12] [--expect "…"] · nosy bet list · nosy bet drop <id> --reason "…"'); process.exitCode = 1; return; }
@@ -274,6 +279,9 @@ const Commands = {
     codes.push(Commands.recent()?.code ?? 1);
     return { code: codes.every(c => c === 0) ? 0 : 1 };
   },
+  // Closes the loop with the people who asked: one comment on each issue a merged PR closed (GitHub's own closing links), shown first,
+  // posted only with --yes (ship-notes.mjs). --since is a global flag (pulled out of argv above): a tag or a date, passed through as written.
+  "ship-notes": () => sourceRequired() && script("ship-notes.mjs", [pm, ...(since ? ["--since", since] : []), ...args]),
   // The page: the decision page by default (tea); --scoreboard builds the bets/shipped scoreboard from pm/state/shipped.json.
   page: () => {
     // No pm/ at all: say so and how to make one, instead of failing on the file it can't write.
@@ -368,12 +376,15 @@ Model-free counts (judgment stays with the agent; these just gather evidence):
   nosy page [output.html]  the decision page (default pm/page.html); --scoreboard: the bets/shipped scoreboard (default pm/scoreboard.html)
   nosy page-adopt adopt|refresh|undo   keep a hand-built page current: adopt lists its tables and the Nosy data that fits each (--apply --yes marks them), refresh rewrites only the marked tables, undo restores the page backup
   nosy watch               which rivals' public pages changed since the last run
+  nosy rival-signals [run|init|note|notes]   did a rival grow? GitHub stars/releases/commits, npm downloads, App Store rating, open roles, against the last 28 days → pm/state/rival-signals.json (init proposes the config; note keeps a sourced observation)
   nosy rival-demand [--repos o/r,…]   what your open-source rivals' users ask for, by votes (issues + Discussions) → pm/state/rival-demand.json
   nosy bet place "<what>" --why "…" --estimate S|M|L   place a bet; prints the id to put in the commit/PR (Bet: nb-…)
   nosy score               settle bets from git (landed, reverted, patched, partial) → pm/state/score.json
   nosy todo [list|add|done|drop|show]   what only a person can do, or said they would: add "<what>" --who ali --why "…" --blocks "…" · done <id> (files under pm/todo/; nothing is sent)
   nosy shipped [7d]        decisions that shipped (explicit links) + work that landed by reference, + recent (merged / close)
+  nosy ship-notes [--since tag|date] [--days N] [--json f] [--yes]   tell the people who asked that it shipped: one comment per issue a merged PR closed, shown first, posted only with --yes
   nosy rivals-import [--from folder] [--dry-run]   copy rival research kept outside pm/rivals (sources.json rivalsPath) into pm/rivals, originals stay
+  nosy roadmap [--check | --pr --yes] [--lang tr]   Now / Next / Later (scoop's waves and/or your GitHub labels, milestones, project board; read-only) as a block of ROADMAP.md: a preview (also pm/state/roadmap.json), a check against the integration branch, or a PR that edits only that block (an open Nosy roadmap PR is updated, not duplicated)
   nosy tour                the first look in one go: what Nosy reads, writes and sends, the steps with their state, one list of questions (tour approve|skip|done <id> records progress)
   nosy weekly [--short]    inventory → shipped → psst → score (if pm/bets/) → rival watch → page; --short: shipped → score → page
   nosy notify [--slack url] [--discord url] [--dry-run] [--allow-sensitive]   this week's "Psst…" summary (a secret or personal data stops it)

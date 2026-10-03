@@ -1,0 +1,4 @@
+{
+  "shipped": "#{pr} ile yayınlandı. Bunu istediğiniz için teşekkürler.",
+  "shippedIn": "#{pr} ile yayınlandı ({tag}). Bunu istediğiniz için teşekkürler."
+}

@@ -8,7 +8,7 @@ import http from "node:http";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { temporary, clean, Tool } from "./helpers.mjs";
-import { safeStatus, safeDiff, safeLowhanging, safePsstFinal, finalIsCurrent, safeSummary, safeRuns, safeGlance, withoutIssueTitle, authorNames, branchNames, PayloadKeys } from "../tools/publish-safe.mjs";
+import { safeStatus, safeDiff, safeLowhanging, safePsstFinal, finalIsCurrent, safeSummary, safeRuns, safeGlance, withoutIssueTitle, authorNames, branchNames, safeRoadmap, safeRivalSignals, safeSignalSource, SignalKeys, SignalHosts, PayloadKeys } from "../tools/publish-safe.mjs";
 
 const PUBLISH = path.join(Tool, "publish.mjs");
 let tmp, pm, server, url, got;
@@ -305,4 +305,83 @@ test("unit: a summary keeps nothing from before its first heading; a file with n
   assert.equal(safeSummary("preamble\n- stray bullet\n## A\n- one\n## B\n- two\n"), "## A\n- one\n");
   assert.equal(safeSummary("\uFEFF## A\n- one\n"), "## A\n- one\n");
   assert.equal(safeSummary(Array.from({ length: 90 }, (_, i) => `l${i}`).join("\n")).split("\n").filter(Boolean).length, 40);
+});
+
+// ---- the roadmap file and the rival signals (Cloud's Roadmap tab, its battlecards and "Who is moving") ----
+const ROAD = { type: "roadmap", generated: "2026-10-02T09:00:00.000Z", path: "ROADMAP.md", note: "internal", sections: {
+  now: [{ title: "  Private   pages\n for acme ", ref: "#12", url: "https://github.com/acme/widgets/issues/12", effort: "M", owner: "ada", why: "a customer asked" }],
+  next: [{ title: "Terraform provider", ref: null, url: "https://github.com/acme/widgets/pull/40" }], later: [{ title: "Voice alerts", ref: "12", url: "http://github.com/acme/widgets/issues/1" }],
+  shipped: [{ title: "Webhook retries", ref: "#31", url: null, date: "2026-09-28", author: "ada" }] }, hidden: { now: 0, next: 2, later: 1, secret: 5 } };
+
+test("unit: the roadmap keeps a title, a #N, a GitHub issue or PR link and a date, and nothing else", () => {
+  const R = safeRoadmap(ROAD);
+  assert.deepEqual(Object.keys(R).sort(), ["generated", "hidden", "path", "sections", "type"]);
+  assert.deepEqual(R.sections.now, [{ title: "Private pages for acme", ref: "#12", url: "https://github.com/acme/widgets/issues/12" }], "whitespace collapsed; effort, owner and why never leave");
+  assert.deepEqual(R.sections.next, [{ title: "Terraform provider", ref: null, url: "https://github.com/acme/widgets/pull/40" }]);
+  assert.deepEqual(R.sections.later, [{ title: "Voice alerts", ref: null, url: null }], "a ref that is not #N, and plain http, become null");
+  assert.deepEqual(R.sections.shipped, [{ title: "Webhook retries", ref: "#31", url: null, date: "2026-09-28" }]);
+  assert.deepEqual(R.hidden, { now: 0, next: 2, later: 1 });
+  assert.equal(R.path, "ROADMAP.md"); assert.equal(R.generated, "2026-10-02T09:00:00.000Z");
+  assert.ok(!JSON.stringify(R).includes("internal") && !JSON.stringify(R).includes("customer"));
+});
+
+test("unit: a roadmap link is an issue or pull request on github.com and nothing else", () => {
+  const url = u => safeRoadmap({ sections: { now: [{ title: "x", url: u }] } }).sections.now[0].url;
+  assert.equal(url("https://github.com/acme/widgets/issues/1"), "https://github.com/acme/widgets/issues/1");
+  for (const u of ["https://github.com/acme/widgets", "https://github.com/acme/widgets/tree/main/x", "https://github.com/acme/widgets/issues/1?x=1", "https://github.com/acme/widgets/issues/1#c", "https://github.com/acme/widgets/issues/abc",
+    "https://evil.test/acme/widgets/issues/1", "https://github.com.evil.test/a/b/issues/1", "https://user@github.com/a/b/issues/1", "http://github.com/a/b/issues/1", "javascript:alert(1)", "//github.com/a/b/issues/1", 7, null, {}, ["https://github.com/a/b/issues/1"]]) assert.equal(url(u), null, String(u));
+});
+
+test("unit: a title is cut to 200 characters, an empty one is dropped, a line that is not an object is dropped, each section holds at most 200 lines, and the path is checked", () => {
+  const R = safeRoadmap({ sections: { now: [{ title: "x".repeat(500) }, { title: "   " }, { title: 5 }, null, "x", 3, { ref: "#1" }, ...Array.from({ length: 900 }, (_, i) => ({ title: `L${i}` }))], next: "no", later: {} }, hidden: { now: -3, next: 9e12, later: "a" }, path: "../../etc/passwd" });
+  assert.equal(R.sections.now[0].title.length, 200); assert.equal(R.sections.now.length, 200);
+  assert.deepEqual(R.sections.next, []); assert.deepEqual(R.sections.later, []); assert.deepEqual(R.sections.shipped, []);
+  assert.deepEqual(R.hidden, { now: 0, next: 1_000_000, later: 0 });
+  assert.equal(R.path, "ROADMAP.md", "a path that climbs out of the repo is replaced");
+  assert.equal(safeRoadmap({ sections: {}, path: "docs/ROADMAP.md" }).path, "docs/ROADMAP.md");
+  assert.equal(safeRoadmap({ sections: {}, generated: "not a date" }).generated, null);
+  for (const bad of [null, 7, "x", [], {}, { sections: null }, { sections: [] }]) assert.throws(() => safeRoadmap(bad), /not a roadmap file/, JSON.stringify(bad));
+});
+
+const SIGS = { type: "rivalSignals", generated: "2026-10-02T09:00:00Z", extra: "x", rivals: [{ slug: "Pingwell", name: "Pingwell ", extra: "x", signals: [
+  { key: "githubStars", label: "GitHub stars", value: 8410, previous: 8120, since: "2026-09-25", source: "https://api.github.com/repos/acme/pingwell", note: "x" },
+  { key: "appStoreRating", label: "App Store rating", value: 4.5, previous: null, since: null, source: "https://itunes.apple.com/lookup?id=123&country=tr&term=zz" },
+  { key: "openRoles", label: "Open roles", value: "7", previous: 3 }, { key: "nope", value: 1 }, { key: "githubStars", value: 1 }],
+  unread: [{ key: "githubForks", why: "rate limited", detail: "x" }, { key: "nope", why: "x" }] }, { name: "Empty", signals: [], unread: [] }, null] };
+
+test("unit: rival signals keep the fixed keys, numbers, dates and a public https source, and nothing else", () => {
+  const S = safeRivalSignals(SIGS);
+  assert.deepEqual(Object.keys(S).sort(), ["generated", "rivals", "type"]);
+  assert.equal(S.rivals.length, 1, "a rival with nothing to show is dropped");
+  assert.deepEqual(Object.keys(S.rivals[0]).sort(), ["name", "signals", "slug", "unread"]);
+  assert.equal(S.rivals[0].name, "Pingwell"); assert.equal(S.rivals[0].slug, "pingwell");
+  assert.deepEqual(S.rivals[0].signals, [
+    { key: "githubStars", label: "GitHub stars", value: 8410, previous: 8120, since: "2026-09-25", source: "https://api.github.com/repos/acme/pingwell" },
+    { key: "appStoreRating", label: "App Store rating", value: 4.5, previous: null, since: null, source: "https://itunes.apple.com/lookup?id=123&country=tr" }], "a value that is not a number, an unknown key and a repeated key are dropped; only id and country survive in a query");
+  assert.deepEqual(S.rivals[0].unread, [{ key: "githubForks", why: "rate limited" }]);
+  assert.deepEqual(SignalKeys, ["githubStars", "githubForks", "githubReleases30d", "githubCommits30d", "npmWeeklyDownloads", "appStoreRating", "appStoreRatings", "openRoles"]);
+});
+
+test("unit: a signal source is https on one of the public hosts the tool reads, without credentials, a fragment or a query other than id and country", () => {
+  for (const host of SignalHosts) assert.equal(safeSignalSource(`https://${host}/x/y`), `https://${host}/x/y`, host);
+  for (const u of ["http://api.github.com/x", "https://evil.test/x", "https://api.github.com.evil.test/x", "https://evil.test/https://api.github.com/x", "https://user:pw@api.github.com/x", "https://user@api.github.com/x", "javascript:alert(1)", "ftp://api.github.com/x", "api.github.com/x", "", null, 5, {}, "https://api.github.com/" + "x".repeat(600)]) assert.equal(safeSignalSource(u), null, String(u));
+  assert.equal(safeSignalSource("https://api.github.com/repos/a/b/commits?since=2026-09-01&per_page=1#frag"), "https://api.github.com/repos/a/b/commits", "a query other than id and country, and a fragment, are cut");
+  assert.equal(safeSignalSource("https://itunes.apple.com/lookup?id=123&country=tr&access_token=zzz"), "https://itunes.apple.com/lookup?id=123&country=tr");
+  assert.equal(safeSignalSource("https://itunes.apple.com/lookup?id=a%20b&country=tr"), "https://itunes.apple.com/lookup?country=tr", "a value that is not a plain id or country is dropped");
+});
+
+test("unit: a reason is cut to 60 characters, a rival name to 120, at most 50 rivals go, and a file that is not a signals file is refused", () => {
+  const long = n => ({ name: n, signals: [{ key: "openRoles", value: 1 }], unread: [{ key: "githubStars", why: "w".repeat(200) }] });
+  const S = safeRivalSignals({ rivals: [long("N".repeat(300)), ...Array.from({ length: 200 }, (_, i) => long(`R${i}`))] });
+  assert.equal(S.rivals.length, 50); assert.equal(S.rivals[0].name.length, 120); assert.equal(S.rivals[0].signals[0].label, "openRoles", "a missing label falls back to the key");
+  assert.equal(S.rivals[0].unread[0].why.length, 60);
+  for (const bad of [null, 7, "x", [], {}, { rivals: "no" }]) assert.throws(() => safeRivalSignals(bad), /not a rival-signals file/, JSON.stringify(bad));
+  const nan = safeRivalSignals({ rivals: [{ name: "A", signals: [{ key: "openRoles", value: NaN }, { key: "githubStars", value: Infinity }, { key: "githubForks", value: 3, previous: "x", since: "yesterday" }] }] });
+  assert.deepEqual(nan.rivals[0].signals.map(x => [x.key, x.previous, x.since]), [["githubForks", null, null]]);
+});
+
+test("unit: the payload list names both files and says what they carry", () => {
+  assert.match(PayloadKeys["pm/state/roadmap.json"], /title, #N reference, GitHub issue or PR link/);
+  assert.match(PayloadKeys["pm/state/rival-signals.json"], /never your own notes on a rival/);
+  assert.match(PayloadKeys["pm/state/rival-signals.json"], /App Store rating, open roles/);
 });

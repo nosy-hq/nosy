@@ -80,13 +80,13 @@ test("a blobless clone is never asked for file contents: reading refs, worktrees
   assert.equal(packs(), before, "no lazy fetch");
 });
 
-test("300+ branches: matching 30 psst items against 400 branches of 500 paths each takes well under a second, and the list stays at 3 strong + 3 weak", () => {
+test("300+ branches: matching 30 psst items against 400 branches of 500 paths each takes seconds at the very worst under load (0.02 to 0.2 s alone), and the list stays at 3 strong + 3 weak", () => {
   const branches = Array.from({ length: 400 }, (_, i) => ({ name: `feat/b${i}`, date: `2026-09-${String(1 + (i % 28)).padStart(2, "0")}`, ahead: 1 + (i % 5), filesDiffer: 1 + (i % 45), subjects: [`K${i} work`],
     paths: Array.from({ length: 500 }, (_, j) => `src/mod${j % 40}/f${(i + j) % 300}.ts`) }));
   const L = { branches, prs: new Map(), base: "main", generated: "2026-10-02" };
   const t0 = Date.now(); let strong = 0;
   for (let k = 0; k < 30; k++) { const { list, more } = matchBranchesDetailed(L, { paths: [`src/mod${k}/f${k}.ts`, `src/mod${k + 1}/f${k + 7}.ts`], refs: [`K${k}`], refRe: /K\d+/g }); assert.ok(list.length <= 6); strong += list.filter(x => x.strength === "strong").length; assert.ok(more >= 0); }
-  assert.ok(Date.now() - t0 < 1500, `took ${Date.now() - t0} ms`);
+  assert.ok(Date.now() - t0 < 6000, `took ${Date.now() - t0} ms`);
   assert.ok(strong > 0);
   assert.ok(formatLocal(matchBranchesDetailed(L, { paths: ["src/mod0/f0.ts"] }).list).length > 0);
 });

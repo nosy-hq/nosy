@@ -6,7 +6,7 @@ This file is the host-agnostic entry point for Codex, Cursor, Gemini CLI and any
 
 ## Commands
 
-Every command is active. Grouped by direction: set up `move-in`, `tour`, `map`, `doctor` · inside `shipped`, `peek`, `overheard`, `psst`, `frontyard`, `dresscode` · over the fence `neighbors` · ahead `canwe`, `spill`, `scoop` · share `tea` · loop `stakeout`. `bet` and `score` are optional.
+Every command is active. Grouped by direction: set up `move-in`, `tour`, `map`, `doctor` · inside `shipped`, `peek`, `overheard`, `psst`, `frontyard`, `dresscode` · over the fence `neighbors` · ahead `canwe`, `spill`, `scoop` · share `roadmap`, `tea` · loop `stakeout`. `bet` and `score` are optional.
 
 | Command | What it does | Steps |
 |---|---|---|
@@ -20,6 +20,7 @@ Every command is active. Grouped by direction: set up `move-in`, `tour`, `map`, 
 | `neighbors` | Scans rivals' sites, changelogs and announcements; says the token cost first and researches only the rivals that changed (`nosy tiers`); proposed matrix cells are applied only with evidence (`nosy matrix-proposals`). | `<skill>/commands/neighbors.md` |
 | `psst` | Ranks cheap, valuable work with evidence (the team's own next notes, screens waiting on the backend, backend ready with no screen, stale statuses, rival gaps, open issues), then checks it: receipts per item, work held on purpose and work already on your own branches kept off, a fresh-context refuter. The answer comes from what survived. | `<skill>/commands/psst.md` |
 | `overheard [hours]` | Which open PRs and issues serve which decision, and whether they fit the roadmap. Not code review. | `<skill>/commands/overheard.md` |
+| `roadmap` | Now / Next / Later from `scoop`'s waves as a block of `ROADMAP.md`, proposed as a PR (merging is the approval). | `<skill>/commands/roadmap.md` |
 | `tea` | Builds and publishes the one-page decision page from `pm/`; the bets and shipped scoreboard on request. A hand-built page is kept current with `nosy page-adopt`. | `<skill>/commands/tea.md` |
 | `spill <topic>` | An evidence-based PRD or issue draft. Never sent out; stays a file under `pm/`. | `<skill>/commands/spill.md` |
 | `scoop` | Suggests the roadmap and work split; size is measured from past work. A suggestion, not an assignment. | `<skill>/commands/scoop.md` |

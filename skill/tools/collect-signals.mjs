@@ -274,7 +274,7 @@ const fileRead = file => { const ext = path.extname(file).toLowerCase();
 const Extension = /\.(csv|json|jsonl|md|txt)$/i;
 const expand = p => { if (!fs.existsSync(p)) return []; const st = fs.statSync(p);
   if (st.isFile()) return Extension.test(p) ? [p] : [];
-  return fs.readdirSync(p, { recursive: true }).map(f => path.join(p, String(f))).filter(f => { try { return fs.statSync(f).isFile() && Extension.test(f); } catch { return false; } }); };
+  return fs.readdirSync(p, { recursive: true }).map(f => path.join(p, String(f))).filter(f => { try { return fs.statSync(f).isFile() && Extension.test(f) && path.basename(f) !== "rival-notes.jsonl"; } catch { return false; } }); }; // rival-notes.jsonl: the owner's notes on rivals (rival-signals.mjs), not customer feedback
 const inputPathsOf = paths.length ? paths : (K.signal?.path?.length ? K.signal.path : [path.join(pm, "signal")]);
 const files = [...new Set(inputPathsOf.flatMap(expand))];
 

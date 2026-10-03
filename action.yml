@@ -24,6 +24,9 @@ inputs:
   commit:
     description: "true = commit pm/state/ and pm/page.html back to the current branch."
     default: "false"
+  roadmap:
+    description: "true = propose the roadmap as a pull request (`roadmap --pr --yes`) after the loop, when pm/sources.json has a `roadmap` key. An open Nosy roadmap PR is updated, not duplicated. Needs permissions contents: write and pull-requests: write for the job's own GITHUB_TOKEN, and the repo setting that lets Actions create pull requests."
+    default: "false"
 
 outputs:
   page:
@@ -73,6 +76,29 @@ runs:
         NOSY_DISCORD_WEBHOOK: ${{ inputs.discord-webhook }}
         NOSY_PAGE_URL: ${{ inputs.page-url }}
       run: node "$GITHUB_ACTION_PATH/skill/tools/nosy.mjs" notify
+
+    - name: Nosy · roadmap pull request
+      if: inputs.roadmap == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        NOSY_PM: ${{ inputs.pm }}
+      run: |
+        # Opt-in twice: the `roadmap` input and a `roadmap` key in sources.json. It pushes a branch and opens (or updates) one pull request that edits
+        # only the Nosy block of ROADMAP.md, with the job's own token: permissions `contents: write` and `pull-requests: write`. Never fails the job.
+        if ! node -e 'try { const K = JSON.parse(require("fs").readFileSync(process.env.NOSY_PM + "/sources.json", "utf8").replace(/^\uFEFF/, "")); process.exit(K.roadmap ? 0 : 1); } catch { process.exit(1); }'; then
+          echo "::notice::Nosy: roadmap is on, but $NOSY_PM/sources.json has no \`roadmap\` key; skipped (add \"roadmap\": {} to turn it on)"; exit 0
+        fi
+        git config user.name "nosy[bot]"; git config user.email "nosy[bot]@users.noreply.github.com"
+        set +e; out=$(node "$GITHUB_ACTION_PATH/skill/tools/nosy.mjs" roadmap --pr --yes 2>&1); code=$?; set -e
+        echo "$out"
+        [ "$code" = 0 ] || echo "::warning::Nosy roadmap: $(echo "$out" | tail -1)"
+        {
+          echo "## Nosy roadmap"
+          url=$(echo "$out" | grep -Eo 'https://github\.com/[^ ]+/pull/[0-9]+' | tail -1)
+          if [ -n "$url" ]; then echo "$url"; fi
+          echo "$out" | tail -1
+        } >> "$GITHUB_STEP_SUMMARY"
 
     - name: Nosy · commit pm/state and the page
       if: inputs.commit == 'true'

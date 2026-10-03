@@ -6,7 +6,9 @@
 // The files go straight from disk to the cloud, never through a model's context. Sent: matrix, status, lowhanging,
 // diff, psst's checked list when it is as new as the raw one (psst-final.json: the refuter's survivors, title/size/verdict/references only), run history (five fields a line), the first section of the summary, the rival watch list (state/watch.json: public rival page URLs,
 // so Cloud's cron can check them daily), the rivals' price lines (rival-facts.mjs), customer demand cut down to counts
-// (demand-facts.mjs), and the page's first screen (glance.mjs). Nothing else in pm/ (decisions, signal/, rivals) leaves.
+// (demand-facts.mjs), the page's first screen (glance.mjs), and, only if you made them, the lines of your roadmap (state/roadmap.json: a title, a #N and a
+// GitHub link per line, publish-safe.mjs safeRoadmap) and the public numbers about your rivals (state/rival-signals.json: stars, downloads, open roles,
+// ratings, publish-safe.mjs safeRivalSignals). Nothing else in pm/ (decisions, signal/ and so your own notes on rivals, rivals) leaves.
 // docs/DATA.md lists every key.
 // Usage: node publish.mjs <pm> [--project <name>] [--url <cloud url>] [--token-file <path>] [--dry-run [--full]] [--yes] [--allow-sensitive]
 //   Target: --url, else NOSY_CLOUD_URL, else sources.json cloud.url. No default: without one, nothing is sent.
@@ -38,7 +40,7 @@ import { readSources } from "./sources-file.mjs";
 import { preflightMatrix, describe as describeMatrix } from "./matrix-preflight.mjs";
 
 import readline from "node:readline";
-import { safeStatus, safeDiff, safeLowhanging, safePsstFinal, finalIsCurrent, safeGlance, safeSummary, safeRuns, authorNames, branchNames, PayloadKeys } from "./publish-safe.mjs";
+import { safeStatus, safeDiff, safeLowhanging, safePsstFinal, finalIsCurrent, safeGlance, safeSummary, safeRuns, safeRoadmap, safeRivalSignals, authorNames, branchNames, PayloadKeys } from "./publish-safe.mjs";
 
 export const Files = ["matrix.json", "state/status.json", "state/lowhanging.json", "state/diff.json", "history/runs.jsonl", "summary.md", "state/watch.json"];
 const Tool = path.dirname(fileURLToPath(import.meta.url));
@@ -107,6 +109,13 @@ try {
 const rdFile = path.join(pm, "state", "rival-demand.json");
 try { if (fs.existsSync(rdFile)) { const RD = rivalDemandForCloud(readJson(rdFile)); if (RD.repos.length) send.push({ key: "pm/state/rival-demand.json", text: JSON.stringify(RD) }); } }
 catch (e) { console.error(`(rival demand skipped: ${why(e)})`); }
+// The roadmap (roadmap.mjs) and the public numbers about rivals (rival-signals.mjs) go up only if you ran them: titles, #numbers and GitHub links; numbers
+// and their public sources. Each is cut down to those fields first (publish-safe.mjs); pm/signal/ (your own rival notes included) is never read here.
+for (const [name, cutFor] of [["roadmap.json", safeRoadmap], ["rival-signals.json", safeRivalSignals]]) {
+  const f = path.join(pm, "state", name);
+  try { if (fs.existsSync(f)) send.push({ key: `pm/state/${name}`, text: JSON.stringify(cutFor(readJson(f)), null, 1) }); }
+  catch (e) { console.error(`(${name} skipped: ${why(e)})`); }
+}
 
 // Nosy Cloud's limits (its store.ts and index.ts): 1.5 million characters a file, 8 MB a request. Said here, before anything is scanned or sent,
 // so a huge file is named with its size instead of a bare "413 Body too large" after the privacy scan has run.
@@ -163,8 +172,12 @@ if (missing.length) console.log(`  not found, will be cleared on the dashboard: 
 if (matrixLine) console.log(`  matrix: ${matrixLine}`);
 for (const n of notes) console.log(`  ${n}`);
 if (dry) { const T = findToken(); console.log(`  token: ${T.problem ? `not usable yet, a real run would stop (${T.short || T.problem.replace(/ Nothing was sent\.$/, "")})` : `found in ${T.from}; it is read only in a real run and never printed`}`); }
-console.log(send.some(x => x.key === "pm/state/rival-demand.json")
-  ? "Counts and structure only, apart from pm/state/rival-demand.json: titles and links of public issues on your rivals' trackers (their public data). No commit subjects, author names, PR titles, your own issue titles or customer quotes. Nothing else in pm/ leaves."
+// What is not a count: said, per file, in the line that promises "counts and structure only".
+const apart = [["pm/state/rival-demand.json", "titles and links of public issues on your rivals' trackers (their public data)"],
+  ["pm/state/roadmap.json", "the titles, #numbers and GitHub links of your roadmap lines (the file you committed)"],
+  ["pm/state/rival-signals.json", "public numbers about your rivals (stars, downloads, open roles, ratings; not your notes on them)"]].filter(([k]) => send.some(x => x.key === k));
+console.log(apart.length
+  ? `Counts and structure only, apart from ${apart.map(([k, d]) => `${k}: ${d}`).join("; ")}. No commit subjects, author names, PR titles, your own issue titles or customer quotes. Nothing else in pm/ leaves.`
   : "Counts and structure only: no commit subjects, author names, PR titles, issue titles or customer quotes. Nothing else in pm/ leaves.");
 if (full) for (const x of send) console.log(`\n--- ${x.key} ---\n${x.text}`);
 // A pipe holds about 64 KB: a big --full printout is still queued when process.exit runs, and the end of it was cut (a reader that is slow, an agent
@@ -203,6 +216,6 @@ console.log(`Published. Dashboard: ${body.url}`);
 if (reads) {
   const m = reads.matrix;
   const drawn = m && (m.areas > 0 || expectedAreas === 0);
-  console.log(drawn ? `The dashboard read: matrix ${m.areas} areas × ${m.rivals ?? 0} rivals${m.unknown ? `, ${m.unknown} cell${m.unknown === 1 ? "" : "s"} unknown to it` : ""}${m.declined ? `, ${m.declined} decided against` : ""}${reads.status ? `; status ${reads.status.main ?? "?"} on main` : ""}${reads.lowhanging != null ? `; ${reads.lowhanging} list item${reads.lowhanging === 1 ? "" : "s"}${reads.checked ? " (the refuter's checked list)" : ""}` : ""}.` : `⚠ The files arrived, but the dashboard drew no matrix from pm/matrix.json (it read ${m ? "0 areas" : "nothing"}). Open ${body.url} before telling anyone it is live.`);
+  console.log(drawn ? `The dashboard read: matrix ${m.areas} areas × ${m.rivals ?? 0} rivals${m.unknown ? `, ${m.unknown} cell${m.unknown === 1 ? "" : "s"} unknown to it` : ""}${m.declined ? `, ${m.declined} decided against` : ""}${reads.status ? `; status ${reads.status.main ?? "?"} on main` : ""}${reads.lowhanging != null ? `; ${reads.lowhanging} list item${reads.lowhanging === 1 ? "" : "s"}${reads.checked ? " (the refuter's checked list)" : ""}` : ""}${reads.roadmap ? `; roadmap ${reads.roadmap.now ?? 0} now, ${reads.roadmap.next ?? 0} next, ${reads.roadmap.later ?? 0} later, ${reads.roadmap.shipped ?? 0} shipped` : ""}${reads.signals != null ? `; public signals for ${reads.signals} rival${reads.signals === 1 ? "" : "s"}` : ""}.` : `⚠ The files arrived, but the dashboard drew no matrix from pm/matrix.json (it read ${m ? "0 areas" : "nothing"}). Open ${body.url} before telling anyone it is live.`);
   if (!drawn) process.exitCode = 1;
 } else console.log("The files arrived. This Cloud doesn't say what it drew: open the dashboard and check the matrix before telling anyone it is live.");

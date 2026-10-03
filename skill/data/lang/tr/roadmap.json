@@ -1,0 +1,16 @@
+{
+  "sections": {
+    "now": "Şimdi",
+    "next": "Sırada",
+    "later": "Daha sonra",
+    "shipped": "Yakın zamanda çıkanlar"
+  },
+  "built": "{source} temel alınarak [Nosy](https://github.com/nosy-hq/nosy) tarafından {date} tarihinde oluşturuldu. Bu bloğun dışındaki her şeyi düzenleyebilirsiniz; yol haritası değiştiğinde bu blok yeniden yazılır. Şimdi ve Sırada, ekibin üzerinde çalıştığı işlerdir; Daha sonra daha uzaktaki işlerdir. Hiçbiri söz değildir.",
+  "sources": {
+    "evidence": "ekibin kanıtları",
+    "github": "ekibin GitHub etiketleri, kilometre taşları ve proje panosu",
+    "both": "ekibin kanıtları ile GitHub etiketleri, kilometre taşları ve proje panosu (ekibin orada belirlediği geçerlidir)"
+  },
+  "more": "…ve {n} tane daha",
+  "empty": "Henüz planlanmış ya da çıkmış bir şey yok."
+}

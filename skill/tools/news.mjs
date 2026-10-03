@@ -14,6 +14,43 @@ import { authorNames } from "./publish-safe.mjs";
 const Tool = path.dirname(fileURLToPath(import.meta.url));
 const read = f => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
 
+// The quiet digest (two optional files, written by other commands; no file, or a shape that isn't this one, adds nothing):
+// pm/state/rival-signals.json { rivals: [{ name, signals: [{ label, value, previous, since }] }] }: a rival whose public signal moved by
+//   10% or 5 units (previous must be a number), each rival at most once with its biggest move, biggest relative move first, 3 at most.
+// pm/state/roadmap.json { generated, sections: { now, next, later, shipped } }: the counts only, and whether the file is behind.
+const num = x => (typeof x === "number" && Number.isFinite(x) ? x : null);
+const clip = (x, n) => String(x ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+export function rivalLines(pm, { max = 3 } = {}) {
+  const best = new Map(); // rival name (any case) -> its biggest qualifying move
+  for (const r of read(path.join(pm, "state", "rival-signals.json"))?.rivals || []) {
+    const rival = clip(r?.name, 40); if (!rival) continue;
+    for (const g of Array.isArray(r.signals) ? r.signals : []) {
+      const value = num(g?.value), previous = num(g?.previous), label = clip(g?.label, 40);
+      if (value === null || previous === null || !label) continue;
+      const change = value - previous, abs = Math.abs(change), rel = previous === 0 ? Infinity : abs / Math.abs(previous);
+      if (abs < 5 && rel < 0.1) continue;
+      const have = best.get(rival.toLowerCase());
+      if (!have || rel > have.rel || (rel === have.rel && abs > have.abs)) best.set(rival.toLowerCase(), { rival, label, value, previous, change, abs, rel, since: clip(g.since, 10) });
+    }
+  }
+  return [...best.values()].sort((a, b) => b.rel - a.rel || b.abs - a.abs).slice(0, max).map(m => {
+    const pct = m.previous === 0 ? "" : ` (${m.change > 0 ? "+" : "-"}${Math.round(m.rel * 100)}%)`;
+    return `• ${m.rival}: ${m.label} ${m.previous} → ${m.value}${pct}${m.since ? `, since ${m.since}` : ""}`;
+  });
+}
+// "Roadmap: 3 now, 2 next, 5 later, 4 shipped lately", then whether the file is behind: older than two weeks, or something merged after it
+// was generated (pm/state/shipped.json's recent merges). "" when there is no roadmap file. `merged` is the dates of recent merges.
+export function roadmapLine(pm, { merged = [], now = Date.now() } = {}) {
+  const R = read(path.join(pm, "state", "roadmap.json")), S = R?.sections;
+  if (!S || typeof S !== "object") return { line: "", behind: false };
+  const n = x => (Array.isArray(x) ? x.length : num(x) ?? 0);
+  const at = Date.parse(R.generated || ""), counts = `${n(S.now)} now, ${n(S.next)} next, ${n(S.later)} later, ${n(S.shipped)} shipped lately`;
+  if (isNaN(at)) return { line: `Roadmap: ${counts} (behind: no date on the file)`, behind: true };
+  const after = merged.filter(d => /^\d{4}-\d{2}-\d{2}/.test(d || "") && d.slice(0, 10) > new Date(at).toISOString().slice(0, 10)).length, age = Math.floor((now - at) / 864e5);
+  const why = after ? `${after} merge${after === 1 ? "" : "s"} since it was generated` : age > 14 ? `generated ${age} days ago` : "";
+  return { line: `Roadmap: ${counts} (${why ? `behind: ${why}` : "current"})`, behind: !!why };
+}
+
 export function messageSetup(pm, { notes = null, enExcess = 3 } = {}) {
   const d = read(path.join(pm, "state", "status.json")), l = read(path.join(pm, "state", "lowhanging.json")), n = notes && read(notes);
   const rc = read(path.join(pm, "state", "shipped.json"))?.recent, sc = read(path.join(pm, "state", "score.json"));
@@ -27,6 +64,10 @@ export function messageSetup(pm, { notes = null, enExcess = 3 } = {}) {
   if (landed.length || late.length) { line.push("", "*Bets:*");
     for (const b of landed) line.push(`• ${b.bet} landed ${b.landed} — estimated ${b.estimate}, took ${b.actual}${b.status === "reverted" ? " (reverted)" : ""}`);
     for (const b of late.slice(0, 3)) line.push(`• ${b.bet} — open longer than 2× its ${b.estimate} estimate`); }
+  // The quiet digest: rivals whose public signals moved (3 lines at most, a rival once), then one roadmap line. At most 5 lines in all, a
+  // blank one included. Nothing moved, nothing said; the roadmap line alone never makes a message (unless the file is behind).
+  const moved = rivalLines(pm), road = roadmapLine(pm, { merged: (rc?.merged || []).map(m => m.merged) });
+  if (moved.length || road.behind || (road.line && line.length)) line.push(...(line.length ? [""] : []), ...moved, ...(road.line ? [road.line] : []));
   // psst's list only goes out if it ran this week, never a stale one.
   // What goes out is the checked list when psst's refuter ran on this list, else the raw list
   // minus anything the receipts hold on purpose: a held item must never be announced as "cheap this week".

@@ -1,0 +1,16 @@
+{
+  "sections": {
+    "now": "Now",
+    "next": "Next",
+    "later": "Later",
+    "shipped": "Shipped recently"
+  },
+  "built": "Built from {source} by [Nosy](https://github.com/nosy-hq/nosy) on {date}. Edit anything outside this block; this block is rewritten when the roadmap changes. Now and Next are what the team is working toward; Later is further out. None of it is a promise.",
+  "sources": {
+    "evidence": "the team's evidence",
+    "github": "the team's GitHub labels, milestones and project board",
+    "both": "the team's evidence and its GitHub labels, milestones and project board (what the team set there wins)"
+  },
+  "more": "…and {n} more",
+  "empty": "Nothing is planned or shipped yet."
+}

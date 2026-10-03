@@ -189,7 +189,12 @@ function isSetup(source) {
 // (psst-final.json) leads "Now" as its own task, with the refuter's corrected size; what the refuter broke goes to
 // "outside". A drafted item isn't merged onto the raw item whose receipt it used: "strike the stale §28 lines" and
 // "build §28's comparison" share a receipt but aren't the same work. Without those files nothing changes.
-const receiptsJ = readJson(path.join(pm, "state", "receipts.json")), finalJ = readJson(path.join(pm, "state", "psst-final.json"));
+const receiptsJ = readJson(path.join(pm, "state", "receipts.json"));
+// The refuter's checked list is only as new as the psst list it checked. One older than the list (psst ran again since) describes work that may be
+// done or gone: on Nosy's own run it put three finished Cloud items at the top of "Now" for three days. It is left out, loudly, until the refuter runs again.
+let finalJ = readJson(path.join(pm, "state", "psst-final.json"));
+{ const listed = Date.parse(readJson(path.join(pm, "state", "lowhanging.json"))?.generated || ""), checked = Date.parse(finalJ?.generated || "");
+  if (finalJ && listed > checked) { console.error(`Psst… the refuter's list (psst-final.json, ${new Date(checked).toISOString().slice(0, 10)}) is older than the psst list (${new Date(listed).toISOString().slice(0, 10)}), so it was left out of the waves. Check the new list: \`nosy refute pack\`, the nosy-refuter agent, \`nosy refute apply\`.`); finalJ = null; } }
 const heldBy = new Map((receiptsJ?.items || []).filter(r => r.gate?.held).map(r => [small(r.title.trim()), r.gate]));
 const receipted = new Set((receiptsJ?.items || []).map(r => small(r.title.trim())));
 const CODE_EVIDENCE = new Set(["Backend ready, not on screen", "Endpoint exists, no screen", "Served, no screen"]);

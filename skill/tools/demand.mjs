@@ -77,7 +77,7 @@ export function demandLine(g, D) {
 // Where collect-signals looks for input (same order as the script): sources.json signal.path, else <pm>/signal/.
 export function demandInputs(pm, K) {
   const paths = K?.signal?.path?.length ? [].concat(K.signal.path) : [path.join(pm, "signal")];
-  return paths.filter(p => { try { const st = fs.statSync(p); return st.isFile() || (st.isDirectory() && fs.readdirSync(p, { recursive: true }).some(f => /\.(csv|json|jsonl|md|txt)$/i.test(String(f)))); } catch { return false; } });
+  return paths.filter(p => { try { const st = fs.statSync(p); return st.isFile() || (st.isDirectory() && fs.readdirSync(p, { recursive: true }).some(f => /\.(csv|json|jsonl|md|txt)$/i.test(String(f)) && path.basename(String(f)) !== "rival-notes.jsonl")); } catch { return false; } });
 }
 
 // --- Interview themes: pm/state/interviews.json from interview-themes.mjs ---

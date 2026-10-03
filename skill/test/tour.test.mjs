@@ -53,7 +53,7 @@ test("a bare pm/: every step is to run, and the questions come as one list: the 
 test("steps that only read or write Nosy's own files never ask", () => {
   const R = tour(pmWith(), { now: NOW });
   for (const id of ["doctor", "facts", "inventory", "shipped", "psst", "scoop", "tea"]) assert.equal(step(R, id).ask, undefined, id);
-  assert.ok(R.steps.filter(s => s.writes === "outside").every(s => s.id === "publish"));
+  assert.ok(R.steps.filter(s => s.writes === "outside").every(s => ["publish", "roadmap"].includes(s.id)), "only the steps that leave pm/ ask: publish and the roadmap PR");
 });
 
 test("what pm/ already holds is not run again: fresh outputs are ✓, and the rival question counts only rivals that changed", () => {
@@ -150,7 +150,7 @@ test("a question the owner skipped is never asked again: its step reads 'skipped
 test("a typo is said and recorded nowhere: approve and skip take question ids, done takes step ids", () => {
   const pm = pmWith();
   const a = run(TOUR, [pm, "approve", "neighbours"]);
-  assert.equal(a.code, 1); assert.match(a.error, /neighbours: not a question of the tour\. Questions: map, neighbors, publish\./);
+  assert.equal(a.code, 1); assert.match(a.error, /neighbours: not a question of the tour\. Questions: map, neighbors, publish, roadmap, rival-signals\./);
   const d = run(TOUR, [pm, "done", "psstt"]);
   assert.equal(d.code, 1); assert.match(d.error, /psstt: not a step of the tour\. Steps: doctor, map, facts/);
   assert.equal(fs.existsSync(path.join(pm, "state", "tour.json")), false, "nothing was written");
@@ -245,4 +245,31 @@ test("a sources.json that is there but won't parse is said to be unreadable (nev
   assert.equal(next(empty, { now: NOW }).picks[0].command, "move-in", "no file at all is still move-in");
   assert.equal(fs.readFileSync(path.join(pm, "sources.json"), "utf8"), '{ "repo": ".", "ref": ');
   assert.equal(fs.existsSync(path.join(pm, "state")), false);
+});
+
+test("roadmap is an opt-in step: skipped without a roadmap key; with one it asks once (it ends in a PR) and is current once the block is newer than the waves", () => {
+  assert.equal(tour(pmWith(), { now: NOW }).steps.find(s => s.id === "roadmap").state, "skip");
+  const pm = pmWith({}, { repo: ".", ref: "main", roadmap: {} });
+  const R = tour(pm, { now: NOW }), s = R.steps.find(x => x.id === "roadmap");
+  assert.equal(s.state, "todo");
+  assert.equal(s.writes, "outside");
+  assert.match(R.questions.find(q => q.step === "roadmap").question, /pull request.*ROADMAP\.md.*merging is the approval/s);
+  fs.mkdirSync(path.join(pm, "state"), { recursive: true });
+  fs.writeFileSync(path.join(pm, "state", "waves.json"), JSON.stringify({ generated: "2026-10-02T08:00:00Z", waves: [] }));
+  fs.writeFileSync(path.join(pm, "state", "roadmap.md"), "block");
+  fs.utimesSync(path.join(pm, "state", "roadmap.md"), new Date("2026-10-02T09:00:00Z"), new Date("2026-10-02T09:00:00Z"));
+  assert.equal(tour(pm, { now: NOW }).steps.find(x => x.id === "roadmap").state, "fresh");
+});
+
+test("rival-signals is an asked step that only appears with a `signals` block, and goes stale after a week", () => {
+  assert.equal(tour(pmWith(), { now: NOW }).steps.find(s => s.id === "rival-signals").state, "skip");
+  const pm = pmWith({}, { repo: ".", ref: "main", rivals: { acme: { name: "Acme", signals: { github: "acme/widgets" } }, beta: { name: "Beta" } } });
+  const R = tour(pm, { now: NOW }), s = R.steps.find(x => x.id === "rival-signals");
+  assert.equal(s.state, "todo");
+  assert.match(R.questions.find(q => q.step === "rival-signals").question, /1 rival.*one plain request per address/is);
+  fs.mkdirSync(path.join(pm, "state"), { recursive: true });
+  fs.writeFileSync(path.join(pm, "state", "rival-signals.json"), JSON.stringify({ generated: "2026-10-01T12:00:00Z", rivals: [] }));
+  assert.equal(tour(pm, { now: NOW }).steps.find(x => x.id === "rival-signals").state, "fresh");
+  fs.writeFileSync(path.join(pm, "state", "rival-signals.json"), JSON.stringify({ generated: "2026-09-10T12:00:00Z", rivals: [] }));
+  assert.equal(tour(pm, { now: NOW }).steps.find(x => x.id === "rival-signals").state, "todo");
 });

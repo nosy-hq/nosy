@@ -40,9 +40,14 @@ const S = {
   droppedTitle: "zq-dropped-title", droppedWhy: "zq-dropped-why", droppedChecked: "zq-dropped-checked", heldTitle: "zq-held-title", receiptCode: "zq-receipt-code-line",
   decision: "zq-decision-text", decisionSummary: "zq-decision-summary", request: "zq-request-text", rivalNote: "zq-rival-internal-note", laterSummary: "zq-later-summary-section",
   todoTitle: "zq-todo-title", todoPerson: "Zelda Todoperson", demandExample: "zq-demand-example", matrixNot: "zq-matrix-private-not", teamNote: "zq-team-private-note",
+  // the roadmap file and the rival signals (publish-safe.mjs safeRoadmap, safeRivalSignals): extra keys, a link that is not an issue, a source that is not https or not a public host,
+  // a query string with a token, a reason past its 60 characters, and the owner's own notes on rivals (pm/signal/rival-notes.jsonl, which is never read)
+  roadmapNote: "zq-roadmap-extra-note", roadmapOwner: "zq-roadmap-owner-key", roadmapBadUrl: "zq-roadmap-bad-url", roadmapQuery: "zq-roadmap-query", roadmapTopKey: "zq-roadmap-top-key", roadmapHidden: "zq-roadmap-hidden-key",
+  signalExtra: "zq-signal-extra-key", signalHttp: "zq-signal-http-source", signalOther: "zq-signal-other-host", signalQuery: "zq-signal-query-token", signalWhyTail: "zq-signal-why-tail", signalRivalKey: "zq-signal-rival-key", signalCreds: "zq-signal-creds",
+  rivalNotesLine: "zq-rival-notes-line", rivalNotesPerson: "Zinnia Rivalwatcher",
 };
 // What IS meant to be sent (the product's own structure): proves the pipeline carried data, so "nothing leaked" is not "nothing sent".
-const OWN = { rowOne: "Export data", rowTwo: "Share links", rival: "RivalOne", listItem: "Bulk import", decided: "Not for this audience", price: "$10 per seat", teamItem: "Own team list item" };
+const OWN = { roadNow: "Private pages", roadNext: "Fourth region", roadQuery: "Terraform provider", roadShipped: "Webhook retries", rowOne: "Export data", rowTwo: "Share links", rival: "RivalOne", listItem: "Bulk import", decided: "Not for this audience", price: "$10 per seat", teamItem: "Own team list item" };
 
 const STATUS = { type: "state", generated: "2026-10-01T20:00:00Z", range: "--since 2026-09-22 00:00 origin/main", main: 12, pr: 5, prCommits: 3, openPrs: 2, lastMain: "abc1234",
   prs: [{ n: 7, t: S.prTitle, a: S.authorPr, draft: false, count: 2, last: "09.30 10:00 AM" }],
@@ -99,6 +104,21 @@ function plant(dir, { matrixExtra = {} } = {}) {
   write(path.join(dir, "state", "signals.json"), { generated: "2026-10-01T09:00:00Z", total: 6, matching: 3, sources: [{ format: "csv", signal: 6 }], themes: [{ key: S.theme, count: 2, examples: [S.quote] }],
     goals: [{ type: "matrix", title: OWN.rowOne, code: "y", count: 3, customer: 2, source: { csv: 3 }, trend: { last30: 2, previous30: 1 }, examples: [S.quote], customers: [S.customer] },
       { type: "signal", title: `${S.customer} wants a thing`, count: 2, customer: 1, source: { csv: 2 }, examples: [S.demandExample], trend: { last30: 2, previous30: 0 } }] });
+  write(path.join(dir, "state", "roadmap.json"), { type: "roadmap", generated: "2026-10-01T14:00:00Z", path: "ROADMAP.md", [S.roadmapTopKey]: "x", sections: {
+    now: [{ title: OWN.roadNow, ref: "#12", url: "https://github.com/acme/cargo/issues/12", note: S.roadmapNote, owner: S.roadmapOwner, effort: "M" },
+      { title: OWN.roadNext, ref: S.roadmapBadUrl, url: `https://evil.test/${S.roadmapBadUrl}`, reason: S.roadmapNote }],
+    next: [{ title: OWN.roadQuery, ref: "#13", url: `https://github.com/acme/cargo/issues/13?${S.roadmapQuery}=1` }], later: [],
+    shipped: [{ title: OWN.roadShipped, ref: "#9", url: "https://github.com/acme/cargo/pull/9", date: "2026-09-28", author: S.roadmapOwner }] }, hidden: { now: 0, next: 1, later: 0, [S.roadmapHidden]: 4 } });
+  write(path.join(dir, "state", "rival-signals.json"), { type: "rivalSignals", generated: "2026-10-01T14:00:00Z", [S.signalRivalKey]: "x", rivals: [
+    { slug: "rivalone", name: OWN.rival, [S.signalRivalKey]: "x", signals: [
+      { key: "githubStars", label: "GitHub stars", value: 1234, previous: 1100, since: "2026-09-05", source: "https://api.github.com/repos/acme/rivalone", [S.signalExtra]: "x", note: S.signalExtra },
+      { key: "githubForks", label: "GitHub forks", value: 55, previous: null, since: null, source: `http://api.github.com/${S.signalHttp}` },
+      { key: "npmWeeklyDownloads", label: "npm downloads", value: 9000, previous: 8000, since: "2026-09-05", source: `https://evil.test/${S.signalOther}` },
+      { key: "openRoles", label: "Open roles", value: 7, previous: 3, since: "2026-09-05", source: `https://api.lever.co/v0/postings/rivalone?mode=json&token=${S.signalQuery}` },
+      { key: "appStoreRating", label: "App Store rating", value: 4.5, previous: 4.4, since: "2026-09-05", source: `https://user:${S.signalCreds}@itunes.apple.com/lookup?id=123&country=tr` },
+      { key: "someOtherKey", label: "Not on the list", value: 3, source: null }],
+      unread: [{ key: "githubReleases30d", why: `rate limited, not read ${"and a long reason ".repeat(6)}${S.signalWhyTail}`, detail: S.signalExtra }] }] });
+  write(path.join(dir, "signal", "rival-notes.jsonl"), JSON.stringify({ at: "2026-10-01", slug: "rivalone", text: S.rivalNotesLine, person: S.rivalNotesPerson, source: "https://example.test/post" }) + "\n");
   write(path.join(dir, "signal", "feedback.csv"), `customer,text\n${S.customer},${S.quote}\n`);
   write(path.join(dir, "decisions.md"), `# Decisions\n\n## K9\n${S.decision}\n`);
   write(path.join(dir, "requests", "requests.md"), `# Requests\n\n## 1. Something\n${S.request}\n`);
@@ -151,7 +171,7 @@ test("a real send: nothing planted reaches the body, and what is meant to leave 
   // 3. what the tool said to the owner
   assert.deepEqual(leaks(r.output + r.error), [], "stdout and stderr");
   // 4. nothing but the dashboard files, and nothing from pm/ outside the list
-  assert.deepEqual(Object.keys(got.body.files).sort(), ["pm/history/runs.jsonl", "pm/matrix.json", "pm/state/demand.json", "pm/state/diff.json", "pm/state/glance.json", "pm/state/lowhanging.json", "pm/state/psst-final.json", "pm/state/rival-facts.json", "pm/state/status.json", "pm/state/watch.json", "pm/summary.md"]);
+  assert.deepEqual(Object.keys(got.body.files).sort(), ["pm/history/runs.jsonl", "pm/matrix.json", "pm/state/demand.json", "pm/state/diff.json", "pm/state/glance.json", "pm/state/lowhanging.json", "pm/state/psst-final.json", "pm/state/rival-facts.json", "pm/state/rival-signals.json", "pm/state/roadmap.json", "pm/state/status.json", "pm/state/watch.json", "pm/summary.md"]);
   // 5. nothing written into pm/, nothing left in the temp folder
   assert.deepEqual(tree(pm), before, "pm/ is untouched");
   assert.deepEqual(fs.readdirSync(sandbox), [], "no temp file left behind");
@@ -170,6 +190,25 @@ test("a real send: nothing planted reaches the body, and what is meant to leave 
   assert.equal(low.leftOut, 1, "the held item is left out, counted");
   assert.ok(low.items.some(i => i.title === "#321"), "the issue is a reference, not its title");
   assert.ok(JSON.parse(F["pm/state/glance.json"]).tiles.length, "the first screen is computed");
+  // The roadmap and the rival signals carry exactly the fields the dashboard reads, and nothing else (no extra key, no foreign link, no query, no credentials).
+  const road = JSON.parse(F["pm/state/roadmap.json"]);
+  assert.deepEqual(Object.keys(road).sort(), ["generated", "hidden", "path", "sections", "type"]);
+  assert.deepEqual(Object.keys(road.sections).sort(), ["later", "next", "now", "shipped"]);
+  assert.deepEqual(road.sections.now[0], { title: OWN.roadNow, ref: "#12", url: "https://github.com/acme/cargo/issues/12" });
+  assert.deepEqual(road.sections.now[1], { title: OWN.roadNext, ref: null, url: null }, "a ref that is not #N and a link that is not an issue become null");
+  assert.equal(road.sections.next[0].url, null, "a query string on an issue link is not an issue address");
+  assert.deepEqual(road.sections.shipped[0], { title: OWN.roadShipped, ref: "#9", url: "https://github.com/acme/cargo/pull/9", date: "2026-09-28" });
+  assert.deepEqual(road.hidden, { now: 0, next: 1, later: 0 });
+  const sig = JSON.parse(F["pm/state/rival-signals.json"]);
+  assert.deepEqual(Object.keys(sig).sort(), ["generated", "rivals", "type"]);
+  assert.deepEqual(Object.keys(sig.rivals[0]).sort(), ["name", "signals", "slug", "unread"]);
+  assert.deepEqual(sig.rivals[0].signals.map(x => x.key), ["githubStars", "githubForks", "npmWeeklyDownloads", "openRoles", "appStoreRating"], "a key not on the list is dropped");
+  for (const x of sig.rivals[0].signals) assert.deepEqual(Object.keys(x).sort(), ["key", "label", "previous", "since", "source", "value"]);
+  assert.deepEqual(sig.rivals[0].signals.map(x => x.source), ["https://api.github.com/repos/acme/rivalone", null, null, "https://api.lever.co/v0/postings/rivalone", null],
+    "http, a foreign host, a token in the query and credentials in the address are not sent");
+  assert.equal(sig.rivals[0].unread[0].key, "githubReleases30d"); assert.deepEqual(Object.keys(sig.rivals[0].unread[0]).sort(), ["key", "why"]);
+  assert.ok(sig.rivals[0].unread[0].why.length <= 60, "the reason is cut to 60 characters");
+  assert.ok(!got.raw.includes("rival-notes") && !got.raw.includes("pm/signal"), "the owner's notes on rivals are not on the list");
 });
 
 test("--dry-run --full prints exactly what the real send sends", async () => {

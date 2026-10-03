@@ -21,8 +21,8 @@ const DAY = 864e5;
 // tokens" belongs to that day's list of rivals, not to next week's, so approvals, skips and done marks all start over.
 export const TOUR_DAYS = 2;
 // The ids `approve` / `skip` (a question's id) and `done` (a step's id) accept: a typo is said, never recorded as if it meant something.
-export const QUESTION_IDS = ["map", "neighbors", "publish"];
-export const STEP_IDS = ["doctor", "map", "facts", "inventory", "shipped", "psst", "rivals-import", "neighbors", "scoop", "frontyard", "tea", "publish"];
+export const QUESTION_IDS = ["map", "neighbors", "publish", "roadmap", "rival-signals"];
+export const STEP_IDS = ["doctor", "map", "facts", "inventory", "shipped", "psst", "rivals-import", "neighbors", "rival-signals", "scoop", "roadmap", "frontyard", "tea", "publish"];
 const readJson = f => { try { return JSON.parse(fs.readFileSync(f, "utf8").replace(/^﻿/, "")); } catch { return null; } };
 const mtime = f => { try { return fs.statSync(f).mtimeMs; } catch { return null; } };
 const asOf = f => { const j = readJson(f), g = j?.generated && Date.parse(j.generated); return g || mtime(f); };
@@ -104,9 +104,22 @@ export function tour(pm, { now = Date.now(), staleDays = 7 } = {}) {
     if (T.suggestions.length) R.steps[R.steps.length - 1].note = T.suggestions.map(x => x.text).join(" ");
   }
 
+  // Growth signals (rival-signals.mjs): public numbers (GitHub, npm, App Store, job boards) for the rivals that have a `signals` block. It reaches the
+  // network (one GET per address), so it asks; with nothing configured it says how to start.
+  const withSignals = Object.values(K.rivals && typeof K.rivals === "object" ? K.rivals : {}).filter(r => r && typeof r === "object" && r.signals && typeof r.signals === "object").length;
+  const sigAge = age("rival-signals.json");
+  step("rival-signals", "rival-signals", !withSignals ? "no rival has a `signals` block yet" : sigAge == null ? `${plural(withSignals, "rival")} to read, never read` : `read ${plural(sigAge, "day")} ago`, withSignals && (sigAge == null || sigAge >= staleDays) ? "todo" : "fresh",
+    { writes: "pm", skip: withSignals ? null : `optional: \`${nosyCommand("rival-signals init")}\` proposes what to watch (GitHub, npm, App Store, job boards)`,
+      ask: withSignals ? { id: "rival-signals", kind: "network", question: `Read public growth signals for ${plural(withSignals, "rival")} (GitHub stars and releases, npm downloads, App Store ratings, open roles)? One plain request per address, no model, nothing of yours leaves; \`${nosyCommand("rival-signals run")}\`.` } : null });
+
   // 6. Roadmap, page, and the landing page when there is one.
   const wavesAt = asOf(state("waves.json"));
   step("scoop", "scoop", !wavesAt ? "no roadmap waves yet" : psstAt && psstAt > wavesAt + 1000 ? "the list changed since the waves were built" : "waves are current", !wavesAt || (psstAt && psstAt > wavesAt + 1000) ? "todo" : "fresh", { writes: "pm" });
+  // The roadmap in the repo (roadmap.mjs): opt-in (a `roadmap` key), and it ends in a pull request, so it asks.
+  const roadmapAt = asOf(state("roadmap.md")), roadmapOn = !!K.roadmap;
+  step("roadmap", "roadmap", !roadmapOn ? "not set up" : !roadmapAt ? "no roadmap block built yet" : wavesAt && wavesAt > roadmapAt + 1000 ? "the waves changed since the block was built" : "the block is current", roadmapOn && (!roadmapAt || (wavesAt && wavesAt > roadmapAt + 1000)) ? "todo" : "fresh",
+    { writes: "outside", skip: roadmapOn ? null : "optional: a `roadmap` key in sources.json (Now / Next / Later as a pull request on ROADMAP.md)",
+      ask: roadmapOn ? { id: "roadmap", kind: "send", question: `Open a pull request that updates the roadmap block in ${K.roadmap.path || "ROADMAP.md"}? It pushes a branch and opens a PR in your repo; merging is the approval, and only the block changes (\`${nosyCommand("roadmap")}\` shows it first).` } : null });
   const V = K.frontyard;
   step("frontyard", "frontyard", "shipped features against the landing page", asOf(state("frontyard.json")) ? "fresh" : "todo", { writes: "pm", skip: V && (V.path || V.url) ? null : "no landing page set in sources.json" });
   const pageAt = mtime(path.join(pm, "page.html")), dataAt = Math.max(0, ...["shipped.json", "lowhanging.json", "waves.json"].map(f => asOf(state(f)) || 0));

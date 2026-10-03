@@ -44,6 +44,18 @@ test("reads: a dashboard that drew the matrix is quoted, with decided-against an
   assert.match(r.output, /The dashboard read: matrix 2 areas × 1 rivals, 1 decided against; status 4 on main; 1 list item \(the refuter's checked list\)\./);
 });
 
+test("reads: the roadmap counts and the number of rivals with signals are quoted when Cloud answers them, and only then", async () => {
+  reply = ok({ reads: { matrix: { areas: 2, rivals: 1, unknown: 0 }, status: null, lowhanging: 0, checked: false, roadmap: { now: 2, next: 1, later: 0, shipped: 3 }, signals: 1 } });
+  const r = await send();
+  assert.equal(r.code, 0, r.error);
+  assert.match(r.output, /The dashboard read: matrix 2 areas × 1 rivals; 0 list items; roadmap 2 now, 1 next, 0 later, 3 shipped; public signals for 1 rival\./);
+  reply = ok({ reads: { matrix: { areas: 2, rivals: 1, unknown: 0 }, lowhanging: 0, signals: 4 } });
+  assert.match((await send()).output, /; public signals for 4 rivals\./);
+  reply = ok({ reads: { matrix: { areas: 2, rivals: 1, unknown: 0 }, lowhanging: 0 } });
+  const old = await send();
+  assert.doesNotMatch(old.output, /roadmap \d|public signals/, "a Cloud that does not answer them says nothing about them");
+});
+
 test("reads: a matrix the dashboard drew nothing from is said, and the exit code is 1 although the files arrived", async () => {
   for (const reads of [{ matrix: { areas: 0, rivals: 0, unknown: 0 } }, { matrix: null }]) {
     reply = ok({ reads });

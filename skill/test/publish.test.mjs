@@ -115,6 +115,40 @@ test("rival demand goes up only if you ran it, cut to public tracker facts, and 
   fs.rmSync(path.join(pm, "state", "rival-demand.json"));
 });
 
+test("the roadmap and the rival signals go up only if you made them, cut to what the dashboard reads, and the promise line says what they are", async () => {
+  const before = await run([pm, "--url", url, "--dry-run", "--full"]);
+  assert.ok(!before.output.includes("roadmap.json") && !before.output.includes("rival-signals.json"), "no file, nothing sent");
+  fs.writeFileSync(path.join(pm, "state", "roadmap.json"), JSON.stringify({ type: "roadmap", generated: "2026-10-02T09:00:00Z", path: "ROADMAP.md", sections: {
+    now: [{ title: "Private pages", ref: "#12", url: "https://github.com/acme/widgets/issues/12", owner: "ada" }], next: [], later: [], shipped: [{ title: "Webhook retries", ref: "#31", url: null, date: "2026-09-28" }] }, hidden: { now: 0, next: 1, later: 0 } }));
+  fs.writeFileSync(path.join(pm, "state", "rival-signals.json"), JSON.stringify({ type: "rivalSignals", generated: "2026-10-02T09:00:00Z", rivals: [{ slug: "pingwell", name: "Pingwell",
+    signals: [{ key: "githubStars", label: "GitHub stars", value: 8410, previous: 8120, since: "2026-09-25", source: "https://api.github.com/repos/acme/pingwell" }], unread: [{ key: "openRoles", why: "no careers page" }] }] }));
+  fs.mkdirSync(path.join(pm, "signal"), { recursive: true });
+  fs.writeFileSync(path.join(pm, "signal", "rival-notes.jsonl"), JSON.stringify({ text: "zq-rival-note-never", source: "https://example.test/x" }) + "\n");
+  try {
+    const after = await run([pm, "--url", url, "--dry-run", "--full"]);
+    assert.equal(after.code, 0, after.error);
+    assert.match(after.output, /pm\/state\/roadmap\.json \([\d.]+ KB\): computed, only if you ran `nosy roadmap`/);
+    assert.match(after.output, /pm\/state\/rival-signals\.json \([\d.]+ KB\): computed, only if you ran `nosy rival-signals`/);
+    assert.match(after.output, /^Counts and structure only, apart from pm\/state\/roadmap\.json: the titles, #numbers and GitHub links of your roadmap lines \(the file you committed\); pm\/state\/rival-signals\.json: public numbers about your rivals/m);
+    assert.ok(!after.output.includes("zq-rival-note-never") && !after.output.includes("rival-notes.jsonl"), "the owner's notes on rivals never leave");
+    const road = JSON.parse(after.output.split("--- pm/state/roadmap.json ---\n")[1].split("\n---")[0].trim());
+    assert.deepEqual(road.sections.now, [{ title: "Private pages", ref: "#12", url: "https://github.com/acme/widgets/issues/12" }]);
+    got = null;
+    const r = await run([pm, "--url", url, "--yes"], { NOSY_CLOUD_TOKEN: "nsy_good" });
+    assert.equal(r.code, 0, r.error);
+    assert.ok("pm/state/roadmap.json" in got.body.files && "pm/state/rival-signals.json" in got.body.files);
+    assert.ok(!got.body.files["pm/state/roadmap.json"].includes("ada"), "an extra key on a line never leaves");
+    // a file that is not one of ours is left out with a one-line reason, and the send goes on
+    fs.writeFileSync(path.join(pm, "state", "roadmap.json"), "{not json");
+    fs.writeFileSync(path.join(pm, "state", "rival-signals.json"), JSON.stringify({ rivals: "no" }));
+    got = null;
+    const bad = await run([pm, "--url", url, "--yes"], { NOSY_CLOUD_TOKEN: "nsy_good" });
+    assert.equal(bad.code, 0, bad.error);
+    assert.match(bad.error, /\(roadmap\.json skipped: it isn't valid JSON\)/); assert.match(bad.error, /\(rival-signals\.json skipped: not a rival-signals file/);
+    assert.ok(!("pm/state/roadmap.json" in got.body.files) && !("pm/state/rival-signals.json" in got.body.files));
+  } finally { for (const f of ["roadmap.json", "rival-signals.json"]) fs.rmSync(path.join(pm, "state", f), { force: true }); fs.rmSync(path.join(pm, "signal"), { recursive: true, force: true }); }
+});
+
 // ---- the token is read from a file, never from the command line ----
 // On the first real run the key was typed into a command, so it stayed in the shell history and in the chat log. The environment still
 // works; a file is now the better way, and a file other users can read is refused before anything is sent.

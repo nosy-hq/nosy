@@ -12,13 +12,13 @@ A 2 is a result, not a failure: the output says what was found. `publish` and `n
 
 ## Which commands run from the terminal
 
-Most of the 18 agent commands have a terminal twin that runs with no model: `npx github:nosy-hq/nosy <terminal command>` (or `nosy <terminal command>` once installed). The terminal part is the counting; the agent adds the judgment. Five have no twin and need the agent.
+Most of the 19 agent commands have a terminal twin that runs with no model: `npx github:nosy-hq/nosy <terminal command>` (or `nosy <terminal command>` once installed). The terminal part is the counting; the agent adds the judgment. Five have no twin and need the agent.
 
 | Command (in your agent) | Terminal command |
 |---|---|
 | `doctor` | `nosy doctor` (`--check` for the install) |
 | `peek` | `nosy peek` |
-| `shipped` | `nosy shipped` |
+| `shipped` | `nosy shipped` Also `nosy ship-notes` (previews one comment per issue a merged PR closed; `--yes` posts). |
 | `psst` | `nosy psst` |
 | `canwe` | `nosy canwe "<question>"` |
 | `frontyard` | `nosy frontyard` |
@@ -26,7 +26,8 @@ Most of the 18 agent commands have a terminal twin that runs with no model: `npx
 | `score` | `nosy score` |
 | `move-in` | `nosy setup` (proposes `pm/sources.json`; the rest of move-in is the agent) |
 | `tour` | `nosy tour` (the plan: what Nosy reads, writes and sends, the steps with their state, one list of questions. It runs no step itself; the agent does. `nosy tour approve <id>…`, `nosy tour skip <id>…` and `nosy tour done <id>` record progress in `pm/state/tour.json`) |
-| `neighbors` | `nosy watch` (which rivals' public pages changed; the research is the agent). Also `nosy tiers` (which rivals get a deep pass, which are only watched, and the token estimate), `nosy matrix-proposals` (sorts the cells the neighbor agents propose by evidence, `apply` writes the ones that earned it) and `nosy rivals-import` (copies rival research kept outside `pm/rivals` in) |
+| `roadmap` | `nosy roadmap` (`--check`, `--pr --yes`, `--write <file>` for a repo with no `origin`, `--lang <code>`; the optional Action input `roadmap` runs it weekly) |
+| `neighbors` | `nosy watch` (which rivals' public pages changed; the research is the agent). Also `nosy tiers` (which rivals get a deep pass, which are only watched, and the token estimate), `nosy matrix-proposals` (sorts the cells the neighbor agents propose by evidence, `apply` writes the ones that earned it) and `nosy rivals-import` (copies rival research kept outside `pm/rivals` in) Also `nosy rival-signals` (public growth counters: GitHub, npm, App Store, open roles; `init` proposes, `note` keeps your own sourced observations). |
 | none | `nosy rival-demand` (what the users of your open-source rivals ask for most, from their public issues and Discussions; no slash command) |
 | none | `nosy todo` (what only a person can do, or said they would: `add`, `list`, `done`, `drop`, `show`; the agent files items through the skill or the `nosy_todo` MCP tool; no slash command) |
 | `tea` | `nosy page` (`nosy page-adopt` for a hand-built page) |
@@ -67,6 +68,9 @@ These never return 2. Their findings are in the output; a 1 means the command st
 | Command | Returns 1 when |
 |---|---|
 | `nosy tour` | `approve` or `done` without an id, or on a `pm/` folder that doesn't exist. Plain `nosy tour` in a repo with no `pm/sources.json` is a 0: it says to run `move-in` |
+| `nosy roadmap` | no waves and nothing curated (run `scoop` first), no `origin` remote, no `--yes` on `--pr`, a PR step that failed, or `gh` couldn't list open PRs (1, nothing pushed). The privacy scan found something in a title, or `--check` found `ROADMAP.md` behind (2: a result, not a failure). An open Nosy PR is updated ("Updated <url>") or reported empty (0); a GitHub source that can't be read is a message on stderr and the evidence alone is used (0) |
+| `nosy rival-signals` | `run` and `init` with nothing configured, or a note refused (1); something couldn't be read, so the output names it (2: a result, not a failure) |
+| `nosy ship-notes` | the preview is 0; `--yes` is 0 when every comment went out and 1 on the first failure (it stops there and says how many were posted). Nothing is written outside `pm/` without `--yes` |
 | `nosy tiers` | there are no rival files in `pm/rivals` and no `rivals` in `sources.json` |
 | `nosy matrix-proposals` | `check` and `apply` have no `pm/state/matrix-proposals.json` or no matrix; `undo` has no backup in `pm/.backup/` |
 | `nosy page-adopt` | `pm/sources.json` is missing; there is no page (`--page`, else `pm/page.html`); `adopt --apply` without `--yes`; `refresh` on a page with no marked table; `undo` with no backup, or with a page changed by hand since the backup (add `--force` to restore anyway) |

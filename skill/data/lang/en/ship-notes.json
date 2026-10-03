@@ -1,0 +1,4 @@
+{
+  "shipped": "Shipped in #{pr}. Thanks for asking for this.",
+  "shippedIn": "Shipped in #{pr} ({tag}). Thanks for asking for this."
+}

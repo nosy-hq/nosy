@@ -147,6 +147,66 @@ export function safeRuns(text) {
   return out.length ? out.join("\n") + "\n" : "";
 }
 
+// ---- state/roadmap.json (computed by roadmap.mjs from the repo's ROADMAP.md): Cloud's Roadmap tab. ----
+// Sent: per line a title (whitespace collapsed, 200 characters), a `#N` reference only when it looks like one, a link only when it is a GitHub issue or
+// pull request address (anything else becomes null), and a date on shipped lines; the file's own path and how many lines it keeps private. Never another key:
+// a note, an owner, a size or a person on a line stays where it is. At most 200 lines a section.
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const REF = /^#\d{1,9}$/, ISSUE_URL = /^https:\/\/github\.com\/[\w.-]{1,100}\/[\w.-]{1,100}\/(?:issues|pull)\/\d{1,9}$/;
+const count = v => (Number.isFinite(v) ? Math.min(1_000_000, Math.max(0, Math.floor(v))) : 0);
+const day = v => (typeof v === "string" && DAY.test(v) && !Number.isNaN(Date.parse(v)) ? v : null);
+const stamp = v => (typeof v === "string" && !Number.isNaN(Date.parse(v)) ? cut(v, 40) : null);
+export const RoadmapSections = ["now", "next", "later", "shipped"];
+export function safeRoadmap(R) {
+  if (!R || typeof R !== "object" || Array.isArray(R) || !R.sections || typeof R.sections !== "object" || Array.isArray(R.sections)) throw new Error("not a roadmap file (no sections)");
+  const line = (x, shipped) => {
+    if (!x || typeof x !== "object") return null;
+    const title = cut(x.title, 200);
+    return title ? { title, ref: typeof x.ref === "string" && REF.test(x.ref) ? x.ref : null, url: typeof x.url === "string" && ISSUE_URL.test(x.url) ? x.url : null, ...(shipped ? { date: day(x.date) } : {}) } : null;
+  };
+  const list = (v, shipped) => (Array.isArray(v) ? v.slice(0, 400).map(x => line(x, shipped)).filter(Boolean).slice(0, 200) : []);
+  const h = R.hidden && typeof R.hidden === "object" ? R.hidden : {};
+  const p = typeof R.path === "string" && /^[\w.\/-]{1,100}$/.test(R.path) && !R.path.includes("..") && !R.path.startsWith("/") ? R.path : "ROADMAP.md";
+  return { type: "roadmap", generated: stamp(R.generated), path: p,
+    sections: { now: list(R.sections.now), next: list(R.sections.next), later: list(R.sections.later), shipped: list(R.sections.shipped, true) },
+    hidden: { now: count(h.now), next: count(h.next), later: count(h.later) } };
+}
+
+// ---- state/rival-signals.json (computed by rival-signals.mjs): public numbers about each rival, for Cloud's battlecards and "Who is moving". ----
+// Sent: per rival a slug and a name; per number its key (from the fixed list), a label, a value and the earlier value as numbers, the date of the earlier
+// reading, and the public address it was read from (https, and only on the hosts the tool reads: anything else becomes null; no query but `id` and
+// `country`, no credentials, no fragment); per number that could not be read its key and a reason cut to 60 characters. Never the owner's own notes
+// on a rival (pm/signal/rival-notes.jsonl is not read here at all) and never any other key.
+export const SignalKeys = ["githubStars", "githubForks", "githubReleases30d", "githubCommits30d", "npmWeeklyDownloads", "appStoreRating", "appStoreRatings", "openRoles"];
+export const SignalHosts = ["api.github.com", "github.com", "api.npmjs.org", "itunes.apple.com", "boards-api.greenhouse.io", "api.lever.co", "api.ashbyhq.com"];
+export const safeRivalName = n => cut(n, 120);
+export function safeSignalSource(v) {
+  if (typeof v !== "string" || v.length > 500) return null;
+  let u; try { u = new URL(v); } catch { return null; }
+  if (u.protocol !== "https:" || u.username || u.password || !SignalHosts.includes(u.hostname)) return null;
+  const q = [...u.searchParams].filter(([k]) => k === "id" || k === "country").filter(([, x]) => /^[\w-]{1,40}$/.test(x));
+  return `${u.origin}${u.pathname}${q.length ? `?${q.map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join("&")}` : ""}`;
+}
+export function safeRivalSignals(S) {
+  if (!S || typeof S !== "object" || Array.isArray(S) || !Array.isArray(S.rivals)) throw new Error("not a rival-signals file (no rivals)");
+  const num = v => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const rivals = [];
+  for (const r of S.rivals.slice(0, 100)) {
+    if (!r || typeof r !== "object" || rivals.length >= 50) continue;
+    const name = safeRivalName(r.name); if (!name) continue;
+    const seen = new Set(), signals = [];
+    for (const x of Array.isArray(r.signals) ? r.signals.slice(0, 32) : []) {
+      if (!x || typeof x !== "object" || !SignalKeys.includes(x.key) || num(x.value) === null || seen.has(x.key)) continue;
+      seen.add(x.key);
+      signals.push({ key: x.key, label: cut(x.label, 40) || x.key, value: x.value, previous: num(x.previous), since: day(x.since), source: safeSignalSource(x.source) });
+    }
+    const unread = (Array.isArray(r.unread) ? r.unread.slice(0, 16) : []).filter(u => u && typeof u === "object" && SignalKeys.includes(u.key)).map(u => ({ key: u.key, why: cut(u.why, 60) }));
+    if (!signals.length && !unread.length) continue;
+    rivals.push({ slug: cut(r.slug, 60).toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, ""), name, signals, unread });
+  }
+  return { type: "rivalSignals", generated: stamp(S.generated), rivals };
+}
+
 // ---- who wrote the commits: names to look for in everything that leaves (a name in free text stops the send) ----
 // The shipped record's authors, and the authors of the owner's own branches (receipts and `facts`).
 export function authorNames(pm) {
@@ -188,5 +248,7 @@ export const PayloadKeys = {
   "pm/state/glance.json": "computed: next decision (title, size, checks), four numbers, where we stand, roadmap lanes, shipped (counts and references), how many things wait on people and for how long (no titles, no names)",
   "pm/state/rival-facts.json": "computed: each rival's price line, from your rival files",
   "pm/state/rival-demand.json": "computed, only if you ran `nosy rival-demand`: titles, vote counts and links of open issues and Discussions on your open-source rivals' own public trackers (their public data, not yours), and which rivals share an ask",
+  "pm/state/roadmap.json": "computed, only if you ran `nosy roadmap`: the lines of your ROADMAP.md as title, #N reference, GitHub issue or PR link and (shipped lines) a date, plus the file's path and how many lines it keeps private; nothing else from the file",
+  "pm/state/rival-signals.json": "computed, only if you ran `nosy rival-signals`: public numbers about each rival (GitHub stars, forks, releases and commits, npm downloads, App Store rating, open roles) with the earlier value, its date and the public address it came from, and which numbers could not be read; never your own notes on a rival (pm/signal/)",
   "pm/state/demand.json": "computed: counts per goal from your matrix and psst items, sources by format, hidden counts; no quotes, no customer names",
 };
