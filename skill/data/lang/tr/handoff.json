@@ -1,0 +1,14 @@
+{
+  "why": "Neden şimdi",
+  "onTheList": "Ekibin listesinde",
+  "asked": "{n} yerde istendi",
+  "where": "Nereye bakmalı",
+  "noEvidence": "işaret edilecek dosya yok",
+  "owner": "Önerilen sahip",
+  "ownerWhy": "{path} dosyasına dokunan son {n} commit'in {k}'si",
+  "suggestion": "öneri, atama değil",
+  "agentAsk": "lütfen bunu al ve inceleme için bir pull request aç.",
+  "done": "**Bitti sayılır:** değişiklik birleşti ve atanan kişi kontrol etti. (Kabul kriterleri: henüz yazılmadı.)",
+  "footer": "Nosy ekibin kendi listesinden açtı. İstediğini değiştir.",
+  "notes": "ekibin kendi notları (bu repoda değil)"
+}

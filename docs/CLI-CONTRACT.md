@@ -22,10 +22,13 @@ Most of the 19 agent commands have a terminal twin that runs with no model: `npx
 | `psst` | `nosy psst` |
 | `canwe` | `nosy canwe "<question>"` |
 | `frontyard` | `nosy frontyard` |
+| `atlas` | `nosy atlas` (the candidate × axis matrix from `pm/atlas/*.md`; the research is the agent), `nosy atlas seed <registry.json> [CC …]` (per-country counts from a registry file) |
 | `bet` | `nosy bet place "<what>" --why "…" --estimate S` |
 | `score` | `nosy score` |
 | `move-in` | `nosy setup` (proposes `pm/sources.json`; the rest of move-in is the agent) |
 | `tour` | `nosy tour` (the plan: what Nosy reads, writes and sends, the steps with their state, one list of questions. It runs no step itself; the agent does. `nosy tour approve <id>…`, `nosy tour skip <id>…` and `nosy tour done <id>` record progress in `pm/state/tour.json`) |
+| `handoff` | `nosy handoff` (the list), `nosy handoff <#> [--agent [copilot]] [--to <login>] [--project <n>] [--horizon Now|Next|Later] [--area <no|name>] [--body-file <file>]` (the preview), `--yes` (writes), `nosy handoff --setup-board [--project <n>]` (what the board lacks; `--yes` creates it), `nosy handoff --review` (read-only: what became of what was handed off, with proposals) |
+| `board-status` | `nosy board-status [--days N] [--status on-track|at-risk|off-track|inactive|complete]` (the preview), `--yes` (posts) |
 | `roadmap` | `nosy roadmap` (`--check`, `--pr --yes`, `--write <file>` for a repo with no `origin`, `--lang <code>`; the optional Action input `roadmap` runs it weekly) |
 | `neighbors` | `nosy watch` (which rivals' public pages changed; the research is the agent). Also `nosy tiers` (which rivals get a deep pass, which are only watched, and the token estimate), `nosy matrix-proposals` (sorts the cells the neighbor agents propose by evidence, `apply` writes the ones that earned it) and `nosy rivals-import` (copies rival research kept outside `pm/rivals` in) Also `nosy rival-signals` (public growth counters: GitHub, npm, App Store, open roles; `init` proposes, `note` keeps your own sourced observations). |
 | none | `nosy rival-demand` (what the users of your open-source rivals ask for most, from their public issues and Discussions; no slash command) |
@@ -52,6 +55,7 @@ Most of the 19 agent commands have a terminal twin that runs with no model: `npx
 | `nosy find` (`facts.mjs find`) | the word appears nowhere: no tracked file, no issue or PR |
 | `nosy fields` (`fields.mjs`) | a type named isn't defined at the ref (Go structs, TypeScript interfaces/object types) |
 | `nosy cite-check` (`cite-check.mjs`) | a `file:line`, quote, commit or `#N` in the answer doesn't hold up |
+| `nosy atlas` (`atlas-matrix.mjs`) | a candidate isn't ranked yet (the reason is listed), or a cell is stale or has a problem (a `read` score without a url, an unknown grade, no date), or one report lacks an axis the others have. No reports, or `--now` that isn't a date, is a 1 |
 | `nosy score` (`score.mjs`) | a bet was reverted, or is open past twice its estimate (backfill bets don't count) |
 | `nosy weekly` | any step returned 2 (and none returned 1); each step is marked ✓ clean, ! look, ✗ couldn't run |
 | `privacy-scan.mjs` | a secret or personal data: do not send (`publish` and `notify` go on only with `--allow-sensitive`) |
@@ -68,9 +72,12 @@ These never return 2. Their findings are in the output; a 1 means the command st
 | Command | Returns 1 when |
 |---|---|
 | `nosy tour` | `approve` or `done` without an id, or on a `pm/` folder that doesn't exist. Plain `nosy tour` in a repo with no `pm/sources.json` is a 0: it says to run `move-in` |
+| `nosy handoff` | the list and the preview are 0; `--yes` is 0 when everything went out and 1 at the first failed step (it stops there and says what was already written). 2: the privacy scan found something in the issue text, nothing written. `--review` is always 0 (an unreadable issue is listed, not an error). `--setup-board` is 0 when it created everything (or there was nothing to do) and 1 at the first step that failed (a project that was created stays). Already handed off is 0. |
+| `nosy board-status` | the preview is 0; `--yes` is 0 when it posted or this week's update is already on the board; 1: no `roadmap.project`, a missing `project` scope, a failed read or post (nothing posted); 2: the privacy scan found something in the text (nothing posted). |
 | `nosy roadmap` | no waves and nothing curated (run `scoop` first), no `origin` remote, no `--yes` on `--pr`, a PR step that failed, or `gh` couldn't list open PRs (1, nothing pushed). The privacy scan found something in a title, or `--check` found `ROADMAP.md` behind (2: a result, not a failure). An open Nosy PR is updated ("Updated <url>") or reported empty (0); a GitHub source that can't be read is a message on stderr and the evidence alone is used (0) |
 | `nosy rival-signals` | `run` and `init` with nothing configured, or a note refused (1); something couldn't be read, so the output names it (2: a result, not a failure) |
 | `nosy ship-notes` | the preview is 0; `--yes` is 0 when every comment went out and 1 on the first failure (it stops there and says how many were posted). Nothing is written outside `pm/` without `--yes` |
+| `nosy atlas seed` | the registry file is missing, isn't JSON, or isn't a registry it knows (profile `legal-data-hunter`); counts, never a finding, so there is no 2 |
 | `nosy tiers` | there are no rival files in `pm/rivals` and no `rivals` in `sources.json` |
 | `nosy matrix-proposals` | `check` and `apply` have no `pm/state/matrix-proposals.json` or no matrix; `undo` has no backup in `pm/.backup/` |
 | `nosy page-adopt` | `pm/sources.json` is missing; there is no page (`--page`, else `pm/page.html`); `adopt --apply` without `--yes`; `refresh` on a page with no marked table; `undo` with no backup, or with a page changed by hand since the backup (add `--force` to restore anyway) |

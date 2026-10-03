@@ -1,0 +1,14 @@
+{
+  "why": "Why now",
+  "onTheList": "On the team's list",
+  "asked": "Asked for in {n} places",
+  "where": "Where to look",
+  "noEvidence": "no file to point at",
+  "owner": "Suggested owner",
+  "ownerWhy": "{k} of the last {n} commits touching {path}",
+  "suggestion": "a suggestion, not an assignment",
+  "agentAsk": "please pick this up, and open a pull request for review.",
+  "done": "**Done when:** the change is merged and the person assigned has checked it. (Acceptance criteria: not written yet.)",
+  "footer": "Opened by Nosy from the team's own list. Edit anything.",
+  "notes": "the team's own notes (not in this repo)"
+}

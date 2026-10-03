@@ -97,3 +97,28 @@ Searched in the PR title, body, and file paths (case-insensitive). A match is a 
 - https://www.lawnext.com/2026/01/the-10-legal-tech-trends-that-defined-2025.html (2025 legaltech trends, accessed 2026-09-28)
 - https://harvey.ai, https://legora.com, https://spellbook.legal, https://ironclad.com, https://clio.com, https://litera.com, https://relativitysoftware.com, https://everlaw.com, https://vlex.com, https://onit.com (product sites, accessed 2026-09-28)
 - https://onedocs.com.tr, https://apilex.com.tr (Turkish product sites, accessed 2026-09-28)
+
+## 9. Expansion axes and registries
+
+Read by `atlas` ("where next?"). Use these axis names, unchanged, in every candidate's report so `nosy atlas` lines them up. A score is 1 (bad for us) to 5 (good for us); a score counts only when its source was opened in the run (`read`). Everything below about a particular source is from one earlier research run on 3 Oct 2026 and was not re-read when this was written: "(unverified)" until a scout reads it again.
+
+| Axis | What a 5 means | Where to look |
+|---|---|---|
+| Data access and licence | A primary source of decisions and statutes can be fetched by a program (open API or bulk download), and its own terms allow commercial use and AI or vector use. The terms are read on the source's own terms page; a page that couldn't be opened is graded `terms-unread`, never assumed free. | The source's API docs and terms page; the open-data portal's dataset page for the licence |
+| Market | Many practitioners, mostly in small and mid-size offices, and prices that a paid tool can live at. | The bar or law society's own statistics (with the year), published prices of the tools already sold there |
+| Rival density | Few or no products already cover deadlines from notices and cited research; the ones that do are named with their price and what they lack. | `neighbors`-style research per candidate; a rival's own pricing page |
+| Notice and e-service channel | Court notices reach a channel a product can use: an API, a system connection, or an e-mail that carries the content. A notice e-mail that only says "new message in file X" scores low: the content sits behind a login. | The judiciary's own documentation for lawyers |
+| Rule similarity | The deadline rules are close enough to the home rules that the core loop works on day one, or a rule table is published. | The procedural code or the court's published rules, with article numbers and the date read |
+| Regulatory friction | Few barriers on cross-border transfer of client data, data location, rules on AI, professional-conduct rules about outsourcing or AI, and tax on selling there. Each point with its source and "as of <date>". | The regulator's own pages; a law firm bulletin is `snippet` until the primary text is read |
+| Bridge | Customers, partners, an office, trade or diaspora ties already link us to the market, and the first person to ask is named. | Own customer base, public trade and bilateral data, firms with offices in both places |
+| Partner and marketplace availability | A place a tool can be listed or found: a practice-management marketplace, a bar association, a law school or a community, an AI assistant's connector directory. | The marketplaces' own listing rules |
+| Demand-test cost | A first honest test of demand is cheap and fast (a free calculator, a listing, a landing page, about 8 weeks) and the number that counts as a yes is written down before it starts. | The channel above; the cost of the test, not of the product |
+
+### Registries and data sources (starting points, not findings)
+
+- **Legal Data Hunter** status file: a public JSON list of legal-data sources by country with status and row counts. `nosy atlas seed <file> <country codes>` counts it. https://zachlaik.github.io/LegalDataHunter/status.json. Its collectors are AGPL-3.0 and the status file states no licence of its own, so don't copy its content into a product without asking its maintainers. Its counts can repeat rows across sources that read the same API; `atlas seed` flags shared hosts and adds nothing up.
+- **A national open judiciary API** is the model of a good `Data access and licence` score: for example the Dutch judiciary's open data service (https://data.rechtspraak.nl, keyless; listed as CC0 on https://data.overheid.nl/dataset/uitspraken-rechtspraak-nl; its own terms page returned 403 to a program in that run, so "free to use" rested on the portal's listing, which is why `terms-unread` exists). (unverified)
+- **Licence traps to check on every source (each seen once, unverified):** a computational-analysis licence with its own wording on vector databases; a dataset under a non-commercial licence (CC BY-NC) that a paid product can't use as it is; a registry whose collectors and whose data have different licences.
+- **A research run's own limits (3 Oct 2026):** 200 searches per agent and a scraping tool's credits both ran out, government sites answered 403, and agents re-fetched the same pages. Expect it; the scout's fallback chain and the `unreadable` grade exist for this.
+
+Output of `atlas` is research, not legal advice. A rule or a deadline in a candidate's report is what the source says on a date, for the owner to check with a lawyer in that place.

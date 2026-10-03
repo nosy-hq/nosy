@@ -1,0 +1,9 @@
+{
+  "week": "Hafta {week} · {from} – {to}",
+  "shipped": "Çıkanlar",
+  "nothing": "Bu aralıkta birleşen pull request yok.",
+  "board": "Board'da:",
+  "counts": "{now} şimdi · {next} sıradaki · {later} daha sonra",
+  "up": "Sırada",
+  "footer": "Nosy bu board'dan ve birleşen pull request'lerden yazdı: yalnızca başlıklar ve sayılar."
+}

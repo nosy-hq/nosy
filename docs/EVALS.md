@@ -109,3 +109,22 @@ To judge: give both answers as A and B to a fresh agent that has the repo and it
 To check that each loss is guarded: `node --test skill/test/psst-receipts.test.mjs skill/test/psst-refute.test.mjs`.
 
 To challenge a result, open an issue with a repo, a commit and a question where plain does better. We will add it here, whichever way it goes.
+
+## `atlas`: one run, three scouts (3 Oct 2026)
+
+`atlas` ("where next?") has been run once by an agent. This is the whole record, and it is a smoke test, not an evaluation: one candidate, one run per model, no judges, and the authors graded the output themselves.
+
+- **Candidate:** a segment of buyers ("open-source maintainers") for Nosy itself, scored on seven axes the agent chose. Free tools only (web search, page fetch, read-only `curl` and GitHub's public API), at most about 35 tool calls per scout.
+- **What ran:** a Haiku scout, a Sonnet scout on the same job, then a Haiku scout in verify mode on the Sonnet report.
+
+| Scout | Tokens | Tool calls | Scores graded `read` | Problems found in the text |
+|---|---|---|---|---|
+| Haiku, research | 93,000 | 40 (it reported 18) | 0 of 7 | Unsupported statements about the owner's own product and team (a funded team, a named maintainer's releases, another product called open source), and a marketplace size with no source. One count checked against the API was right. |
+| Sonnet, research | 113,000 | 23 | 2 of 7 | None found. It marked four claims "(unverified)", said the licence terms page was never opened, and listed what it could not reach. |
+| Haiku, verify (on the Sonnet report) | 89,000 | 28 | n/a | Re-read 8 claims: 7 agreed, 1 could not be checked (a client-rendered page, which we checked by hand: it holds). Several "second sources" were the same GitHub API the first scout used, so they confirm the figure was copied right, not that it is independent. |
+
+What it shows, and no more:
+- The ranking gate worked: with 2 of 7 axes read, `nosy atlas` ranked nothing and said why, in both runs. A ranking needs at least half the axes read from a source and a verification with a source in it.
+- The smaller model was cheaper by about a fifth and worse on the point that matters: it graded nothing as read and invented facts about our own product. That is why the command says research on Sonnet; the verify step is narrow enough that a smaller model can do it, once a person has checked its first output.
+- A scout's own count of its tool calls was wrong by more than a factor of two, so the command and the agent now say to take it from the harness.
+- Not shown: whether any score is *right*, how a different candidate or model behaves, or what a cheaper search provider would change. A second run on a country, with an answer key built from the earlier hand research, is what would test the ranking itself.

@@ -3,8 +3,8 @@
 // from every agent, from CI (GitHub Action), and from the MCP server; the judgment call still belongs to the agent.
 // Counting happens in the script, judgment in the agent, memory in pm/.
 // Usage: node nosy.mjs <command> [--pm <pm folder>] [...]      (via npx: `npx nosy <command>`)
-// Commands: next (the default), tour, roadmap, facts, find, sweep, matrix-proposals, tiers, cite-check, team-next, fields, receipts, refute, decision, nudge, install, update, uninstall, doctor, setup, check, explain, shipped, ship-notes, peek, inventory, gates, metrics, frontyard, signals, watch, rival-demand, rival-signals, psst, bet, score, todo, canwe, notes, page, page-adopt, weekly, notify, publish, mcp, help.
-// No dependencies; uses git and (if present) gh. The commands that write outward are `notify` (only to the given webhook), `ship-notes --yes` (one comment per issue that asked, on GitHub) and `publish` (opt-in: counts and structure only, to a Nosy Cloud you configured, after the privacy scan); `watch` only reads public rival pages (plain GET).
+// Commands: next (the default), tour, roadmap, facts, find, sweep, matrix-proposals, tiers, atlas, cite-check, team-next, fields, receipts, refute, decision, nudge, install, update, uninstall, doctor, setup, check, explain, shipped, ship-notes, handoff, board-status, peek, inventory, gates, metrics, frontyard, signals, watch, rival-demand, rival-signals, psst, bet, score, todo, canwe, notes, page, page-adopt, weekly, notify, publish, mcp, help.
+// No dependencies; uses git and (if present) gh. The commands that write outward are `notify` (only to the given webhook), `ship-notes --yes` (one comment per issue that asked, on GitHub), `handoff --yes` (one issue, its assignee and project card, on GitHub) and `publish` (opt-in: counts and structure only, to a Nosy Cloud you configured, after the privacy scan); `watch` only reads public rival pages (plain GET).
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -37,7 +37,7 @@ const localize = text => {
   const prefix = nosyPrefix(); if (prefix === "nosy" || !text) return text;
   return text.replace(new RegExp("`nosy (" + [...Object.keys(Commands), "help"].join("|") + ")\\b([^`\\n]*)`", "g"), (_, c, rest) => "`" + prefix + " " + c + rest + "`");
 };
-const NoStateDir = new Set(["adopt-page.mjs", "tour.mjs", "rivals-import.mjs", "doctor.mjs", "health.mjs", "find-sources.mjs", "install.mjs", "git-hooks.mjs", "explain.mjs", "next.mjs", "verify-setup.mjs"]);
+const NoStateDir = new Set(["adopt-page.mjs", "tour.mjs", "rivals-import.mjs", "doctor.mjs", "health.mjs", "find-sources.mjs", "install.mjs", "git-hooks.mjs", "explain.mjs", "next.mjs", "verify-setup.mjs", "atlas-seed.mjs"]);
 // Runs a script; prints its output or (silently) returns it. Never throws, returns the exit code instead.
 function script(name, a = [], { silent = false } = {}) {
   // A fresh repo has no pm/state yet: every step writes there (first-run `nosy inventory` / `nosy shipped` used to crash).
@@ -126,6 +126,9 @@ const Commands = {
   },
   decision: () => sourceRequired() && script("next-decision.mjs", [pm, ...args]),
   nudge: () => sourceRequired() && script("nudge.mjs", [pm, ...args]),
+  // Where next? (atlas.md): `seed <registry.json> [CC …]` counts a registry file per country (reads only that file); the default builds the candidate × axis
+  // matrix from pm/atlas/*.md. Neither needs the repo or a network; the research itself is the nosy-scout agent.
+  atlas: () => { const [sub, ...rest] = args; if (sub === "seed") return script("atlas-seed.mjs", rest); const a = sub === "matrix" ? rest : args; return script("atlas-matrix.mjs", [pm, ...a, ...(a.includes("--json") ? [] : ["--json", path.join(pm, "state", "frontier.json")])]); },
   frontyard: () => sourceRequired() && script("frontyard.mjs", [pm, ...args, "--json", path.join(pm, "state", "frontyard.json")]),
   // Rival language: are the loop matrix's steps still just Nosy's own framing, or do
   // rivals' own homepage claims (pm/rivals/*.md's "## Featured on the landing page") actually back each one up.
@@ -282,6 +285,10 @@ const Commands = {
   // Closes the loop with the people who asked: one comment on each issue a merged PR closed (GitHub's own closing links), shown first,
   // posted only with --yes (ship-notes.mjs). --since is a global flag (pulled out of argv above): a tag or a date, passed through as written.
   "ship-notes": () => sourceRequired() && script("ship-notes.mjs", [pm, ...(since ? ["--since", since] : []), ...args]),
+  // One item of the team's list becomes work on GitHub (handoff.mjs): an issue, its assignee, an agent, a project card. Previewed; written only with --yes.
+  handoff: () => sourceRequired() && script("handoff.mjs", [pm, ...args]),
+  // The week as a status update on the Projects board the roadmap reads (board-status.mjs): previewed, posted only with --yes, once per ISO week.
+  "board-status": () => sourceRequired() && script("board-status.mjs", [pm, ...args]),
   // The page: the decision page by default (tea); --scoreboard builds the bets/shipped scoreboard from pm/state/shipped.json.
   page: () => {
     // No pm/ at all: say so and how to make one, instead of failing on the file it can't write.
@@ -360,6 +367,8 @@ Model-free counts (judgment stays with the agent; these just gather evidence):
   nosy gates               are recently shipped features tied to a plan → pm/state/plan-gates.json
   nosy metrics             do the key steps (signup, activation, revenue…) fire events → pm/state/metrics.json
   nosy frontyard [--page f] are shipped features on the landing page → pm/state/frontyard.json
+  nosy atlas [matrix] [--days N]   where next? the candidate × axis matrix from pm/atlas/*.md: ranks only what is verified, not refused by you, and mostly read from a source → pm/state/frontier.json
+  nosy atlas seed <registry.json> [CC …] [--json f]   per-country facts from a registry file (sources, complete, open, rows, why blocked, shared hosts), no model, reads only that file
   nosy rival-language      are the matrix's steps in rivals' own words, from their landing pages → pm/state/rival-language.json
   nosy interviews          interview/call notes in pm/signal/interviews/ → themes with receipts → pm/state/interviews.json
   nosy signals             demand from pm/signal/ exports (+ GitHub issues) → pm/state/signals.json
@@ -382,6 +391,10 @@ Model-free counts (judgment stays with the agent; these just gather evidence):
   nosy score               settle bets from git (landed, reverted, patched, partial) → pm/state/score.json
   nosy todo [list|add|done|drop|show]   what only a person can do, or said they would: add "<what>" --who ali --why "…" --blocks "…" · done <id> (files under pm/todo/; nothing is sent)
   nosy shipped [7d]        decisions that shipped (explicit links) + work that landed by reference, + recent (merged / close)
+  nosy handoff [<#> | --item text] [--to login] [--agent [copilot]] [--project n] [--horizon Now|Next|Later] [--area no|name] [--body-file f] [--yes]   put one item of your list on GitHub: an issue (or the issue it already is), a suggested assignee from who wrote the code, an agent if the repo has one (else a label), a project card with its fields; shown first, written only with --yes
+  nosy handoff --review   what became of what you handed off: state, card, the merged PR that closed it, and PROPOSALS (the matrix cell it may now close, whether ship-notes will tell the asker); read-only, writes nothing to GitHub or the matrix
+  nosy handoff --setup-board [--project n] [--yes]   what a GitHub board lacks for handoff (the project itself, Horizon, Signal, Asked for, Area, Rivals with it); shown first, created only with --yes
+  nosy board-status [--days N] [--status on-track|at-risk|off-track|inactive|complete] [--yes]   the week (what shipped, the board's counts, what is next) as a status update on your GitHub project board; titles and counts only, shown first, posted only with --yes, once per week, no status unless you give one
   nosy ship-notes [--since tag|date] [--days N] [--json f] [--yes]   tell the people who asked that it shipped: one comment per issue a merged PR closed, shown first, posted only with --yes
   nosy rivals-import [--from folder] [--dry-run]   copy rival research kept outside pm/rivals (sources.json rivalsPath) into pm/rivals, originals stay
   nosy roadmap [--check | --pr --yes] [--lang tr]   Now / Next / Later (scoop's waves and/or your GitHub labels, milestones, project board; read-only) as a block of ROADMAP.md: a preview (also pm/state/roadmap.json), a check against the integration branch, or a PR that edits only that block (an open Nosy roadmap PR is updated, not duplicated)

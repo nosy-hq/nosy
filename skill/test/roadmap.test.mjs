@@ -428,7 +428,8 @@ test("project: a Projects v2 board is read with gh api graphql (Status field, 10
   assert.deepEqual(seen[0].slice(0, 2), ["api", "graphql"]);
   const q = flag(seen[0], "-f").replace(/^query=/, "");
   assert.match(q, /organization\(login:\$owner\)\{ projectV2\(number:\$number\)\{ items\(first:100,after:\$after\)/);
-  assert.match(q, /fieldValueByName\(name:"Status"\)/);
+  assert.match(q, /fieldValueByName\(name:\$field\)/);
+  assert.ok(seen[0].includes("field=Status"), "the field is a variable, not text pasted into the query");
   assert.match(q, /\.\.\. on Issue\{ number title url state repository\{ nameWithOwner isPrivate \} \} \.\.\. on DraftIssue\{ title \}/);
   assert.ok(seen[0].includes("owner=acme") && seen[0].includes("number=3") && !seen[0].some(x => /^after=/.test(x)));
   assert.ok(seen[1].includes("after=c1"));
@@ -581,4 +582,19 @@ test("action.yml: the roadmap step opens the PR and prints its URL in the job su
   // A failing roadmap (no origin) is a warning, never a failed job.
   const bad = product({ roadmap: {} }); bad.g("remote", "remove", "origin");
   const w = runStep(bad); assert.equal(w.status, 0); assert.match(w.stdout, /::warning::Nosy roadmap: .*no `origin` remote/);
+});
+
+test("project.field: a board with its own Now / Next / Later field (Horizon) maps by those words; Status stays the default", () => {
+  const board = { data: { organization: { projectV2: { items: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [
+    node("Now", iss(1, "Doing it")), node("Next", iss(2, "Soon")), node("Later", iss(3, "Someday")), node("Todo", iss(4, "Status words mean nothing here")), node(null, iss(5, "No horizon yet")),
+    node("Now", iss(6, "Done already", { state: "CLOSED" }))] } } } } };
+  const seen = [];
+  const R = readGithub(KR, configOf({ roadmap: { source: "github", project: { owner: "acme", number: 3, type: "organization", field: "Horizon" } } }), { gh: a => { seen.push(a); return JSON.stringify(board); } });
+  assert.deepEqual([R.sections.now, R.sections.next, R.sections.later].map(s => s.map(i => i.title)), [["Doing it"], ["Soon"], ["Someday"]]);
+  assert.ok(seen[0].includes("field=Horizon"));
+  // An owner's own mapping still wins over the words.
+  const own = readGithub(KR, configOf({ roadmap: { source: "github", project: { owner: "acme", number: 3, type: "organization", field: "Horizon", status: { now: ["Next"], next: ["Now"], later: [] } } } }), { gh: () => JSON.stringify(board) });
+  assert.deepEqual([own.sections.now, own.sections.next].map(s => s.map(i => i.title)), [["Soon"], ["Doing it"]]);
+  // No `field` at all: the Status field, with the old default words.
+  assert.equal(configOf({ roadmap: PROJECT }).project.field, "Status");
 });

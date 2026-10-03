@@ -22,7 +22,7 @@
 //     source: "evidence" | "github" | "both",     (github: only what the team curated there; both: curated items win for the same item)
 //     labels: { now: "roadmap:now", next: "roadmap:next", later: "roadmap:later" },   open issues with the label
 //     milestones: true,                            open milestones by due date: soonest = Now, the next = Next, the rest and undated = Later
-//     project: { owner: "acme", number: 3, type: "organization" | "user", status: { now: ["In progress"], next: ["Todo", "Ready"], later: ["Backlog"] } } }
+//     project: { owner: "acme", number: 3, type: "organization" | "user", status: { now: ["In progress"], next: ["Todo", "Ready"], later: ["Backlog"] }, field: "Status" | "Horizon" } }
 // GitHub is only ever READ here (gh issue list, gh api, a GraphQL query): nothing in this file writes to issues, milestones or Projects. If gh
 // can't read a source (no read:project scope, not found, offline) it says so on stderr, says what to run, and the block is the evidence only.
 // Language: the block's fixed phrases come from skill/data/lang/<code>/roadmap.json (`--lang`, else sources.json `language`, else English; an unknown
@@ -50,7 +50,9 @@ export function configOf(K) {
     max: { now: cap("now"), next: cap("next"), later: cap("later") },
     labels: Object.fromEntries(SECTIONS.map(k => [k, str(R.labels?.[k])]).filter(([, v]) => v)), milestones: R.milestones === true,
     project: P && str(P.owner) && Number.isInteger(+P.number) && +P.number > 0
-      ? { owner: str(P.owner), number: +P.number, type: P.type === "user" ? "user" : "organization", status: Object.fromEntries(SECTIONS.map(k => [k, list(P.status?.[k], DEFAULTS.status[k])])) } : null };
+      ? { owner: str(P.owner), number: +P.number, type: P.type === "user" ? "user" : "organization", field: str(P.field) || "Status",
+          // A board that has its own Now / Next / Later field (`field: "Horizon"`) maps by those words unless the owner says otherwise.
+          status: Object.fromEntries(SECTIONS.map(k => [k, list(P.status?.[k], str(P.field) && str(P.field).toLowerCase() !== "status" ? [k[0].toUpperCase() + k.slice(1)] : DEFAULTS.status[k])])) } : null };
 }
 
 // ---- items ------------------------------------------------------------------------------------------------------------------------------------
@@ -161,7 +163,7 @@ function ghJson(gh, args) {
   try { const data = JSON.parse(gh(args)); return data?.errors?.length ? { error: `${data.errors[0].type || "error"}: ${data.errors[0].message || ""}` } : { data }; }
   catch (e) { return { error: e.code === "ENOENT" ? "gh isn't installed" : firstLine(e.stderr || e.stdout || e) || firstLine(e) }; }
 }
-const PROJECT_QUERY = root => `query($owner:String!,$number:Int!,$after:String){ ${root}(login:$owner){ projectV2(number:$number){ items(first:100,after:$after){ pageInfo{hasNextPage endCursor} nodes{ isArchived status: fieldValueByName(name:"Status"){ ... on ProjectV2ItemFieldSingleSelectValue{ name } } content{ __typename ... on Issue{ number title url state repository{ nameWithOwner isPrivate } } ... on DraftIssue{ title } } } } } } }`;
+const PROJECT_QUERY = root => `query($owner:String!,$number:Int!,$field:String!,$after:String){ ${root}(login:$owner){ projectV2(number:$number){ items(first:100,after:$after){ pageInfo{hasNextPage endCursor} nodes{ isArchived status: fieldValueByName(name:$field){ ... on ProjectV2ItemFieldSingleSelectValue{ name } } content{ __typename ... on Issue{ number title url state repository{ nameWithOwner isPrivate } } ... on DraftIssue{ title } } } } } } }`;
 
 export function readGithub(K, cfg, { gh = ghRun } = {}) {
   const repo = K?.issue?.repo, stop = msg => ({ sections: null, warnings: [`Psst… ${msg} Using the evidence only.`] });
@@ -194,7 +196,7 @@ export function readGithub(K, cfg, { gh = ghRun } = {}) {
     const P = cfg.project, root = P.type === "user" ? "user" : "organization", items = [];
     let after = null, more = false;
     for (let page = 0; page < 3; page++) {
-      const r = ghJson(gh, ["api", "graphql", "-f", `query=${PROJECT_QUERY(root)}`, "-f", `owner=${P.owner}`, "-F", `number=${P.number}`, ...(after ? ["-f", `after=${after}`] : [])]);
+      const r = ghJson(gh, ["api", "graphql", "-f", `query=${PROJECT_QUERY(root)}`, "-f", `owner=${P.owner}`, "-F", `number=${P.number}`, "-f", `field=${P.field}`, ...(after ? ["-f", `after=${after}`] : [])]);
       const board = r.data?.data?.[root]?.projectV2;
       if (r.error || !board) {
         const e = r.error || "";

@@ -1,0 +1,9 @@
+{
+  "week": "Week {week} · {from} to {to}",
+  "shipped": "Shipped",
+  "nothing": "No pull request was merged in this window.",
+  "board": "On the board:",
+  "counts": "{now} now · {next} next · {later} later",
+  "up": "Next up",
+  "footer": "Written by Nosy from this board and the merged pull requests: titles and counts only."
+}

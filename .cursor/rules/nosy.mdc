@@ -3,9 +3,9 @@ description: Nosy — the nosy product manager that lives inside your coding age
 alwaysApply: false
 ---
 
-Full instructions, command list and rules for Nosy live in the root `AGENTS.md` — this file doesn't repeat them, it points to them. Step-by-step command instructions: `skill/commands/<move-in|tour|peek|psst|canwe|neighbors|overheard|spill|scoop|roadmap|tea|stakeout>.md`.
+Full instructions, command list and rules for Nosy live in the root `AGENTS.md` — this file doesn't repeat them, it points to them. Step-by-step command instructions: `skill/commands/<move-in|tour|peek|psst|canwe|atlas|neighbors|overheard|spill|scoop|roadmap|tea|stakeout>.md`.
 
-If the user asks for any Nosy command (`move-in`, `tour`, `map`, `doctor`, `shipped`, `peek`, `overheard`, `psst`, `frontyard`, `dresscode`, `neighbors`, `canwe <question>`, `spill <topic>`, `scoop`, `roadmap`, `tea`, `stakeout`, `bet`, `score`) (by exact command name or with an equivalent request like "what can we build"):
+If the user asks for any Nosy command (`move-in`, `tour`, `map`, `doctor`, `shipped`, `peek`, `overheard`, `psst`, `frontyard`, `dresscode`, `neighbors`, `canwe <question>`, `atlas`, `spill <topic>`, `scoop`, `roadmap`, `handoff`, `tea`, `stakeout`, `bet`, `score`) (by exact command name or with an equivalent request like "what can we build"):
 
 1. Read `AGENTS.md` first (the command table and general rules are there).
 2. Read the matching `skill/commands/<name>.md` file and follow its steps from start to finish.

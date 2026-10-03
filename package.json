@@ -1,6 +1,6 @@
 {
   "name": "nosy",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "private": true,
   "description": "Nosy about your product. Never your data. A product manager that lives inside your coding agent.",
   "type": "module",

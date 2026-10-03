@@ -92,14 +92,14 @@ Nosy is one skill folder (`skill/`, the open Agent Skills format) plus small dep
 | **Slack / Discord** | The Action, or `nosy notify`, posts the weekly "Psst…" to a webhook. |
 | **Terminal, no agent** | `npx github:nosy-hq/nosy weekly` |
 
-`npx github:…` runs code straight from a repo. To know which code, pin a release tag: `npx github:nosy-hq/nosy#v0.20.0 install`. Every path in detail: [docs/INSTALL.md](docs/INSTALL.md).
+`npx github:…` runs code straight from a repo. To know which code, pin a release tag: `npx github:nosy-hq/nosy#v0.21.0 install`. Every path in detail: [docs/INSTALL.md](docs/INSTALL.md).
 
 </details>
 
 ## Commands
 
 <details>
-<summary>All 19 commands</summary>
+<summary>All 21 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -110,11 +110,13 @@ Nosy is one skill folder (`skill/`, the open Agent Skills format) plus small dep
 | `/nosy:peek` | What shipped, what didn’t, what has no screen. |
 | `/nosy:psst` | What you could ship today. Asked for + ready goes first. |
 | `/nosy:canwe <question>` | “Can we do X?” Answered with a size; remembered next week. |
+| `/nosy:atlas` | Where next? Candidate markets researched on the same axes and checked twice; a matrix that ranks only what is verified. A suggestion, never an assignment. |
 | `/nosy:neighbors` | What rivals shipped, and how much of it you already have. |
 | `/nosy:overheard [hours]` | Which open PRs and issues serve which decision. |
 | `/nosy:spill <topic>` | A spec your agents can build from. Stays local. |
 | `/nosy:scoop` | The roadmap, in waves. |
 | `/nosy:roadmap` | The roadmap in your repo: Now / Next / Later as a pull request on `ROADMAP.md`. Merging is the approval. |
+| `/nosy:handoff` | Put one item of your list on GitHub where your team already works: an issue, a suggested assignee, a coding agent through a label, a project card. Shown first, written only with your yes. |
 | `/nosy:tea` | One shareable decision page. |
 | `/nosy:map` | What your product is made of: apps, screens, what’s off. |
 | `/nosy:dresscode` | Your design system, checked in 20 areas, with a receipt for each. |
@@ -127,7 +129,7 @@ Most commands have a terminal twin that runs with no model, for example `npx git
 
 </details>
 
-**1 skill · 19 commands · 94 scripts · 4 hooks · 16 named rules.** Plain, dependency-free Node: the counting runs in your terminal, in CI or as an MCP server, with no model and no API key. Your agent adds the judgment. Everything Nosy remembers lives in a `pm/` folder in your repo.
+**1 skill · 21 commands · 98 scripts · 4 hooks · 16 named rules.** Plain, dependency-free Node: the counting runs in your terminal, in CI or as an MCP server, with no model and no API key. Your agent adds the judgment. Everything Nosy remembers lives in a `pm/` folder in your repo.
 
 ## If it broke
 
@@ -138,7 +140,7 @@ Most commands have a terminal twin that runs with no model, for example `npx git
 ## What Nosy reads, what leaves your machine
 
 - **Reads.** Nosy reads your code, git history, GitHub issues and PRs including their text (titles, bodies, comments and author logins, through your own `gh`), your decision and roadmap docs, and public web pages.
-- **Writes.** Nosy writes to your `pm/` folder, plus a few named files: temporary files, a first-run marker, the skill folders `nosy install` copies, a hand-built page of yours when you run `nosy page-adopt` (after a copy in `pm/.backup/`), a branch and pull request in your own repo when you run `nosy roadmap --pr --yes`, one fixed comment on each issue your merged PRs closed when you run `nosy ship-notes --yes`, and files you name with a flag. The optional weekly GitHub Action commits and pushes `pm/state/` and the decision page only if you set `commit: "true"`.
+- **Writes.** Nosy writes to your `pm/` folder, plus a few named files: temporary files, a first-run marker, the skill folders `nosy install` copies, a hand-built page of yours when you run `nosy page-adopt` (after a copy in `pm/.backup/`), a branch and pull request in your own repo when you run `nosy roadmap --pr --yes`, one fixed comment on each issue your merged PRs closed when you run `nosy ship-notes --yes`, an issue (or the changes to one you already have: an assignee, a label) and its project card in your own repo when you run `nosy handoff --yes`, a project board and its fields when you run `nosy handoff --setup-board --yes`, a status update on your GitHub project board when you run `nosy board-status --yes`, and files you name with a flag. The optional weekly GitHub Action commits and pushes `pm/state/` and the decision page only if you set `commit: "true"`.
 - **Sends.** Nothing of yours leaves on its own. Nosy's network calls are reads: the public rival pages you listed (and, for rivals you configure, public counters through `nosy rival-signals`: GitHub, npm, Apple's app lookup and job-board APIs), and GitHub through your own `gh`, including a read-only lookup of the `#N` issues your agent's answer cites (`NOSY_CITE_GH=0` turns that off), and, when you run `nosy rival-demand`, the public issues and Discussions of the open-source rivals you name. `nosy notify` and `nosy publish` send something only when you run them, and `publish` is off until you configure a target and confirm (counts and structure, never quotes). Both stop on a secret or personal data unless you pass `--allow-sensitive`. The model call is your agent's.
 - **No telemetry.** No analytics, usage pings or crash reports. The one call you didn't start yourself is a once-a-day read of a public version file, so the plugin can say when a newer Nosy is out (nothing about you in it; `NOSY_NO_UPDATE_CHECK=1` turns it off).
 

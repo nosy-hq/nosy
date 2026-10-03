@@ -22,10 +22,11 @@ A pack can be set permanently in `product.md`: add a `- **Pack:** fintech` line 
 | `peek`, `neighbors`, `scoop` (on every PR/plan review) | Never list - checks the team's delivery or the proposed plan against this list, and flags any violation as a warning |
 | `tea` | Metrics - to show which number matters in the "Where we stand" and "Head to head" sections |
 | `move-in`, `neighbors` | Sources - starting links to show the owner ("should I start from these?") |
+| `atlas` | Expansion axes and registries (section 9, optional) - the axis names every candidate market is scored on, and where the data and market facts start |
 
 ## File format
 
-Every pack file carries the same eight headings, in the same order:
+Every pack file carries the same eight headings, in the same order, and may add a ninth (optional, read only by `atlas`):
 
 1. **Who it's for** - one paragraph, target audience and product type.
 2. **Rival universe** - categories + 8-15 real example products by region, each with its site address. A separate subheading for the Turkey market when relevant.
@@ -35,5 +36,6 @@ Every pack file carries the same eight headings, in the same order:
 6. **Never list** - things the agent must flag if it sees them in a PR or a plan.
 7. **Metrics** - 5-8 metrics that PMs in this domain actually track.
 8. **Sources** - URLs used for verification.
+9. **Expansion axes and registries** (optional) - the axes a candidate market is scored on, with what a 5 means and where to look, and the registries and data sources to start from, each with what is known about its licence and how it was found. Filled so far for `legaltech` only; a pack without it leaves `atlas` to agree the axes with the owner.
 
 The general rules (`rules.md`) always apply; a pack doesn't override them, it adds to them. Every claim in a pack follows the same evidence rule: if it isn't in a primary source, it's "(unverified)".
