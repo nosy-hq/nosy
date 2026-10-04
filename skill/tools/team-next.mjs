@@ -75,9 +75,11 @@ export function teamNext(pm, { day = 14 } = {}) {
   }
 
   const refRe = refRegex(patternsOfLoad(K));
-  const items = [], datedBy = {}; let declarative = 0;
+  const items = [], datedBy = {}, missing = []; let declarative = 0;
   for (const file of files) {
-    const text = git("show", `${ref}:${file}`); if (!text) continue;
+    const text = git("show", `${ref}:${file}`);
+    // Named by the owner but neither at the ref nor on disk: a typo in sources.json, not "no next steps". (An empty file that exists is just empty.)
+    if (!text) { if (!fs.existsSync(path.resolve(repo, file))) missing.push(file); continue; }
     const lines = text.replace(/\n$/, "").split("\n"); // blame counts lines without the final newline
     // Last-edit time per line (git blame at the ref), to keep only what the team touched lately.
     const when = []; let cur = null;
@@ -130,13 +132,17 @@ export function teamNext(pm, { day = 14 } = {}) {
     flush();
   }
   items.sort((a, b) => b.time - a.time);
-  return { type: "teamNext", generated: new Date().toISOString(), ref, files, found, dated: datedBy, items: items.slice(0, 12).map(({ time, ...x }) => x), ...(declarative ? { skippedDeclarative: declarative } : {}) };
+  const note = missing.length ? `${missing.join(", ")} ${missing.length === 1 ? "does" : "do"} not exist in ${repo} (sources.json → next.path): fix the path, or remove next.path to let Nosy look for the team's notes.` : null;
+  return { type: "teamNext", generated: new Date().toISOString(), ref, files, found, dated: datedBy, ...(note ? { missing, note } : {}), items: items.slice(0, 12).map(({ time, ...x }) => x), ...(declarative ? { skippedDeclarative: declarative } : {}) };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2), take = k => { const i = argv.indexOf(k); return i >= 0 ? argv.splice(i, 2)[1] : null; };
   const jsonOut = take("--json"), dayArg = take("--day"), R = teamNext(argv[0] || "pm", { day: dayArg ? +dayArg : 14 });
   if (!R) { console.error(`Psst… ${sourcesProblem(argv[0] || "pm") || "no pm/sources.json: run `nosy setup .` first"}`); process.exit(1); }
+  // Every named file missing: nothing was read, so say so and fail (the --json file is still written, with the note, so a stale list is not left looking current).
+  const allMissing = R.missing?.length && R.missing.length === R.files.length;
+  if (allMissing) { if (jsonOut) { fs.mkdirSync(path.dirname(jsonOut), { recursive: true }); fs.writeFileSync(jsonOut, JSON.stringify(R, null, 1)); } console.error(`Psst… ${R.note}`); process.exit(1); }
   console.log(`# The team's own next list · ${R.files.join(", ") || "(none)"} (${R.found})\n`);
   for (const it of R.items) console.log(`- **${it.title}** · ${it.file}:${it.line} · ${it.date}${it.refs.length ? ` · ${it.refs.join(", ")}` : ""}`);
   if (R.note) console.log(R.note);

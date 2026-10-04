@@ -271,7 +271,7 @@ function works(pm, dayArg) {
 }
 
 function formatMd(R) {
-  let o = `# Plan gate · ${R.ref} · last ${R.day} days\n\n`;
+  let o = `# Plan gate · ${R.ref ? `${R.ref} · ` : ""}last ${R.day} days\n\n`;
   if (R.billing_missing) return o + "No billing trace in the code (payment provider, subscription, purchase). If the product isn't charging money yet, that's not a gap, it can be a decision; no signal was produced.\n";
   o += `Billing: ${R.billing.join(", ")}. Plan gate: ${R.gate_count} lines${R.gate_example.length ? ` (e.g. ${R.gate_example.join(", ")})` : ""}${R.plan_files_of.length ? `; plan files: ${R.plan_files_of.join(", ")}` : ""}.\n\n`;
   if (R.gatesUnknown) o += `**${R.gatesNote}.** This isn't the same as "no plan gate" (below) - the language isn't recognized yet, not confirmed absent; add \`glossary.billing\` words for this product's language to sources.json (see move-in.md step 5) and rerun.\n\n`;

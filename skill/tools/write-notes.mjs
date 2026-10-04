@@ -18,6 +18,7 @@ const ji = argv.indexOf("--json"), jsonOut = ji >= 0 ? argv.splice(ji, 2)[1] : n
 const pri = argv.indexOf("--pr"), prFlag = pri >= 0 ? (argv.splice(pri, 1), true) : false;
 const ai = argv.indexOf("--audience"), audience = ai >= 0 ? argv.splice(ai, 2)[1] : "team";
 const [pm = "pm", argFrom, argTo] = argv;
+if (!["customer", "team", "manager"].includes(audience)) { console.error(`Psst… --audience "${audience}" isn't one: use customer, team or manager.`); process.exit(1); }
 const K = readSources(pm);
 
 const git = (...a) => execFileSync("git", ["-C", K.repo, ...a], { encoding: "utf8", maxBuffer: 64 << 20 });

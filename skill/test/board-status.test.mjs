@@ -7,7 +7,7 @@ import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 import { run as helperRun, temporary, clean, Tool } from "./helpers.mjs";
 import { isoWeek, bodyOf, MARKER, STATUSES, phrases } from "../tools/board-status.mjs";
-
+import { localDay } from "../tools/today.mjs";
 const run = (file, args, opts) => { const r = helperRun(file, args, opts); return { status: r.code, stdout: r.output, stderr: r.error }; };
 const BS = path.join(Tool, "board-status.mjs"), NOSY = path.join(Tool, "nosy.mjs");
 
@@ -115,7 +115,7 @@ test("--status is sent as the board's enum; an unknown one is refused before any
 });
 
 test("once a week: an update with this week's marker already on the board means nothing is posted, and it says so", () => {
-  const week = isoWeek(new Date());
+  const week = isoWeek(new Date(`${localDay()}T12:00:00Z`)); // the owner's day, as the tool reads it
   const p = product({ fixture: { updates: [{ body: `Earlier text\n${MARKER(week)}\n` }] } });
   const r = p.go("--yes");
   assert.equal(r.status, 0, r.stderr);

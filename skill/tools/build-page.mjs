@@ -16,8 +16,10 @@
 // built page is still over it — it never blocks the write.
 import fs from "node:fs"; import path from "node:path"; import { section as sectionValue } from "./auto-section.mjs"; import { thresholds } from "./thresholds.mjs";
 import { glance, renderGlance, GLANCE_CSS } from "./glance.mjs"; import { next as nextPicks } from "./next.mjs";
-import { readSources, readSourcesSafe, matrixFile } from "./sources-file.mjs"; import { esc } from "./html-safe.mjs"; import { load as loadWeek } from "./rivals-week.mjs"; import { builtByNosy } from "./page-path.mjs";
+import { damagedJson } from "./owner-json.mjs"; import { readSources, readSourcesSafe, matrixFile } from "./sources-file.mjs"; import { esc } from "./html-safe.mjs"; import { load as loadWeek } from "./rivals-week.mjs"; import { builtByNosy } from "./page-path.mjs";
 const pm = process.argv[2] || "pm", out = process.argv[3] || "page.html";
+// A sources.json that exists but doesn't parse is not "no sources": the matrix and repo name come from it, so a page built over it would be wrong and still say "written".
+{ const bad = damagedJson(path.join(pm, "sources.json")); if (bad) { console.error(`Psst… ${path.join(pm, "sources.json")} isn't valid JSON (${bad}). The page was not written. A trailing comma or a merge-conflict marker (<<<<<<<) is the usual cause: fix that spot, or move the file aside and run \`nosy setup .\`, then build again.`); process.exit(1); } }
 const rd = f => { try { return fs.readFileSync(path.join(pm, f), "utf8"); } catch { return ""; } };
 const truncate = (s, n) => { s = String(s ?? ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
 // Keeps the most recent "## " sections of a log up to a byte budget (at least the single latest one), so
@@ -53,7 +55,7 @@ function md(src) { // a small markdown subset: headings, lists, numbered lists, 
   close(); return h;
 }
 const section = (src, title) => { const m = src.match(new RegExp(`^## ${title}[^\\n]*\\n([\\s\\S]*?)(?=^## |$(?![\\s\\S]))`, "m")); return m ? m[1].trim() : ""; };
-const field = (src, k) => (src.match(new RegExp(`\\*\\*${k}:\\*\\*\\s*(.+)$`, "m")) || [, ""])[1].trim();
+const field = (src, k) => (src.match(new RegExp(`\\*\\*${k}(?::\\*\\*|\\*\\*:)\\s*(.+)$`, "m")) || [, ""])[1].trim(); // "**Label:** v" or "**Label**: v"
 
 const M = (() => { let t = ""; try { t = fs.readFileSync(matrixFile(pm, readSourcesSafe(pm)), "utf8"); } catch {} return JSON.parse(t || "{}"); })(); // sources.json `matrix`, else pm/matrix.json
 // No product.md yet (a scripted setup): the repo's own name, from package.json or the folder, never a bare "Product".

@@ -17,7 +17,7 @@
 // scraper, ever) - the `research` key is for the agent-driven research in `neighbors`/`nosy-neighbor`, which
 // reads pages with judgment attached; this script never does.
 import fs from "node:fs"; import path from "node:path"; import crypto from "node:crypto";
-import { readSources } from "./sources-file.mjs";
+import { readSources, flatMarkdown, markdownSlug, skippedNote } from "./sources-file.mjs";
 
 const argv = process.argv.slice(2);
 const opt = k => { const i = argv.indexOf(k); return i >= 0 ? argv.splice(i, 2)[1] : null; };
@@ -128,8 +128,9 @@ async function fetchText(url) {
 }
 
 // --- run ---
-const rivals = fs.readdirSync(rivalDir).filter(f => f.endsWith(".md") && !f.startsWith("_"))
-  .map(f => ({ slug: f.replace(/\.md$/, ""), md: fs.readFileSync(path.join(rivalDir, f), "utf8") }))
+const rivalList = flatMarkdown(rivalDir);
+const rivals = rivalList.files
+  .map(f => ({ slug: markdownSlug(f), md: fs.readFileSync(path.join(rivalDir, f), "utf8") }))
   .filter(r => !only.length || only.includes(r.slug))
   .map(r => ({ ...r, name: (r.md.match(/^# (.+)$/m) || [, r.slug])[1].trim(), pages: (K.watch?.[r.slug]) || registryPages(K.rivals?.[r.slug]) || pagesOf(r.md, maxPages) }));
 
@@ -167,8 +168,10 @@ for (const r of rivals) {
 }
 
 const by = s => results.filter(x => x.state === s);
+const noFiles = !rivalList.files.length; // nothing to read in pm/rivals: say so (and what was passed over) instead of "0 rivals" as if all were quiet
 let o = `# Rival watch · ${today.slice(0, 10)} · ${results.length} rivals, ${by("changed").length} changed, ${by("same").length} unchanged, ${by("baseline").length} first snapshot, ${by("unreachable").length + by("no pages").length} not read\n\n`;
 o += `Public pages only, compared with the last snapshot in ${historyDir}/ (numbers masked outside pricing pages, so counters and dates don't count). Changed rivals are what \`neighbors\` should research this round; judgment (shipped vs announced, matrix cells) stays with the agent.\n\n`;
+if (noFiles) o += `No rival files to read in ${rivalDir}/ (rival files are .md or .markdown, directly in that folder).${skippedNote(rivalList.skipped)} Run /nosy:neighbors, or move the files there.\n\n`;
 if (by("changed").length) {
   o += `## Changed\n\n`;
   for (const x of by("changed")) {
@@ -186,5 +189,5 @@ list("Not read", [...by("unreachable"), ...by("no pages")], x => `- ${x.name}: $
 if (by("same").length) o += `Unchanged: ${by("same").map(x => x.name).join(", ")}.\n`;
 process.stdout.write(o);
 // Exit 2 when no rival's pages could be read at all (offline, blocked): a watch that read nothing is not an all-clear, and `weekly` marked it ✓ (field-test hunt).
-process.exitCode = results.length && results.some(x => x.state === "unreachable") && results.every(x => x.state === "unreachable" || x.state === "no pages") ? 2 : 0; // nothing at all could be read (offline, blocked): not an all-clear. One rival that is down is named in the output and is not the whole run; "no pages" is a setup gap the output already names
+process.exitCode = noFiles ? 2 : results.length && results.some(x => x.state === "unreachable") && results.every(x => x.state === "unreachable" || x.state === "no pages") ? 2 : 0; // nothing at all could be read (offline, blocked): not an all-clear. One rival that is down is named in the output and is not the whole run; "no pages" is a setup gap the output already names
 if (jsonOut) { fs.mkdirSync(path.dirname(jsonOut), { recursive: true }); fs.writeFileSync(jsonOut, JSON.stringify({ type: "watch", generated: today, rivals: results }, null, 1)); }

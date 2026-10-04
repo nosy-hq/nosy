@@ -44,18 +44,22 @@ export function todoRender(t) {
   return o;
 }
 
+// Reads the files `nosy todo` writes and the ones a person writes by hand: the label may be bold or plain, in either colon form, in any case
+// ("- **Status:** Done", "**Status**: done", "Status: DONE"); a file with no "Todo" line takes its first heading as the title.
 export function todoParse(md, file = "") {
   const id = (md.match(/^# Todo (\S+)/m) || [])[1] || path.basename(file, ".md");
   const t = { id };
-  for (const [k, label] of FIELDS) { const m = md.match(new RegExp(`^- \\*\\*${label}:\\*\\*\\s*(.*)$`, "m")); const v = m?.[1].trim(); t[k] = v && v !== "—" ? v : null; }
-  t.status = STATUSES.includes(t.status) ? t.status : "open";
+  for (const [k, label] of FIELDS) { const m = md.match(new RegExp(`^[ \\t]*(?:[-*][ \\t]+)?(?:\\*\\*)?${label}(?::\\*\\*|\\*\\*:|:)[ \\t]*(.*)$`, "im")); const v = m?.[1].replace(/\*+$/, "").trim(); t[k] = v && v !== "—" ? v : null; }
+  if (!t.todo) { const h = (md.match(/^# (?!Todo \S+\s*$)(.+)$/m) || [])[1]; t.todo = h ? h.trim() : id; }
+  t.status = String(t.status || "").toLowerCase(); t.status = STATUSES.includes(t.status) ? t.status : "open";
   t.who = t.who || "owner";
   return t;
 }
 
+// Every .md file in pm/todo/ is an item (a README or a file starting with "_" or "." is not): a hand-written one is as good as one `add` wrote.
 export function todoLoad(pm) {
   const dir = path.join(pm, "todo"); if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir).filter(f => /^nt-.*\.md$/.test(f)).sort().map(f => todoParse(fs.readFileSync(path.join(dir, f), "utf8"), f));
+  return fs.readdirSync(dir).filter(f => /\.md$/i.test(f) && !/^[._]|^readme\.md$/i.test(f)).sort().map(f => todoParse(fs.readFileSync(path.join(dir, f), "utf8"), f));
 }
 export function todoSave(pm, t) {
   const dir = path.join(pm, "todo"); fs.mkdirSync(dir, { recursive: true });
@@ -85,8 +89,8 @@ export function todoLine(S, { max = 3 } = {}) {
 
 function find(all, key) {
   const k = String(key || "").trim().toLowerCase(); if (!k) return { error: "give the id (or part of it): `nosy todo list` shows them." };
-  const exact = all.find(t => t.id === k); if (exact) return { t: exact };
-  const hits = all.filter(t => t.id.includes(k));
+  const exact = all.find(t => t.id.toLowerCase() === k); if (exact) return { t: exact };
+  const hits = all.filter(t => t.id.toLowerCase().includes(k));
   if (hits.length === 1) return { t: hits[0] };
   return { error: hits.length ? `"${key}" fits more than one: ${hits.map(t => t.id).join(", ")}. Use more of the id.` : `no item matches "${key}". \`nosy todo list --all\` shows every item.` };
 }

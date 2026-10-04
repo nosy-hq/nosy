@@ -57,8 +57,10 @@ function script(name, a = [], { silent = false } = {}) {
 // that most scripts would crash with a git stack trace, or worse, answer "nothing found" about a repo they never read.
 // Each problem says what to do next (hints.mjs). Checked once per run.
 let repoVerdict;
-function sourceRequired({ repo = true } = {}) {
-  const bad = sourcesProblem(pm) ?? (repo ? (repoVerdict ??= repoProblem(sources()) ?? "") || null : null);
+// `ref: true` (check, gates, metrics, psst): those read the branch named by `ref` and have no fallback, so a missing one is said, not printed as "undefined".
+function sourceRequired({ repo = true, ref = false } = {}) {
+  const bad = sourcesProblem(pm) ?? (repo ? (repoVerdict ??= repoProblem(sources()) ?? "") || null : null)
+    ?? (ref && !(typeof sources()?.ref === "string" && sources().ref.trim()) ? `${path.join(pm, "sources.json")} has no \`ref\` (the branch Nosy reads, usually "main" or "origin/main"): add it, then run this again.` : null);
   if (!bad) return true;
   console.error(`Psst… ${bad}`);
   process.exitCode = 1;
@@ -121,13 +123,13 @@ const Commands = {
     }
     return r;
   },
-  check: () => sourceRequired({ repo: false }) && script("verify-setup.mjs", [pm]), // it reports an unreadable repo or ref itself, as a table row
+  check: () => sourceRequired({ repo: false, ref: true }) && script("verify-setup.mjs", [pm]), // it reports an unreadable repo or ref itself, as a table row
   // The named rule catalog (skill/data/rules.json): no args lists id/name/one-liner; an id prints the
   // full rule (why, enforcedBy, tests); an unknown id prints the closest ids and exits 1. No pm needed.
   explain: () => { const r = script("explain.mjs", [...args]); if (r.code !== 0) process.exitCode = r.code; return r; },
   inventory: () => sourceRequired() && script("inventory.mjs", [pm, "--json", path.join(pm, "state", "inventory.json")]),
-  gates: ({ silent } = {}) => sourceRequired() && script("plan-gates.mjs", [pm, "--json", path.join(pm, "state", "plan-gates.json")], { silent }),
-  metrics: ({ silent } = {}) => sourceRequired() && script("scan-metrics.mjs", [pm, "--json", path.join(pm, "state", "metrics.json")], { silent }),
+  gates: ({ silent } = {}) => sourceRequired({ ref: true }) && script("plan-gates.mjs", [pm, "--json", path.join(pm, "state", "plan-gates.json")], { silent }),
+  metrics: ({ silent } = {}) => sourceRequired({ ref: true }) && script("scan-metrics.mjs", [pm, "--json", path.join(pm, "state", "metrics.json")], { silent }),
   // psst's check step, one command each: usually `nosy psst` runs the first two.
   "team-next": () => sourceRequired() && script("team-next.mjs", [pm, ...args, "--json", path.join(pm, "state", "team-next.json")]),
   fields: () => sourceRequired() && script("fields.mjs", [sources().repo || ".", ...args]),
@@ -168,7 +170,7 @@ const Commands = {
   "rival-demand": () => script("rival-demand.mjs", [pm, ...args, "--json", path.join(pm, "state", "rival-demand.json")]),
   // psst silently refreshes the plan-gate, metrics, waiting-screen and demand scans first (signals 7, 8, 9 and the demand column read these files).
   psst: () => {
-    if (!sourceRequired()) return;
+    if (!sourceRequired({ ref: true })) return;
     fs.mkdirSync(path.join(pm, "state"), { recursive: true });
     Commands.gates({ silent: true }); Commands.metrics({ silent: true });
     script("pending-backend.mjs", [pm, "--json", path.join(pm, "state", "pending.json")], { silent: true }); // signal 9
@@ -234,7 +236,10 @@ const Commands = {
     if (r.code === 0 && r.output) statusWrite(`${today}-delivery.md`, r.output);
     return r;
   },
-  notes: () => { if (!sourceRequired()) return; const win = windowFlag(); if (win === "bad") return; return script("write-notes.mjs", [pm, start(since || win || args[0]), "--audience", target || "customer"]); },
+  notes: () => {
+    if (target && !["customer", "team", "manager"].includes(target)) { console.error(`Psst… --for "${target}" isn't an audience: use customer, team or manager.`); process.exitCode = 1; return; }
+    if (!sourceRequired()) return; const win = windowFlag(); if (win === "bad") return; return script("write-notes.mjs", [pm, start(since || win || args[0]), "--audience", target || "customer"]);
+  },
   // Recency (wave N2): merged since the last run (incremental, pm/history/runs.jsonl) + open PRs close to
   // merging (approved / green CI), each tied to its decision/request/issue via refs.mjs. `overheard`'s
   // "which decision does this PR serve" question now lives here as a standing view.
@@ -343,12 +348,15 @@ const Commands = {
     const result = [];
     const bets = fs.existsSync(path.join(pm, "bets")), rivals = fs.existsSync(path.join(pm, "rivals")) && !process.env.NOSY_OFFLINE;
     const steps = short ? ["shipped", ...(bets ? ["score"] : []), "page"] : ["inventory", "shipped", "psst", ...(bets ? ["score"] : []), ...(rivals ? ["watch"] : []), "page"];
+    // A step that is left out says so in the summary line, with the reason (it used to just be missing from it).
+    const skippedWatch = short || rivals ? null : process.env.NOSY_OFFLINE ? "watch: skipped (NOSY_OFFLINE is set)" : "watch: skipped (no pm/rivals folder)";
     for (const k of steps) {
       console.log(`\n── nosy ${k} ──`);
       const r = Commands[k]();
       // ✓ ran clean · ! ran and found something to look at (exit 2) · ✗ couldn't run
       result.push(`${k}: ${!r ? "✗" : r.code === 0 ? "✓" : r.code === 2 ? "!" : "✗"}`);
     }
+    if (skippedWatch) result.push(skippedWatch); // last, so the ran-steps part of the line keeps its shape
     console.log(`\n${result.join(" · ")}`);
     process.exitCode = result.some(s => s.endsWith("✗")) ? 1 : result.some(s => s.endsWith("!")) ? 2 : 0;
   },

@@ -158,7 +158,7 @@ export function scoreSection(r) {
 }
 
 function formatMd(R) {
-  if (!R.bets.length) return `# Score\n\nNo bets yet. Place one: \`node bet.mjs pm place "<what>" --why "…" --estimate S|M|L\`.\n`;
+  if (!R.bets.length) return `# Score\n\nNo bets yet. Place one: \`nosy bet place "<what>" --why "…" --estimate S|M|L\`.\n`;
   const by = s => R.bets.filter(r => r.status === s && r.origin !== "backfill");
   let o = `# Score · ${R.generated.slice(0, 10)} · integration branch ${R.integration} (${R.integrationReason})\n\n`;
   o += `${R.bets.length} bet(s): ${["open", "landed", "partial", "reverted", "dropped"].map(s => `${by(s).length} ${s}`).join(" · ")}${R.bets.some(r => r.origin === "backfill") ? ` · ${R.bets.filter(r => r.origin === "backfill").length} backfill (not shown in tables)` : ""}\n\n`;

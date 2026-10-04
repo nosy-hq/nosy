@@ -184,7 +184,7 @@ function works(pm) {
 }
 
 function formatMd(R) {
-  let o = `# Metrics · ${R.ref}\n\n`;
+  let o = `# Metrics${R.ref ? ` · ${R.ref}` : ""}\n\n`;
   o += R.event_count ? `${R.event_count} distinct product events (${R.tools.join(", ")}).` : `No product event found in the code${R.installed.length ? ` (installed in dependencies: ${R.installed.join(", ")}; installed but not called)` : ""}.`;
   o += ` ${R.unmeasured} key steps exist in the product but don't fire an event.\n\n`;
   o += R.northStar.defined ? `**North Star (${R.northStar.name}):** ${R.northStar.measured ? `measured — ${R.northStar.events.join(", ")} (${R.northStar.evidence})` : "**no event in the code feeds this metric.**"}\n\n`

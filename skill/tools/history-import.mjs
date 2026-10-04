@@ -60,6 +60,8 @@ export function render(H) {
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2), take = k => { const i = argv.indexOf(k); return i >= 0 ? argv.splice(i, 2)[1] : null; };
   const daysArg = take("--days"), jsonOut = take("--json"), pm = argv[0] || "pm", days = daysArg ? +daysArg : 90;
+  const stray = argv.slice(1).find(a => !a.startsWith("--")); // `history 7x`: a window that isn't one was ignored and the default 90 days ran
+  if (stray) { console.error(`Psst… "${stray}" isn't a window: use 30d or 90d, or --days N (1 to 730).`); process.exit(1); }
   if (!Number.isInteger(days) || days < 1 || days > 730) { console.error("Psst… --days needs a whole number of days between 1 and 730 (30 or 90 are the usual windows)."); process.exit(1); }
   const H = importHistory(pm, { days });
   if (H.error) { console.error(render(H)); process.exit(1); }

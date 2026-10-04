@@ -10,6 +10,7 @@
 import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process";
 import { matrixRead } from "./read-matrix.mjs";
 import { readSources } from "./sources-file.mjs";
+import { sourcesProblem } from "./hints.mjs";
 
 const MAX_REPOS = 15;
 const NOT_REPO = new Set(["orgs", "sponsors", "features", "apps", "marketplace", "topics", "about", "pricing", "login", "settings", "collections"]);
@@ -219,7 +220,9 @@ async function main() {
   const take = (flag) => { const i = argv.indexOf(flag); return i >= 0 ? argv.splice(i, 2)[1] : null; };
   const jsonOut = take("--json"), top = Number(take("--top")) || 8, repoArg = take("--repos");
   const pm = argv[0] || "pm";
-  const { repos, from } = reposFor(pm, repoArg ? repoArg.split(",").map(s => s.trim()).filter(Boolean) : null);
+  let found; try { found = reposFor(pm, repoArg ? repoArg.split(",").map(s => s.trim()).filter(Boolean) : null); }
+  catch (e) { console.error(`Psst… ${sourcesProblem(pm) || `couldn't read ${path.join(pm, "sources.json")} (${String(e.message).split("\n")[0]}).`} Or pass --repos owner/repo,... to skip it.`); process.exit(1); }
+  const { repos, from } = found;
   if (!repos.length) { console.log("No rival repos to read. Pass --repos owner/repo,... or add sources.json `rivalRepos`."); process.exit(0); }
   if (repos.length > MAX_REPOS) console.log(`Reading the first ${MAX_REPOS} of ${repos.length} repos.`);
   const getJson = makeGetJson(), getDiscussions = makeGetDiscussions(), lines = linesOf(pm), out = [];

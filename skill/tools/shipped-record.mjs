@@ -481,7 +481,8 @@ const rows = decisions.map(d => {
     mainEntry = link.pr.mergedAt; mainCommit = link.pr.mergeCommit?.oid || null; source = link.kind;
     linkedPr = link.pr.number; linkedVia = link.via || null;
   } else {
-    const c = firstMainCommitMentioning(d.number);
+    // an open issue, or one closed as "not planned", that a commit only names is not shipped by that commit
+    const c = d.state === "OPEN" || (d.state === "CLOSED" && d.stateReason === "NOT_PLANNED") ? null : firstMainCommitMentioning(d.number);
     if (c) { mainEntry = c.date; mainCommit = c.hash; source = "commit-grep"; }
   }
   const dayDiffOf = mainEntry ? Math.round((new Date(mainEntry) - new Date(d.createdAt)) / 86400000) : null;

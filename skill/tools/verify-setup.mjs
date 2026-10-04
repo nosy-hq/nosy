@@ -36,7 +36,7 @@ const document = (what, filePath, search, write) => {
 
 // Repo and ref
 try { git("rev-parse", "--git-dir"); ok("repo", "✓", K.repo); } catch { ok("repo", "✗", `${K.repo} is not a git repo`); }
-try { ok("ref", "✓", `${K.ref} = ${git("rev-parse", "--short", K.ref).trim()}`); } catch { ok("ref", "✗", `${K.ref} doesn't resolve (git fetch?)`); }
+if (!K.ref) ok("ref", "✗", "no `ref` in pm/sources.json (the branch Nosy reads: set it to your integration branch)"); else try { ok("ref", "✓", `${K.ref} = ${git("rev-parse", "--short", K.ref).trim()}`); } catch { ok("ref", "✗", `${K.ref} doesn't resolve (git fetch?)`); }
 if (rows.some(r => r.result === "✗")) { print(); process.exit(2); } // exit contract: 2 = a ✗ row, 1 = couldn't read sources.json
 
 // Reference patterns (refs.mjs): every pattern must compile; how many times it matches in the last 200 commit

@@ -200,7 +200,7 @@ const blocking = findings.filter(b => b.category === "secret" || (b.category ===
 numbers.blocking = blocking.length;
 const toBeShown = findings.filter(b => all || b.severity !== "low").sort((a, b) => (a.file === b.file ? a.line - b.line : a.file.localeCompare(b.file)));
 
-let o = `# Privacy scan · ${new Date().toISOString().slice(0, 16).replace("T", " ")}\n\n`;
+let o = `# Privacy scan · ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC\n\n`;
 o += `${files.length} files · ${duration}ms · high ${numbers["high"]} · medium ${numbers["medium"]} · low ${numbers["low"]}${all ? "" : " (low hidden from table, show with --all)"}\n\n`;
 o += blocking.length ? `**${blocking.length} finding${blocking.length === 1 ? "" : "s"} stop a send** (secrets or personal data).\n\n` : "";
 if (blocking.some(b => b.slug === "hidden-name")) o += `A *name* finding that is really a public product or company, not a person: list it in \`privacy.publicNames\` in sources.json (or \`publicEntities\` in pm/private.json). It is then let through only as that whole name; the bare word, or a real person's name, still stops a send. No override flag is needed.\n\n`;

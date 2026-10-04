@@ -44,6 +44,8 @@ before(async () => {
   matchHash = commitAt(K.repo, 5, "fix: apply the patch discussed in #966.", { "backend/k966.js": "export function k966() { return true; }\n" });
   // A decoy that must NOT match #966: "#9660" has a DIGIT right after "966", so the boundary must reject it.
   decoyHash = commitAt(K.repo, 4, "chore: unrelated change, ticket #9660 in another tracker", { "backend/decoy.js": "export const decoy = 1;\n" });
+  // #967 is still open and a commit only names it: that is not shipping it (field hunt, 4 Oct).
+  commitAt(K.repo, 3, "docs: note that #967 is still being discussed", { "docs/n967.md": "open\n" });
   git(K.repo, ["push", "-q", "origin", "main"]);
   git(K.repo, ["fetch", "-q", "origin"]);
 
@@ -56,6 +58,9 @@ before(async () => {
   K.gh.searchIssues = [
     // Milestoned (internal request 118's signal), so it counts as a decision without any PR link.
     { number: 966, title: "Patch the shipment list edge case", body: "", createdAt: now, closedAt: null,
+      state: "CLOSED", stateReason: "COMPLETED", author: { login: "customer1" }, authorAssociation: "NONE",
+      labels: { nodes: [] }, milestone: { title: "v61" } },
+    { number: 967, title: "Still open", body: "", createdAt: now, closedAt: null,
       state: "OPEN", stateReason: null, author: { login: "customer1" }, authorAssociation: "NONE",
       labels: { nodes: [] }, milestone: { title: "v61" } },
   ];
@@ -85,4 +90,11 @@ test("'#9660' (a longer number) does not falsely match issue #966 (boundary corr
 
 test("summary counts this as a commit-grep mapping", () => {
   assert.equal(output.json.summary.mapped_by_kind["commit-grep"], 1);
+});
+
+test("an open issue that a commit only names is not shipped by that commit", () => {
+  const row = output.json.decisions.find(d => d.issue === 967);
+  assert.ok(row, "#967 (milestoned) is a decision row");
+  assert.notEqual(row.source, "commit-grep");
+  assert.ok(!row.main_entry, "no landing date for an open issue");
 });

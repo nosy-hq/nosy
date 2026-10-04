@@ -15,7 +15,7 @@
 // Usage: node facts.mjs <pm> build [--now YYYY-MM-DD] [--branch-days 60] [--max-branches 200] [--no-gh] · node facts.mjs <pm> find <term> [more terms]
 // Exit: 0 built / found · 2 find: nothing anywhere · 1 couldn't read sources.json, the repo, or GitHub (build
 // without GitHub still writes the git parts and says so).
-import { localDay } from "./today.mjs";
+import { localDay, localDayOf } from "./today.mjs";
 import fs from "node:fs"; import os from "node:os"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { fileURLToPath } from "node:url";
 import { redactLine } from "./redact.mjs";
 import { repoProblem, sourcesProblem } from "./hints.mjs";
@@ -195,12 +195,12 @@ export function githubFacts(ghRepo) {
   const clip = s => String(s || "").slice(0, 4000), who = a => a?.login || a?.name || "";
   const issues = gh(["issue", "list", "-R", ghRepo, "--state", "all", "--limit", "3000", "--json", "number,title,state,createdAt,closedAt,author,labels,assignees,body,comments"]);
   const prs = gh(["pr", "list", "-R", ghRepo, "--state", "all", "--limit", "3000", "--json", "number,title,state,createdAt,closedAt,mergedAt,author,headRefName,baseRefName,mergeCommit,isDraft,body,comments"]);
-  const comments = cs => (cs || []).map(c => ({ by: who(c.author), at: (c.createdAt || "").slice(0, 10), body: clip(c.body) }));
+  const comments = cs => (cs || []).map(c => ({ by: who(c.author), at: localDayOf(c.createdAt) || "", body: clip(c.body) }));
   const LIMIT = 3000, list = [
-    ...issues.map(i => ({ n: i.number, kind: "issue", state: i.state.toLowerCase(), title: i.title, by: who(i.author), created: i.createdAt?.slice(0, 10), closed: i.closedAt?.slice(0, 10) || null,
+    ...issues.map(i => ({ n: i.number, kind: "issue", state: i.state.toLowerCase(), title: i.title, by: who(i.author), created: localDayOf(i.createdAt), closed: localDayOf(i.closedAt) || null,
       labels: (i.labels || []).map(l => l.name), assignees: (i.assignees || []).map(who), body: clip(i.body), comments: comments(i.comments) })),
-    ...prs.map(p => ({ n: p.number, kind: "pr", state: p.state.toLowerCase(), title: p.title, by: who(p.author), created: p.createdAt?.slice(0, 10), closed: p.closedAt?.slice(0, 10) || null,
-      merged: p.mergedAt?.slice(0, 10) || null, mergeCommit: p.mergeCommit?.oid?.slice(0, 9) || null, branch: p.headRefName, base: p.baseRefName, draft: !!p.isDraft, body: clip(p.body), comments: comments(p.comments) })),
+    ...prs.map(p => ({ n: p.number, kind: "pr", state: p.state.toLowerCase(), title: p.title, by: who(p.author), created: localDayOf(p.createdAt), closed: localDayOf(p.closedAt) || null,
+      merged: localDayOf(p.mergedAt) || null, mergeCommit: p.mergeCommit?.oid?.slice(0, 9) || null, branch: p.headRefName, base: p.baseRefName, draft: !!p.isDraft, body: clip(p.body), comments: comments(p.comments) })),
   ].sort((a, b) => b.n - a.n);
   // gh lists the newest first: at the limit, older ones exist and weren't read. Say so rather than imply "all".
   list.capped = { issues: issues.length >= LIMIT, prs: prs.length >= LIMIT };
@@ -264,7 +264,7 @@ export function find(repo, gh, terms, { base = "HEAD" } = {}) {
     for (const x of fileList.slice(0, 15)) {
       x.changed = git("log", "-1", "--format=%ad", "--date=short", base, "--", x.file).trim() || null;
       // For a document, when the matching line itself was written (a file edited yesterday can keep a month-old line).
-      if (isDoc(x.file) && !partial) { const t = git("blame", "--porcelain", "-L", `${x.hits[0].line},${x.hits[0].line}`, base, "--", x.file).match(/^author-time (\d+)/m); if (t) x.written = new Date(+t[1] * 1000).toISOString().slice(0, 10); }
+      if (isDoc(x.file) && !partial) { const bl = git("blame", "--porcelain", "-L", `${x.hits[0].line},${x.hits[0].line}`, base, "--", x.file), t = bl.match(/^author-time (\d+)/m), z = bl.match(/^author-tz ([+-])(\d\d)(\d\d)/m); if (t) x.written = new Date(+t[1] * 1000 + (z ? (z[1] === "-" ? -1 : 1) * (+z[2] * 60 + +z[3]) * 60000 : 0)).toISOString().slice(0, 10); } // the author's own day, like the commit dates beside it
     }
     // Commits on the integration branch whose message mentions it, newest first: "Uygula writes a tracked change"
     // (25 Sep) beats a doc from 24 Sep that says tracking is still to do.
@@ -314,7 +314,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     console.log(renderFind(res, { ghRead: !!gh, base }));
     process.exitCode = res.every(r => !r.files.length && !r.github.length && !r.commits.length) ? 2 : 0;
   } else if (cmd === "build") {
-    const now = nowArg || day(new Date());
+    const now = nowArg || localDay();
     fs.mkdirSync(dir, { recursive: true });
     let gh = null, ghError = null;
     if (!noGh && K.issue?.repo) { try { gh = githubFacts(K.issue.repo); } catch (e) { ghError = String(e.stderr || e.message).trim().split("\n")[0]; } }

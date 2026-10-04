@@ -103,7 +103,7 @@ It looks for the agents the project uses (a `.claude/`, `.cursor/`, `.gemini/`, 
 `npx github:…` runs a repo's code on your machine. Pin a release tag to say which code (replace with the latest release tag); without `#<tag>` you get the default branch as it is right now:
 
 ```
-npx github:nosy-hq/nosy#v0.21.1 install
+npx github:nosy-hq/nosy#v0.21.2 install
 ```
 
 - `--providers claude,codex,cursor,gemini,copilot,opencode,kiro` chooses; `--dry-run` shows first; `--global` uses your user folder (Claude Code `~/.claude/skills`, Codex `~/.agents/skills`).

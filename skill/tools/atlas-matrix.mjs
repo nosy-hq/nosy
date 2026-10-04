@@ -13,6 +13,7 @@
 // Usage: node atlas-matrix.mjs <pm> [--json <file>] [--now YYYY-MM-DD] [--days 90]
 // Exit: 0 ranked, nothing to look at · 2 it ran and something needs a look (a problem, a stale row, a candidate not ranked) · 1 there are no reports.
 import fs from "node:fs"; import path from "node:path"; import { fileURLToPath } from "node:url";
+import { flatMarkdown, markdownSlug, skippedNote } from "./sources-file.mjs";
 
 const DAY = 864e5;
 export const GRADES = ["read", "snippet", "unreadable", "terms-unread", "judgment"];
@@ -39,7 +40,7 @@ function rows(sec) {
 }
 
 export function parseReport(text, file = "") {
-  const slug = path.basename(file).replace(/\.md$/, ""), h = header(text);
+  const slug = markdownSlug(path.basename(file)), h = header(text);
   const name = (text.match(/^#\s+(.+)$/m)?.[1] ?? slug).trim();
   const decisionWord = (h["owner decision"] ?? "undecided").toLowerCase().match(/^(yes|no|undecided)\b/)?.[1] ?? "undecided";
   const verified = (h["verified"] ?? "").match(/^(\d{4}-\d{2}-\d{2})/)?.[1] ?? null;
@@ -102,14 +103,14 @@ export function render(m, days = STALE_DAYS) {
   return L.join("\n");
 }
 
-export const files = dir => { try { return fs.readdirSync(dir).filter(f => f.endsWith(".md") && !f.startsWith("_") && f !== "axes.md").sort().map(f => path.join(dir, f)); } catch { return []; } };
+export const files = dir => flatMarkdown(dir).files.filter(f => f.toLowerCase() !== "axes.md").map(f => path.join(dir, f));
 
 function main(argv) {
   const al = n => { const i = argv.indexOf(n); if (i < 0) return null; const v = argv[i + 1]; argv.splice(i, 2); return v; };
   const jsonFile = al("--json"), nowArg = al("--now"), days = Number(al("--days") ?? STALE_DAYS), [pm] = argv;
   if (!pm || !(days > 0) || (nowArg && !isDate(nowArg))) { console.error("Usage: atlas-matrix.mjs <pm> [--json file] [--now YYYY-MM-DD] [--days N]"); return 1; }
   const fs_ = files(path.join(pm, "atlas"));
-  if (!fs_.length) { console.error(`Psst… no reports in ${path.join(pm, "atlas")} yet. This command only ranks the reports: the research that writes them is the atlas step in your agent (/nosy:atlas in Claude Code, \`$nosy atlas\` in Codex, /nosy atlas elsewhere), where one nosy-scout per candidate writes pm/atlas/<slug>.md (templates/market.md). Run that, then this again.`); return 1; }
+  if (!fs_.length) { console.error(`Psst… no reports in ${path.join(pm, "atlas")} yet.${skippedNote(flatMarkdown(path.join(pm, "atlas")).skipped)} This command only ranks the reports: the research that writes them is the atlas step in your agent (/nosy:atlas in Claude Code, \`$nosy atlas\` in Codex, /nosy atlas elsewhere), where one nosy-scout per candidate writes pm/atlas/<slug>.md (templates/market.md). Run that, then this again.`); return 1; }
   const m = build(fs_.map(f => parseReport(fs.readFileSync(f, "utf8"), f)), { now: nowArg ? Date.parse(nowArg) : Date.now(), days });
   console.log(render(m, days));
   if (jsonFile) { fs.mkdirSync(path.dirname(path.resolve(jsonFile)), { recursive: true }); fs.writeFileSync(jsonFile, JSON.stringify({ generatedAt: new Date(nowArg ? Date.parse(nowArg) : Date.now()).toISOString().slice(0, 10), days, ...m }, null, 1) + "\n"); console.log(`\nWrote ${jsonFile}`); }

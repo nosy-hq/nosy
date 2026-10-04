@@ -82,7 +82,7 @@ export function plan(project, { providers = null, global = false, action = "inst
     if (exists && !marker) { steps.push({ provider: k, target, skip: "a nosy folder is already there and wasn't written by nosy install; left alone (remove it yourself to install)" }); continue; }
     steps.push({ provider: k, target, copy: true, from: marker?.version || null });
   }
-  return { project, global, action, providers: chosen, detected: detect(project), steps };
+  return { project, global, action, providers: chosen, asked: !!providers?.length, detected: detect(project), steps };
 }
 
 // Folders under `base` that don't exist yet on the way to `target`'s parent: the ones this install is about to create.
@@ -134,7 +134,8 @@ export function render(P, { dry = false } = {}) {
     : s.from ? (dry ? `would update (${s.from} → ${VERSION})` : `updated (${s.from} → ${VERSION})`)
     : (dry ? "would install" : "installed");
   const lines = [];
-  if (P.action === "install" && !P.global) lines.push(P.detected.length ? `Found: ${P.detected.map(k => PROVIDERS[k].name).join(", ")}.` : `No coding agent's folder found here; installing for ${DEFAULT.map(k => PROVIDERS[k].name).join(" and ")} (--providers to choose).`);
+  // --providers names the agents: say those, not the other agents found in the folder.
+  if (P.action === "install" && !P.global) lines.push(P.asked ? `Installing for ${P.providers.map(k => PROVIDERS[k].name).join(", ")}.` : P.detected.length ? `Found: ${P.detected.map(k => PROVIDERS[k].name).join(", ")}.` : `No coding agent's folder found here; installing for ${DEFAULT.map(k => PROVIDERS[k].name).join(" and ")} (--providers to choose).`);
   for (const s of P.steps) lines.push(s.skip ? `  – ${PROVIDERS[s.provider].name}: ${s.skip}${s.target ? ` (${rel(s.target)})` : ""}` : `  ✓ ${PROVIDERS[s.provider].name}: ${verb(s)} ${rel(s.target)}`);
   const done = P.steps.filter(s => s.copy);
   if (done.length && !dry && P.action !== "uninstall") {

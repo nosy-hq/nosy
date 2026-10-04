@@ -87,8 +87,9 @@ function main() {
   const fail = m => { console.error(m); process.exit(1); };
 
   if (action === "place") {
-    if (!text) fail('Usage: node bet.mjs <pm> place "<what>" --why "<why>" --estimate S|M|L [--basis …] [--expect "…"] [--rests-on K12]');
-    if (!est || !/^[SML]$/i.test(est)) fail("Estimate missing: ask the owner for S, M or L (S = 1–2 days, M = about a week, L = bigger). measure-size's history can be mentioned as a hint, never filled in for them.");
+    if (!text) fail('Usage: `nosy bet place "<what>" --why "<why>" --estimate S|M|L [--basis code|document|intent] [--expect "…"] [--rests-on K12]`');
+    if (est && !/^[SML]$/i.test(est)) fail(`--estimate "${est}" isn't a size: use S, M or L (S = 1–2 days, M = about a week, L = bigger).`);
+    if (!est) fail("Estimate missing: ask the owner for S, M or L (S = 1–2 days, M = about a week, L = bigger). measure-size's history can be mentioned as a hint, never filled in for them.");
     if (!why) fail('Why missing: one line, e.g. --why "customers asked 14 times; backend is ready".');
     const b0 = betsLoad(pm), taken = new Set(b0.map(b => b.id));
     const placed = date || localDay();
@@ -113,7 +114,7 @@ function main() {
   if (action === "index") { const bets = indexWrite(pm); console.log(`${bets.length} bets → pm/bets/bets.json`); return; }
   if (action === "list") {
     const bets = betsLoad(pm).filter(b => !status || b.status === status);
-    if (!bets.length) { console.log(status ? `No ${status} bets.` : 'No bets yet. Place one: node bet.mjs pm place "<what>" --why "…" --estimate S|M|L'); return; }
+    if (!bets.length) { console.log(status ? `No ${status} bets.` : 'No bets yet. Place one: `nosy bet place "<what>" --why "…" --estimate S|M|L`'); return; }
     let o = `| Id | Bet | Estimate | Rests on | Placed | Status |\n|---|---|---|---|---|---|\n`;
     for (const b of bets) o += `| ${b.id} | ${b.bet.replace(/\|/g, "/").slice(0, 60)} | ${b.estimate} | ${b.restsOn || "none ⚠"} | ${b.placed} | ${b.status}${b.origin === "backfill" ? " (backfill)" : ""} |\n`;
     process.stdout.write(o); return;

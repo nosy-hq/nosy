@@ -8,7 +8,7 @@
 // Usage: node rivals-import.mjs <pm> [--from <folder>] [--dry-run]
 // Exit: 0 ran · 1 no folder to read from · 2 markdown files were there but none was rival-shaped (each is listed with why).
 import fs from "node:fs"; import path from "node:path"; import { fileURLToPath } from "node:url";
-import { readSourcesSafe, rivalsDir, rivalFiles, rivalDocWhy, markdownFiles } from "./sources-file.mjs";
+import { readSourcesSafe, rivalsDir, rivalFiles, rivalDocWhy, markdownFiles, markdownSlug } from "./sources-file.mjs";
 
 // A file-system slug: ASCII, lower case, accents folded ("Çelik Hukuk" → "celik-hukuk", "Müller" → "muller"), anything else a dash. A name with no
 // Latin letter at all (a title in another script) becomes "rival", then rival-2, rival-3: never an empty name, never a clash.
@@ -28,7 +28,7 @@ export function importRivals(pm, { from, dry = false } = {}) {
   const K = readSourcesSafe(pm) || {}, src = from ? path.resolve(from) : rivalsDir(pm, K), dest = path.join(pm, "rivals");
   if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) return { from: src, error: `no folder at ${src}` };
   if (path.resolve(src) === path.resolve(dest)) return { from: src, files: [], same: true };
-  const taken = new Set(fs.existsSync(dest) ? fs.readdirSync(dest).map(f => f.replace(/\.md$/i, "").toLowerCase()) : []), files = [];
+  const taken = new Set(fs.existsSync(dest) ? fs.readdirSync(dest).map(f => markdownSlug(f).toLowerCase()) : []), files = [];
   const copiedFrom = new Map(); // slug -> source, so a second run recognises its own copies
   try { for (const l of fs.readFileSync(path.join(dest, ".imported"), "utf8").split("\n")) { const [slug, rel] = l.split("\t"); if (slug && rel) copiedFrom.set(rel, slug); } } catch {}
   const found = rivalFiles(src, { nested: true });

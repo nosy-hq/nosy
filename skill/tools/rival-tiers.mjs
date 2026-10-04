@@ -20,13 +20,13 @@
 //        node rival-tiers.mjs record <pm>
 // Exit: 0 planned · 1 no rival files and no registry.
 import fs from "node:fs"; import path from "node:path"; import { fileURLToPath } from "node:url";
-import { readSourcesSafe } from "./sources-file.mjs";
+import { readSourcesSafe, flatMarkdown, markdownSlug, skippedNote } from "./sources-file.mjs";
 
 const DAY = 864e5;
 // The first run on a real product: 11 rivals, 1,079,151 tokens. One run, said as such; sources.json tour.tokensPerRival replaces it.
 export const TOKENS_PER_RIVAL = 98000, THIN_SHARE = 0.25, A_MAX = 10, A_STALE_DAYS = 30, C_STALE_DAYS = 90, PROMOTE_AFTER = 3, PROMOTE_OF = 4;
 const readJson = f => { try { return JSON.parse(fs.readFileSync(f, "utf8").replace(/^﻿/, "")); } catch { return null; } };
-const mdFiles = d => { try { return fs.readdirSync(d).filter(f => f.endsWith(".md") && !f.startsWith("_")).sort(); } catch { return []; } };
+const mdFiles = d => flatMarkdown(d).files;
 const fmt = n => Math.round(n).toLocaleString("en-US");
 const plural = (n, w, many = `${w}s`) => `${n} ${n === 1 ? w : many}`;
 
@@ -61,7 +61,7 @@ export function stubOf(md) {
 // The plan: everything the text prints, as data. `now` is a number (ms) so a test can pin it.
 export function plan(pm, { now = Date.now() } = {}) {
   const K = readSourcesSafe(pm) || {}, registry = K.rivals && typeof K.rivals === "object" && !Array.isArray(K.rivals) ? K.rivals : {};
-  const files = new Map(mdFiles(path.join(pm, "rivals")).map(f => [f.replace(/\.md$/, ""), path.join(pm, "rivals", f)]));
+  const files = new Map(mdFiles(path.join(pm, "rivals")).map(f => [markdownSlug(f), path.join(pm, "rivals", f)]));
   const slugs = [...new Set([...Object.keys(registry), ...files.keys()])].sort();
   const W = readJson(path.join(pm, "state", "watch.json")), watch = new Map(((W && W.rivals) || []).map(r => [r.slug, watchState(r.state)]));
   const own = +(K.tour && K.tour.tokensPerRival) > 0;
@@ -145,7 +145,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
   const [cmd, pm = "pm"] = argv, fail = m => { console.error(`Psst… ${m}`); process.exit(1); };
   if (cmd === "record") { console.log(record(pm) ? "Recorded this watch run." : "Nothing new to record (no pm/state/watch.json, or this run is already in the log)."); }
   else if (cmd === "plan") {
-    if (!mdFiles(path.join(pm, "rivals")).length && !Object.keys((readSourcesSafe(pm) || {}).rivals || {}).length) fail(`No rivals yet: no ${path.join(pm, "rivals")}/*.md and no \`rivals\` in sources.json. Run /nosy:neighbors first.`);
+    if (!mdFiles(path.join(pm, "rivals")).length && !Object.keys((readSourcesSafe(pm) || {}).rivals || {}).length) fail(`No rivals yet: no ${path.join(pm, "rivals")}/*.md and no \`rivals\` in sources.json.${skippedNote(flatMarkdown(path.join(pm, "rivals")).skipped)} Run /nosy:neighbors first.`);
     const P = plan(pm, nowArg ? { now: Date.parse(nowArg + "T12:00:00Z") } : {});
     if (jsonFile) { fs.mkdirSync(path.dirname(jsonFile), { recursive: true }); fs.writeFileSync(jsonFile, JSON.stringify(P, null, 1)); }
     console.log(jsonStdout ? JSON.stringify(P, null, 1) : render(P));

@@ -30,6 +30,9 @@ const argv = process.argv.slice(2);
 const al = flagName => { const i = argv.indexOf(flagName); return i >= 0 ? argv.splice(i, 2)[1] : undefined; };
 const jsonOut = al("--json"), sinceArg = al("--since"), daysArg = al("--days"), branchArg = al("--branch");
 const [pm = "pm"] = argv.filter(a => !a.startsWith("--"));
+// A window that isn't one is said, not guessed: `--since banana` became an invalid date and the whole answer was wrong without a word.
+if (sinceArg !== undefined && !(/^\d{4}-\d{2}-\d{2}/.test(sinceArg) && !Number.isNaN(Date.parse(sinceArg)))) { console.error(`Psst… --since "${sinceArg}" isn't a date: use a day count like 7d or a date like 2026-10-01.`); process.exit(1); }
+if (daysArg !== undefined && !(/^\d+$/.test(daysArg) && +daysArg >= 1)) { console.error(`Psst… --days "${daysArg}" isn't a number of days: use a whole number like 30.`); process.exit(1); }
 
 const K = readSources(pm);
 const R = K.issue?.repo;

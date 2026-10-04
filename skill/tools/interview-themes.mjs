@@ -58,10 +58,13 @@ function calculate(pm, { paths = [], quoteN = 2 } = {}) {
 
   // --- input files ---
   const inputs = paths.length ? paths : K.signal?.interviews ? [].concat(K.signal.interviews) : [path.join(pm, "signal", "interviews")];
-  const expand = p => { if (!fs.existsSync(p)) return []; const st = fs.statSync(p); if (st.isFile()) return /\.(md|txt)$/i.test(p) ? [p] : [];
-    return fs.readdirSync(p, { recursive: true }).map(f => path.join(p, String(f))).filter(f => /\.(md|txt)$/i.test(f) && fs.statSync(f).isFile()).sort(); };
+  // Notes in a word processor or a PDF can't be read here: they are counted and named, never passed over in silence.
+  const skipped = [], isNote = f => /\.(md|txt)$/i.test(f), unreadable = f => /\.(docx?|pdf|rtf|odt|pages)$/i.test(f);
+  const expand = p => { if (!fs.existsSync(p)) return []; const st = fs.statSync(p); if (st.isFile()) { if (unreadable(p)) skipped.push(p); return isNote(p) ? [p] : []; }
+    const all = fs.readdirSync(p, { recursive: true }).map(f => path.join(p, String(f))).filter(f => fs.statSync(f).isFile());
+    skipped.push(...all.filter(unreadable)); return all.filter(isNote).sort(); };
   const files = [...new Set(inputs.flatMap(expand))];
-  const base = { type: "interviews", generated: new Date().toISOString(), inputs };
+  const base = { type: "interviews", generated: new Date().toISOString(), inputs, ...(skipped.length ? { skipped: [...new Set(skipped)].sort() } : {}) };
   if (!files.length) return { ...base, interviews: [], themes: [], once: 0 };
   const interviewers = [...DEFAULT_INTERVIEWERS, ...(K.interview?.interviewers || [])];
   const rel = f => path.relative(pm, f).startsWith("..") ? f : path.relative(pm, f);
@@ -132,8 +135,15 @@ function calculate(pm, { paths = [], quoteN = 2 } = {}) {
   return { ...base, interviews: interviews.map(iv => ({ file: iv.file, date: iv.date, statements: iv.statements.length })), themes, once, statements: S.length };
 }
 
+// "skipped 2 .docx files (a.docx, b.docx), 1 .pdf file (c.pdf): convert to .md/.txt and run again."
+function skippedLine(R) {
+  if (!R.skipped?.length) return "";
+  const by = new Map(); for (const f of R.skipped) { const e = path.extname(f).toLowerCase(); (by.get(e) || by.set(e, []).get(e)).push(path.basename(f)); }
+  return `skipped ${[...by].map(([e, names]) => `${names.length} ${e} file${names.length === 1 ? "" : "s"} (${names.slice(0, 5).join(", ")}${names.length > 5 ? ", …" : ""})`).join(", ")}: convert to .md/.txt and run again.`;
+}
 function formatMd(R) {
-  if (!R.interviews.length) return `# Interview themes\n\nNo interview notes found (${R.inputs.join(", ")}). Drop interview or call notes (.md/.txt, one file per conversation, a date in the file name) in pm/signal/interviews/.\n`;
+  const skip = skippedLine(R);
+  if (!R.interviews.length) return `# Interview themes\n\nNo interview notes found (${R.inputs.join(", ")}). ${skip ? `${skip[0].toUpperCase()}${skip.slice(1)} ` : ""}Drop interview or call notes (.md/.txt, one file per conversation, a date in the file name) in pm/signal/interviews/.\n`;
   const n = R.interviews.length, kindName = { matrix: "matrix", roadmap: "roadmap", request: "request doc" };
   let o = `# Interview themes · ${n} interview${n === 1 ? "" : "s"}, ${R.statements} customer statements\n\n`;
   const matched = R.themes.filter(t => t.target), open = R.themes.filter(t => !t.target);
@@ -144,6 +154,7 @@ function formatMd(R) {
   o += `## Quotes\n\n`;
   for (const t of R.themes.slice(0, 12)) o += `**${t.target ? t.target.title : t.key}** — ${t.interviews} of ${n} interviews\n${t.quotes.map(q => `- "${q.text}" (${q.file}:${q.line})`).join("\n")}\n\n`;
   if (R.once) o += `${R.once} statement(s) came up only once and don't form a theme.\n\n`;
+  if (skip) o += `Note: ${skip}\n\n`;
   o += `Privacy: quotes are masked (email, phone, IDs, IBAN, card, URL keys). Names inside a sentence can't be detected: check before sharing, and never publish quotes without privacy-scan.\n`;
   return o;
 }

@@ -4,7 +4,8 @@
 // quoting a sentence that isn't in the file (a translation in quotation marks), a handler file that doesn't
 // exist, and a merged PR reported as "couldn't find the issue". This script checks each one mechanically, so
 // the agent fixes or drops the line before the owner reads it. It reads; it never edits the answer.
-//   file:line       the file exists in the repo (a bare name may match several; any one will do) and has that line
+//   file:line       the file exists in the repo (a bare name may match several; any one will do) and has that line;
+//                   also `file#L5`, `file line 3`, `file, lines 2-4` and `line 3 of file` (a plain "line N" beside a name that is no file of the repo is prose, not a miss)
 //   "quote" + cite  quoted words next to a citation are in that file near that line: word for word, any
 //                   language, case and accents ignored; a translation or paraphrase in quotation marks fails
 //   commit          a 7-40 character hex name is a commit in the repo, unless the sentence says it's missing
@@ -22,6 +23,13 @@ export const fold = s => String(s).replace(/[İI]/g, "i").toLowerCase().normaliz
   .replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
 const CITE_RE = /(?<![\w/:.-])((?:[\w@()[\]{}.-]+\/)*[\w@()[\]{}-][\w@()[\]{}.-]*\.[A-Za-z][A-Za-z0-9]{0,5}):(\d{1,6})(?:\s*[-–]\s*(\d{1,6}))?((?:\s*,\s*:?\d{1,6}(?:\s*[-–]\s*\d{1,6})?)*)/g;
+// The same file name, cited another way: an anchor ("README.md#L5", "README.md#L5-L9") or the word ("README.md line 3", "README.md, lines 2-4", "line 3 of README.md").
+// A name followed by a plain "line N" may be prose ("Node.js line 5 of the table"), so those are `loose`: kept only when the name is a real file.
+const FILE_SRC = String.raw`((?:[\w@()[\]{}.-]+\/)*[\w@()[\]{}-][\w@()[\]{}.-]*\.[A-Za-z][A-Za-z0-9]{0,5})`;
+const LINE_WORD = String.raw`(?:lines?|satır|satir)`;
+const ANCHOR_RE = new RegExp(String.raw`(?<![\w/:.-])${FILE_SRC}#L(\d{1,6})(?:\s*[-–]\s*L?(\d{1,6}))?\b`, "g");
+const LINE_AFTER_RE = new RegExp(String.raw`(?<![\w/:.-])${FILE_SRC}\`?(?:\s*[,(]\s*|\s+)\(?${LINE_WORD}\s+(\d{1,6})(?:\s*[-–]\s*(\d{1,6}))?\b`, "gi");
+const LINE_BEFORE_RE = new RegExp(String.raw`\b${LINE_WORD}\s+(\d{1,6})(?:\s*[-–]\s*(\d{1,6}))?\s+(?:of|in|from)\s+\`?(?<![\w/:.-])${FILE_SRC}`, "gi");
 const QUOTE_RE = /"([^"\n]{6,240})"|“([^”\n]{6,240})”|«([^»\n]{6,240})»|„([^“”\n]{6,240})[“”]|`([^`\n]{6,240})`/g;
 const SHA_RE = /(?<![\w/#.-])([0-9a-f]{7,12}|[0-9a-f]{40})(?![\w/-]|\.\w)/g;
 const REF_RE = /(?<![\w&/])#(\d{1,6})\b/g;
@@ -78,14 +86,18 @@ export function extract(text) {
     // Links are not citations: blank the URLs out, keeping the line length so positions still line up.
     const bare = line.replace(/\bhttps?:\/\/\S+/g, m => " ".repeat(m.length));
     const lineCites = [];
+    // "(dto.go:150" : the parenthesis is the answer's, not part of the path ("(home)/page.tsx" keeps its own).
+    const trim = (file, start) => { while (/^[([{]/.test(file) && !/^\([^)/]*\)\//.test(file) && !/^\[[^\]/]*\]\//.test(file)) { file = file.slice(1); start++; } return { file, start }; };
+    const add = (m, file, start, lines, loose = false) => { const c = { at: li + 1, file, lines, start, end: m.index + m[0].length, ...(loose ? { loose } : {}) }; cites.push(c); lineCites.push(c); };
     for (const m of bare.matchAll(CITE_RE)) {
-      let file = m[1], start = m.index;
-      // "(dto.go:150" : the parenthesis is the answer's, not part of the path ("(home)/page.tsx" keeps its own).
-      while (/^[([{]/.test(file) && !/^\([^)/]*\)\//.test(file) && !/^\[[^\]/]*\]\//.test(file)) { file = file.slice(1); start++; }
+      const { file, start } = trim(m[1], m.index);
       const extra = (m[4] || "").split(",").map(s => s.replace(/[:\s]/g, "")).filter(Boolean);
-      const lines = [[+m[2], +(m[3] || m[2])], ...extra.map(e => { const [a, b] = e.split(/[-–]/).map(Number); return [a, b || a]; })];
-      const c = { at: li + 1, file, lines, start, end: m.index + m[0].length }; cites.push(c); lineCites.push(c);
+      add(m, file, start, [[+m[2], +(m[3] || m[2])], ...extra.map(e => { const [a, b] = e.split(/[-–]/).map(Number); return [a, b || a]; })]);
     }
+    for (const m of bare.matchAll(ANCHOR_RE)) { const { file, start } = trim(m[1], m.index); add(m, file, start, [[+m[2], +(m[3] || m[2])]]); }
+    for (const m of bare.matchAll(LINE_AFTER_RE)) { const { file, start } = trim(m[1], m.index); add(m, file, start, [[+m[2], +(m[3] || m[2])]], true); }
+    for (const m of bare.matchAll(LINE_BEFORE_RE)) add(m, m[3], m.index, [[+m[1], +(m[2] || m[1])]], true);
+    lineCites.sort((a, b) => a.start - b.start); cites.sort((a, b) => a.at - b.at || a.start - b.start);
     for (const m of line.matchAll(QUOTE_RE)) {
       const q = m[1] || m[2] || m[3] || m[4] || m[5], code = !!m[5];
       // Code spans are checked only when they're a phrase: one identifier or a path says nothing checkable.
@@ -211,10 +223,11 @@ function outsideCandidates(outside, file) {
 }
 
 function checkCites(idx, cites, outside = []) {
-  const problems = [], notes = [];
+  const problems = [], notes = []; let ignored = 0;
   for (const c of cites) {
     const k = candidatesOf(idx, c.file), loc = `${c.file}:${c.lines.map(([a, b]) => a === b ? a : `${a}-${b}`).join(",")}`;
     if (!k.found.length) { const o = outsideCandidates(outside, c.file); if (o.length) k.found = o; }
+    if (!k.found.length && c.loose) { ignored++; continue; } // "Node.js line 5": a name that isn't a file of ours is the answer's prose, not a miss
     if (!k.found.length) {
       if (k.sameName?.length) problems.push({ kind: "path", at: c.at, ref: loc, why: `no ${c.file} in the repo; files with that name: ${k.sameName.slice(0, 3).join(", ")}${k.sameName.length > 3 ? ", …" : ""}` });
       else if (k.hasDir) notes.push({ kind: "outside", at: c.at, ref: loc, why: "not in this repo: say which repo or folder it's from" });
@@ -236,7 +249,7 @@ function checkCites(idx, cites, outside = []) {
       else problems.push({ kind: "quote", at: c.at, ref: shown, why: `these words aren't in ${fitting.length === 1 ? fitting[0] : `any of the ${fitting.length} files named ${c.file}`}: quote the file word for word, or drop the quotation marks and say it's a paraphrase` });
     }
   }
-  return { problems, notes };
+  return { problems, notes, ignored };
 }
 
 function checkShas(repo, shas) {
@@ -294,7 +307,7 @@ export function check(text, { repo, lookup = null, ghRepo = "", outside = [] } =
   if (lookup) { try { R = checkRefs(X.refs, lookup, ghRepo); } catch (e) { refNote = `#refs not checked: gh failed (${e.message})`; } }
   else if (X.refs.length) refNote = `${new Set(X.refs.map(r => r.n)).size} #refs not checked (add --gh)`;
   const problems = [...C.problems, ...S.problems, ...R.problems].sort((a, b) => a.at - b.at);
-  return { problems, notes: C.notes, refNote, counts: { cites: X.cites.length, quotes: X.cites.reduce((n, c) => n + (c.quotes?.length || 0), 0), commits: S.checked, refs: R.checked } };
+  return { problems, notes: C.notes, refNote, counts: { cites: X.cites.length - C.ignored, quotes: X.cites.reduce((n, c) => n + (c.quotes?.length || 0), 0), commits: S.checked, refs: R.checked } };
 }
 
 export function render(R, { name = "the answer" } = {}) {

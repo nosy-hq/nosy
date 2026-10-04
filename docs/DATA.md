@@ -138,7 +138,7 @@ Up to these files, with your token. Each local file that holds words from your g
 
 Nothing else in `pm/` leaves: not the decision log, not `pm/signal/`, not the rival files, not `pm/state/facts/`.
 
-**New in 0.19.0 to 0.21.1.** Everything here is local, except the lines that name a network read or a GitHub write.
+**New in 0.19.0 to 0.21.2.** Everything here is local, except the lines that name a network read or a GitHub write.
 - `nosy history [30d|90d]` reads the repository's own past (git, and `gh` when `issue.repo` is set) and writes `pm/state/history.json` and `pm/state/history.md`: counts by week and area, tags, merged pull request numbers and titles, and the latest commit subjects. **It stays on this machine: `publish` does not send it.** It is a record of the time before Nosy and is not one of Nosy's own snapshots.
 - `nosy rivals-week` reads `pm/state/rivals-this-week.json` (written by the research: rival, one line, source address, day, shipped or announced) and prints what the page's "Rivals this week" box shows; it writes nothing. `nosy sweep-check` reads `pm/state/rival-sweep.json` and your rival files and writes `pm/state/sweep-reconcile.json` (per rival: the date the file says, the newest swept entry). `nosy universe` reads `pm/state/rival-universe.json` and writes nothing.
 - `nosy page validate` reads the page and `pm/`, runs the privacy scan and `find-stale` on the page, and writes nothing in the end (it makes one short-lived file beside the page and removes it); `--json <file>` saves its report where you say.

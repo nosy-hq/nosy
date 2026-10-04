@@ -201,7 +201,7 @@ else {
   let refOk = false, refShort = ""; try { refShort = execFileSync("git", ["-C", K.repo, "rev-parse", "--short", K.ref], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); refOk = true; } catch {}
   accessIssueOf = accessIssueOf || !refOk;
   const lastReadOne = typeInfo.state?.ageDays != null ? `${typeInfo.state.ageDays.toFixed(1)} days ago` : "unknown";
-  add({ name: "K.ref resolution", path: K.ref, status: refOk ? "✓" : "✗", reason: refOk ? `${K.ref} = ${refShort} · last read (status.json) ${lastReadOne}` : `${K.ref} doesn't resolve (git fetch?)`, command: refOk ? null : "git fetch" });
+  add({ name: "K.ref resolution", path: K.ref, status: refOk ? "✓" : "✗", reason: refOk ? `${K.ref} = ${refShort} · last read (status.json) ${lastReadOne}` : K.ref ? `${K.ref} doesn't resolve (git fetch?)` : "no `ref` in pm/sources.json (the branch Nosy reads)", command: refOk || !K.ref ? null : "git fetch" });
 
   let ghOk = false; try { execFileSync("gh", ["auth", "status"], { stdio: "ignore" }); ghOk = true; } catch {}
   add({ name: "gh access", path: "gh auth status", status: ghOk ? "✓" : "–", reason: ghOk ? "gh session open (read-only)" : "gh missing or not signed in", command: null });

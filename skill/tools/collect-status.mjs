@@ -26,6 +26,11 @@ if (!to) {
   to = det.branch === defaultBranch ? defaultRef : refFor((K && K.repo) || ".", det.branch, defaultRef);
   toReason = det.reason;
 }
+// The start of the window is a date or something git can resolve; anything else is said by name (it used to surface as a git error blaming `ref`).
+if (from && !/^\d{4}-\d{2}-\d{2}/.test(from)) {
+  let known = true; try { execFileSync("git", ["-C", repo, "rev-parse", "--verify", "--quiet", `${from}^{commit}`], { stdio: "ignore" }); } catch { known = false; }
+  if (!known) { console.error(`Psst… "${from}" isn't a window, date or git ref: use a day count like 7d, a date like 2026-10-01, or a branch, tag or commit.`); process.exit(1); }
+}
 const local = d => new Date(d).toLocaleString("en-US", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(/[,/]/g, m => m === "/" ? "." : "");
 // Truncates a GitHub title at ~70 chars with "…" and prepends the rest with "…" to the start of the body.
 const fullTitle = c => { const b = (c.messageBody || "").split("\n"); return /…$/.test(c.messageHeadline) && /^…/.test(b[0] || "") ? c.messageHeadline.slice(0, -1) + b[0].slice(1) : c.messageHeadline; };

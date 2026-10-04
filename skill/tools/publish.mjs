@@ -18,7 +18,7 @@
 //     default file ~/.config/nosy/token ($XDG_CONFIG_HOME/nosy/token when that is set). The file's content is the token (surrounding
 //     whitespace trimmed). On macOS and Linux a token file that group or others can read (mode & 0o077) is refused with the `chmod 600`
 //     to run, and nothing is sent; Windows has no such check. The token is never printed.
-//   Project: --project, else sources.json cloud.project, else the repo folder's name.
+//   Project: --project, else sources.json cloud.project, else the repo folder's name (the folder above pm/; for a pm/ inside docs/, doc/ or documentation/, the git repo's root folder).
 //   --yes: send without asking (a script, or an agent you told to publish). In a terminal without it, you are asked.
 //   --allow-sensitive: go on although the privacy scan found a secret or personal data (read its list first).
 //   Where it sends: https, or your own machine (localhost, 127.0.0.1); plain http to another host is refused, and a redirect is not followed (it would
@@ -60,7 +60,17 @@ const cloud = sources.cloud || {};
 // No built-in default: a send needs a target you configured (--url, NOSY_CLOUD_URL, or cloud.url in sources.json).
 const target = urlArg || process.env.NOSY_CLOUD_URL || cloud.url || null;
 const base = target ? target.replace(/\/+$/, "") : null;
-const project = projectArg || cloud.project || path.basename(path.resolve(pm, ".."));
+// The folder above pm/ names the project, except when pm/ sits in a generic folder of the repo (docs/pm gave "docs", doc/, documentation/): then the git repo's own name.
+const projectFolder = () => {
+  const home = path.resolve(pm, ".."), name = path.basename(home);
+  if (/^(docs?|documentation|wiki|handbook)$/i.test(name)) {
+    const top = spawnSync("git", ["-C", home, "rev-parse", "--show-toplevel"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const root = top.status === 0 ? top.stdout.trim() : "";
+    if (root && path.basename(root) && path.resolve(root) !== home) return path.basename(root);
+  }
+  return name;
+};
+const project = projectArg || cloud.project || projectFolder();
 if (!/^[A-Za-z0-9][\w.-]{0,63}$/.test(project)) fail(`"${project}" isn't a valid project name (letters, digits, . _ -). Pass --project <name>.`);
 
 // The token and your files cross the network: only over https, except to your own machine (a local Cloud, or a test). Checked before anything is

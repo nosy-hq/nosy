@@ -92,7 +92,7 @@ Nosy is one skill folder (`skill/`, the open Agent Skills format) plus small dep
 | **Slack / Discord** | The Action, or `nosy notify`, posts the weekly "Psst…" to a webhook. |
 | **Terminal, no agent** | `npx github:nosy-hq/nosy weekly` |
 
-`npx github:…` runs code straight from a repo. To know which code, pin a release tag: `npx github:nosy-hq/nosy#v0.21.1 install`. Every path in detail: [docs/INSTALL.md](docs/INSTALL.md).
+`npx github:…` runs code straight from a repo. To know which code, pin a release tag: `npx github:nosy-hq/nosy#v0.21.2 install`. Every path in detail: [docs/INSTALL.md](docs/INSTALL.md).
 
 </details>
 

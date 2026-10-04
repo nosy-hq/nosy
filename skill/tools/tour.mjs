@@ -14,7 +14,7 @@ import { pagePath } from "./page-path.mjs";
 import { examine } from "./doctor.mjs";
 import { nosyCommand } from "./hints.mjs";
 import { plan as tierPlan, TOKENS_PER_RIVAL } from "./rival-tiers.mjs";
-import { rivalsDir, rivalFiles } from "./sources-file.mjs";
+import { rivalsDir, rivalFiles, flatMarkdown, skippedNote } from "./sources-file.mjs";
 
 const DAY = 864e5;
 // What the tour remembers lives in pm/state/tour.json: { started, updated, approved: [question ids], tokens: { id: figure the yes covered },
@@ -28,7 +28,7 @@ const readJson = f => { try { return JSON.parse(fs.readFileSync(f, "utf8").repla
 const mtime = f => { try { return fs.statSync(f).mtimeMs; } catch { return null; } };
 const asOf = f => { const j = readJson(f), g = j?.generated && Date.parse(j.generated); return g || mtime(f); };
 const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
-const mdFiles = d => { try { return fs.readdirSync(d).filter(f => f.endsWith(".md") && !f.startsWith("_")); } catch { return []; } };
+const mdFiles = d => flatMarkdown(d).files;
 
 // The first run on a real product: 11 rivals cost 1,079,151 tokens, about 98,000 each (rival-tiers.mjs holds the figure). A figure from one run,
 // said as such; the owner's own number (sources.json → tour.tokensPerRival) replaces it.
@@ -93,11 +93,11 @@ export function tour(pm, { now = Date.now(), staleDays = 7 } = {}) {
     step("rivals-import", "rivals-import", there ? `${plural(there, "rival file")} already in ${path.relative(path.dirname(pm), outside) || outside}, ${have ? `${have} in pm/rivals` : "none in pm/rivals yet"}` : "no rival files in the folder you named", there && !have ? "todo" : "fresh", { writes: "pm" });
     if (there && !have) R.steps[R.steps.length - 1].note = `Copies, never moves: \`${nosyCommand("rivals-import --dry-run")}\` lists first.`;
   }
-  const files = mdFiles(inPm), watch = readJson(state("watch.json"))?.rivals || [];
+  const { files, skipped: passedOver } = flatMarkdown(inPm), watch = readJson(state("watch.json"))?.rivals || [];
   const per = +K.tour?.tokensPerRival || TOKENS_PER_RIVAL, fromOwner = !!K.tour?.tokensPerRival;
   const where = (tokens, count) => `about ${tokens.toLocaleString("en")} tokens${fromOwner ? "" : ", from one earlier run of about " + per.toLocaleString("en") + " each"}`;
   const free = `the free scan (\`${nosyCommand("watch")}\`) finds which of ${plural(watch.length || files.length, "rival")} changed, no model`;
-  if (!files.length) step("neighbors", "neighbors", "no rival files yet: nothing says what rivals shipped", "todo", { writes: "pm",
+  if (!files.length) step("neighbors", "neighbors", `no rival files yet: nothing says what rivals shipped${passedOver.length ? "." + skippedNote(passedOver) : ""}`, "todo", { writes: "pm",
     ask: { id: "neighbors", kind: "tokens", question: `Research the top 3 rivals I find (${where(3 * per, 3)})? ${free.charAt(0).toUpperCase() + free.slice(1)}. Rivals I propose are marked "proposed, not confirmed" until you say so.`, tokens: 3 * per } });
   else {
     // Tiers (rival-tiers.mjs): only tier A rivals that changed or went stale get a deep pass, tier C a thin read, tier B is only watched.

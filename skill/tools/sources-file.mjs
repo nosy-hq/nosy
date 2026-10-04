@@ -124,17 +124,36 @@ function walkMarkdown(dir, rel = "", depth = 8, out = []) {
   for (const e of entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
     const r = rel ? `${rel}/${e.name}` : e.name;
     if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name) && depth > 0) walkMarkdown(dir, r, depth - 1, out); }
-    else if (e.name.endsWith(".md") && !e.name.startsWith("_")) out.push(r);
+    else if (isMarkdownName(e.name) && !e.name.startsWith("_")) out.push(r);
   }
   return out;
 }
+// A markdown file by name: .md, .MD or .markdown (an editor or a Windows folder gives any of them; matching only ".md" made such a rival look like it was not there).
+export const isMarkdownName = name => /\.(md|markdown)$/i.test(name);
+export const markdownSlug = name => name.replace(/\.(md|markdown)$/i, "");
+// One flat folder (pm/rivals, pm/atlas): its markdown files (not the `_` template, nor the names in `skip`) and what was passed over, so "no rivals yet" can say what
+// was there. A subfolder is not descended into and a file of another extension is not read; both are named instead of vanishing.
+export function flatMarkdown(dir, { skip = [] } = {}) {
+  const files = [], skipped = [];
+  let entries; try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return { files, skipped }; }
+  for (const e of entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+    if (e.name.startsWith(".") || e.name.startsWith("_")) continue;
+    let isDir = e.isDirectory(); if (e.isSymbolicLink()) { try { isDir = fs.statSync(path.join(dir, e.name)).isDirectory(); } catch { /* a broken link is a file we cannot read */ } }
+    if (isDir) { if (!SKIP_DIRS.has(e.name)) skipped.push(`${e.name}/ (a subfolder; files inside are not read)`); }
+    else if (isMarkdownName(e.name)) { if (!skip.includes(e.name)) files.push(e.name); }
+    else skipped.push(`${e.name} (not a .md or .markdown file)`);
+  }
+  return { files, skipped };
+}
+// " Skipped: a/ (...), b.txt (...)." with at most `max` names, then how many more; "" when nothing was skipped.
+export const skippedNote = (skipped, max = 6) => skipped.length ? ` Skipped: ${skipped.slice(0, max).join(", ")}${skipped.length > max ? `, and ${skipped.length - max} more` : ""}.` : "";
 const RIVAL_READ_MAX = 1 << 20; // a rival file is a page or two of tables; a megabyte of markdown is something else
 // The rival files in a rival folder, as paths relative to it ("/" separators). The default <pm>/rivals is flat, every .md but the
 // `_`-prefixed template (as always). A configured rivalsPath may nest (references/<name>/competitive-x.md) and hold other
 // documents, so there it is recursive and only rival-shaped files count.
 export function rivalFiles(dir, { nested = false } = {}) {
   try {
-    if (!nested) return fs.readdirSync(dir).filter(f => f.endsWith(".md") && !f.startsWith("_"));
+    if (!nested) return fs.readdirSync(dir).filter(f => isMarkdownName(f) && !f.startsWith("_"));
     return walkMarkdown(dir).filter(f => { try { const p = path.join(dir, f); return fs.statSync(p).size <= RIVAL_READ_MAX && rivalDoc(fs.readFileSync(p, "utf8")); } catch { return false; } });
   } catch { return []; }
 }

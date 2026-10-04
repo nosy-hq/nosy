@@ -6,9 +6,9 @@
 //   pm/state/rival-sweep.json (written by `nosy sweep`)  ×  pm/rivals/<slug>.md  →  pm/state/sweep-reconcile.json
 // Dates are compared at the precision the file gives ("2026-07" means July, so an entry in July is not later; one in August is). A rival the sweep couldn't read is listed as
 // "not compared" (never as agreeing); a rival with no dated entry in the window is "nothing found" (which the sweep's own page problems qualify).
-// Usage: node sweep-reconcile.mjs <pm> [--json <file>]    Exit: 0 every rival agrees · 2 at least one is behind · 1 no sweep file (run `nosy sweep` first)
+// Usage: node sweep-reconcile.mjs <pm> [--json <file>]    Exit: 0 every rival read agrees · 2 at least one is behind, or none could be read · 1 no sweep file (run `nosy sweep` first)
 import fs from "node:fs"; import path from "node:path"; import { fileURLToPath } from "node:url";
-import { readSourcesSafe, rivalsDir, rivalFiles } from "./sources-file.mjs";
+import { readSourcesSafe, rivalsDir, rivalFiles, markdownSlug } from "./sources-file.mjs";
 
 const isoPart = s => { const m = String(s || "").match(/\b(20\d\d)(?:-(\d{2})(?:-(\d{2}))?)?\b/); return m ? { y: m[1], m: m[2] || null, d: m[3] || null, text: m[0] } : null; };
 // "Latest major announcement" row: `- **Latest major announcement:** 2026-07-14 — what, url · delivery: shipped`.
@@ -28,7 +28,7 @@ export function laterThan(entry, A) {
 export function reconcile(pm) {
   const sweepFile = path.join(pm, "state", "rival-sweep.json");
   let S; try { S = JSON.parse(fs.readFileSync(sweepFile, "utf8")); } catch { return null; }
-  const K = readSourcesSafe(pm) || {}, dir = rivalsDir(pm, K), files = new Map(rivalFiles(dir, { nested: dir !== path.join(pm, "rivals") }).map(f => [path.basename(f).replace(/\.md$/i, ""), path.join(dir, f)]));
+  const K = readSourcesSafe(pm) || {}, dir = rivalsDir(pm, K), files = new Map(rivalFiles(dir, { nested: dir !== path.join(pm, "rivals") }).map(f => [markdownSlug(path.basename(f)), path.join(dir, f)]));
   const rivals = [];
   for (const R of S.rivals || []) {
     const file = files.get(R.slug), md = file ? (() => { try { return fs.readFileSync(file, "utf8"); } catch { return ""; } })() : "";
@@ -39,7 +39,7 @@ export function reconcile(pm) {
     row.status = !file ? "no rival file" : !entries.length ? (unread.length ? "not compared (a page couldn't be read)" : "nothing found in the window") : laterThan(entries[0].date, A) ? "behind" : "agrees";
     rivals.push(row);
   }
-  return { type: "sweepReconcile", generated: new Date().toISOString(), window: { from: S.from, to: S.to }, rivals, behind: rivals.filter(r => r.status === "behind").map(r => r.slug) };
+  return { type: "sweepReconcile", generated: new Date().toISOString(), window: { from: S.from, to: S.to }, rivals, behind: rivals.filter(r => r.status === "behind").map(r => r.slug), compared: rivals.filter(r => r.status === "behind" || r.status === "agrees").length };
 }
 
 export function render(R) {
@@ -49,7 +49,7 @@ export function render(R) {
     if (r.status === "behind") L.push(`✗ ${r.name}: the file says ${r.fileSays || "no date"}, the sweep found ${r.newest.date} · ${r.newest.text} (${r.newest.page}). Open it and update the row, or say why it isn't a major announcement; the file may not say "nothing new".`);
     else L.push(`${r.status === "agrees" ? "✓" : "–"} ${r.name}: ${r.status}${r.status === "agrees" ? ` (file ${r.fileSays || "—"}, newest entry ${r.newest.date})` : r.unread.length ? ` — ${r.unread.join(", ")}` : ""}`);
   }
-  L.push("", R.behind.length ? `${R.behind.length} rival file${R.behind.length === 1 ? " is" : "s are"} behind the sweep: ${R.behind.join(", ")}.` : "Every rival the sweep could read agrees with its file.");
+  L.push("", R.behind.length ? `${R.behind.length} rival file${R.behind.length === 1 ? " is" : "s are"} behind the sweep: ${R.behind.join(", ")}.` : !R.compared ? `None of the rivals could be read (${R.rivals.length ? "no dated entry compared with a rival file" : "the sweep lists no rivals"}), so nothing was checked: this is not agreement. Open the sweep's unread pages above, or run \`nosy sweep\` again.` : "Every rival the sweep could read agrees with its file.");
   return L.join("\n");
 }
 
@@ -58,5 +58,5 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
   const R = reconcile(pm);
   if (R && jsonOut) { fs.mkdirSync(path.dirname(path.resolve(jsonOut)), { recursive: true }); fs.writeFileSync(jsonOut, JSON.stringify(R, null, 1)); }
   console.log(render(R));
-  process.exitCode = !R ? 1 : R.behind.length ? 2 : 0;
+  process.exitCode = !R ? 1 : R.behind.length || !R.compared ? 2 : 0; // exit 2 too when nothing at all was compared (like `watch`)
 }
