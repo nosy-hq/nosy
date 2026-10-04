@@ -9,7 +9,7 @@
 
 ## Scores
 The axes are the product's own: the pack's section 9 ("Expansion axes and registries") when there is one, else the ones the owner and you agreed on first. Use **the same axis names in every candidate's file**, unchanged. `nosy atlas` reads this table.
-Score 1 (bad for us) to 5 (good for us), or `–` when you couldn't tell. **Grade** says how well the score is known: `read` (you opened the source itself in this run) · `snippet` (a search summary only) · `unreadable` (the page was behind a block or a login; say which in the basis) · `terms-unread` (the licence or terms page of a data source couldn't be opened, so "free to use" isn't known) · `judgment` (yours, no single source). Only `read` scores count toward the ranking. A `read` score needs the url in **Basis**. Date every row.
+Score 1 (bad for us) to 5 (good for us), or `–` when you couldn't tell. **Grade** says how well the score is known: `read` (you opened the source itself in this run) · `snippet` (a search summary only) · `unreadable` (the page was behind a block or a login; say which in the basis) · `terms-unread` (the licence or terms page of a data source couldn't be opened, so "free to use" isn't known) · `judgment` (yours, no single source). Only `read` scores count toward the ranking. A `read` score needs the url in **Basis**. Date every row. Scores are whole numbers: where a source gives a range (say 2–3), take the more cautious end and say so in Basis. An axis you couldn't score is still a row: score `–`, grade `judgment` (nobody could tell) or `unreadable` (the page was blocked), and a date; a `–` in the Grade or Date column is flagged as a problem.
 
 | Axis | Score | Grade | Date | Basis |
 |---|---|---|---|---|
