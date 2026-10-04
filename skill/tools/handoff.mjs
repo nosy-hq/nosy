@@ -20,6 +20,7 @@
 //   kind of signal that put the item on the list), Asked for (number: only when the item carries a count), Area and Rivals with it (--area <no|name>:
 //   the matrix area this work closes and how many rivals have it; given by the owner, never guessed). `--setup-board` previews and, with --yes,
 //   creates what a board is missing (the project itself when there is none, linked to the repo; the fields above).
+// --review --brief: only what a merged pull request closed (what `nosy shipped` shows), and nothing at all when there is none.
 // --review: what became of what was handed off (read-only, writes only pm/state/handoff-review.json). For each handed-off issue: open or closed, its card's
 //   Status, and, when a merged pull request closed it, PROPOSALS: the matrix area it may now close (named with --area when it was handed off; the cell
 //   `Nosy: p/n → y` is the owner's to change, after checking it works) and whether `nosy ship-notes` will tell whoever asked. Nothing is written to GitHub or
@@ -123,7 +124,7 @@ function main() {
   // coding agent, which is a paid feature of the owner's plan (a premium request and Actions minutes per session), so it is never picked on its own.
   let agentWanted = false, agentCopilot = false;
   { const i = argv.indexOf("--agent"); if (i >= 0) { agentWanted = true; if (argv[i + 1] === "copilot") { agentCopilot = true; argv.splice(i, 2); } else argv.splice(i, 1); } }
-  const yes = flag("--yes"), setup = flag("--setup-board"), review = flag("--review");
+  const yes = flag("--yes"), setup = flag("--setup-board"), review = flag("--review"), brief = flag("--brief");
   const positional = argv.filter(a => !a.startsWith("--"));
   const [pm = "pm", nArg] = positional;
   const stop = (msg, code = 1) => { console.error(`Psst… ${msg}`); process.exit(code); };
@@ -198,6 +199,7 @@ function main() {
 
   if (review) {
     const entries = state.done || [];
+    if (!entries.length && brief) return; // `nosy shipped` asks: nothing to say is no output at all
     if (!entries.length) stop("nothing has been handed off yet: `nosy handoff <#> --yes` puts an item on GitHub first.", 0);
     const mp = K.matrix ? (path.isAbsolute(K.matrix) ? K.matrix : path.resolve(K.repo || ".", K.matrix)) : path.join(pm, "matrix.json");
     const M = fs.existsSync(mp) ? matrixRead(mp, { codes: K.matrixCodes }) : null, team = teamLogins(K), rows = [];
@@ -214,18 +216,27 @@ function main() {
       const tell = !!pr && !!v.author?.login && !v.author.is_bot && !isBotLogin(v.author.login) && !isTeamLogin(team, v.author.login);
       rows.push({ issue: e.issue, title: e.title || null, status, card, pr, area: e.area ?? null, matrix, tell });
     }
-    let o = `# Hand-off review · ${R}\n\n| Issue | Title | State | Card | Merged PR | Matrix area |\n|---|---|---|---|---|---|\n`;
-    for (const r of rows) o += `| #${r.issue} | ${String(r.title || "–").replace(/\s+/g, " ").replace(/\|/g, "/").slice(0, 50)} | ${r.status} | ${r.card || "–"} | ${r.pr ? `#${r.pr.number} (${r.pr.mergedAt})` : "–"} | ${r.area ?? "not recorded"} |\n`;
-    const props = [];
-    for (const r of rows) {
-      if (r.pr && r.matrix && !r.matrix.already) props.push(`- Matrix area ${r.matrix.area} (${r.matrix.name}): Nosy ${r.matrix.from} → ${r.matrix.to}? #${r.issue} was closed by merged pull request #${r.pr.number} on ${r.pr.mergedAt}. If it works, change \`biz.codes["${r.matrix.area}"]\` in the matrix; it is yours to change.`);
-      else if (r.pr && r.matrix?.already) props.push(`- Matrix area ${r.matrix.area} (${r.matrix.name}) already says y; #${r.issue} is merged (#${r.pr.number}).`);
-      else if (r.pr && r.area == null) props.push(`- #${r.issue} is merged (#${r.pr.number}) but no matrix area was recorded; hand it off again with \`--area\` to say which area it closes.`);
-      if (r.tell) props.push(`- \`nosy ship-notes\` will tell whoever asked for #${r.issue} (it previews first).`);
-      if (r.status === "closed, no merged pull request") props.push(`- #${r.issue} is closed with no merged pull request: was it fixed? Nothing is proposed for it.`);
-      if (r.status === "unreadable") props.push(`- #${r.issue} couldn't be read (gh signed out, or the issue is gone); nothing is proposed for it.`);
+    const propsOf = r => {
+      const out = [];
+      if (r.pr && r.matrix && !r.matrix.already) out.push(`- Matrix area ${r.matrix.area} (${r.matrix.name}): Nosy ${r.matrix.from} → ${r.matrix.to}? #${r.issue} was closed by merged pull request #${r.pr.number} on ${r.pr.mergedAt}. If it works, change \`biz.codes["${r.matrix.area}"]\` in the matrix; it is yours to change.`);
+      else if (r.pr && r.matrix?.already) out.push(`- Matrix area ${r.matrix.area} (${r.matrix.name}) already says y; #${r.issue} is merged (#${r.pr.number}).`);
+      else if (r.pr && r.area == null) out.push(`- #${r.issue} is merged (#${r.pr.number}) but no matrix area was recorded; hand it off again with \`--area\` to say which area it closes.`);
+      if (r.tell) out.push(`- \`nosy ship-notes\` will tell whoever asked for #${r.issue} (it previews first).`);
+      if (r.status === "closed, no merged pull request") out.push(`- #${r.issue} is closed with no merged pull request: was it fixed? Nothing is proposed for it.`);
+      if (r.status === "unreadable") out.push(`- #${r.issue} couldn't be read (gh signed out, or the issue is gone); nothing is proposed for it.`);
+      return out;
+    };
+    const reviewFile = path.join(pm, "state", "handoff-review.json"), seen = new Set((readJson(reviewFile)?.rows || []).filter(x => x.pr).map(x => x.issue));
+    let o;
+    if (brief) {
+      const merged = rows.filter(r => r.pr);
+      o = merged.length ? `${merged.map(r => `- #${r.issue} ${String(r.title || "").replace(/\s+/g, " ").slice(0, 60)}: merged in #${r.pr.number} (${r.pr.mergedAt})${seen.has(r.issue) ? "" : " · new since the last look"}`).join("\n")}\n${merged.flatMap(propsOf).join("\n")}\n(\`nosy handoff --review\` has the whole list; nothing here is written to GitHub or the matrix.)\n` : "";
+    } else {
+      o = `# Hand-off review · ${R}\n\n| Issue | Title | State | Card | Merged PR | Matrix area |\n|---|---|---|---|---|---|\n`;
+      for (const r of rows) o += `| #${r.issue} | ${String(r.title || "–").replace(/\s+/g, " ").replace(/\|/g, "/").slice(0, 50)} | ${r.status} | ${r.card || "–"} | ${r.pr ? `#${r.pr.number} (${r.pr.mergedAt})` : "–"} | ${r.area ?? "not recorded"} |\n`;
+      const props = rows.flatMap(propsOf);
+      o += `\n${props.length ? `Proposals (nothing is written to GitHub or to the matrix):\n${props.join("\n")}\n` : "No proposals: nothing handed off has been merged yet.\n"}`;
     }
-    o += `\n${props.length ? `Proposals (nothing is written to GitHub or to the matrix):\n${props.join("\n")}\n` : "No proposals: nothing handed off has been merged yet.\n"}`;
     process.stdout.write(o);
     fs.mkdirSync(path.join(pm, "state"), { recursive: true });
     fs.writeFileSync(path.join(pm, "state", "handoff-review.json"), JSON.stringify({ type: "handoffReview", generated: new Date().toISOString(), repo: R, rows }, null, 1) + "\n");

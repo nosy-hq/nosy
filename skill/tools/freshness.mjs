@@ -8,7 +8,7 @@
 // files whose "Latest major announcement" doesn't start with `date — text` or whose Status is empty.
 // Usage: node freshness.mjs <pm> [--page <page.html>] [--json <file>] [--strict]   (--strict: exit code 1 if there's a ✗)
 import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process";
-import { readSources } from "./sources-file.mjs"; import { generatedOf } from "./auto-section.mjs";
+import { pagePath as pagePathOf } from "./page-path.mjs"; import { readSources } from "./sources-file.mjs"; import { generatedOf } from "./auto-section.mjs";
 
 const argv = process.argv.slice(2);
 const opt = k => { const i = argv.indexOf(k); return i >= 0 ? argv.splice(i, 2)[1] : null; };
@@ -163,15 +163,8 @@ for (const f of rFile) {
 }
 
 // ---- 4. page: the auto-section's embedded date + the newest date on the page, relative to status/lowhanging ----
-let pagePath = pageArg || null;
-if (!pagePath && K?.page) pagePath = path.isAbsolute(K.page) ? K.page : path.join(pm, K.page);
-if (!pagePath) {
-  const um = (() => { try { return fs.readFileSync(path.join(pm, "product.md"), "utf8"); } catch { return ""; } })();
-  const line = (um.match(/^-\s*\*\*[^*\n]*[Ss]ayfa[^*\n]*:\*\*.*$/m) || [""])[0]; // only the line labeled "Page"
-  const m = line.match(/([.\w/-]+\.html)\b/);
-  if (m && !/^https?:/i.test(m[1])) pagePath = path.isAbsolute(m[1]) ? m[1] : path.join(pm, m[1]);
-}
-if (!pagePath) { const v = path.join(pm, "page.html"); if (fs.existsSync(v)) pagePath = v; }
+const pageFound = pagePathOf(pm, K, { explicit: pageArg });
+let pagePath = pageFound.exists || pageFound.configured || pageArg ? pageFound.path : null;
 
 let automaticStale = false, pageStale = false;
 const newestInput = [typeInfo.state?.generated, typeInfo.lowHanging?.generated].filter(Boolean).sort((a, b) => b - a)[0] || null;

@@ -23,6 +23,7 @@
 // Dates without a year ("Sep 23") take the window's year (the year before when that falls after the window).
 // Usage: node rival-sweep.mjs <pm> [--days 30] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--only slug,…] [--json <file>]
 // Exit: 0 swept · 2 a page in the registry couldn't be read (the list still prints; a failed store lookup doesn't count) · 1 no registry / no sources.json.
+import { localDay } from "./today.mjs";
 import fs from "node:fs"; import path from "node:path"; import { fileURLToPath } from "node:url";
 import { sourcesProblem } from "./hints.mjs";
 import { readSources } from "./sources-file.mjs";
@@ -183,7 +184,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
   const only = (take("--only") || "").split(",").filter(Boolean), [pm = "pm"] = argv;
   let K; try { K = readSources(pm); } catch { console.error(`Psst… ${sourcesProblem(pm) || `Couldn't read ${path.join(pm, "sources.json")}.`}`); process.exit(1); }
   if (!K.rivals || !Object.keys(K.rivals).length) { console.error("No rival registry yet: run /nosy:neighbors (it proposes one), or add `rivals` to pm/sources.json (neighbors step 0)."); process.exit(1); }
-  const to = untilArg || new Date().toISOString().slice(0, 10);
+  const to = untilArg || localDay();
   const from = sinceArg || new Date(new Date(to + "T00:00:00Z").getTime() - days * 864e5).toISOString().slice(0, 10);
   const S = await sweep(K.rivals, { from, to, only });
   const out = jsonOut || path.join(pm, "state", "rival-sweep.json");

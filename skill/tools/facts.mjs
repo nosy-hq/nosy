@@ -15,6 +15,7 @@
 // Usage: node facts.mjs <pm> build [--now YYYY-MM-DD] [--branch-days 60] [--max-branches 200] [--no-gh] · node facts.mjs <pm> find <term> [more terms]
 // Exit: 0 built / found · 2 find: nothing anywhere · 1 couldn't read sources.json, the repo, or GitHub (build
 // without GitHub still writes the git parts and says so).
+import { localDay } from "./today.mjs";
 import fs from "node:fs"; import os from "node:os"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { fileURLToPath } from "node:url";
 import { redactLine } from "./redact.mjs";
 import { repoProblem, sourcesProblem } from "./hints.mjs";
@@ -72,7 +73,7 @@ export function capPaths(out, { each = PATHS_EACH, total = PATHS_TOTAL } = {}) {
   }
   return out;
 }
-export function branchFacts(repo, base, { days = 60, max = 200, big = 20, openPr = new Set(), now = new Date().toISOString().slice(0, 10) } = {}) {
+export function branchFacts(repo, base, { days = 60, max = 200, big = 20, openPr = new Set(), now = localDay() } = {}) {
   const partial = isPartialClone(repo), treeless = partial && isTreeless(repo);
   let tmp = null, env = process.env;
   if (!partial) {

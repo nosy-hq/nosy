@@ -16,7 +16,7 @@
 // built page is still over it — it never blocks the write.
 import fs from "node:fs"; import path from "node:path"; import { section as sectionValue } from "./auto-section.mjs"; import { thresholds } from "./thresholds.mjs";
 import { glance, renderGlance, GLANCE_CSS } from "./glance.mjs"; import { next as nextPicks } from "./next.mjs";
-import { readSources } from "./sources-file.mjs"; import { esc } from "./html-safe.mjs";
+import { readSources, readSourcesSafe, matrixFile } from "./sources-file.mjs"; import { esc } from "./html-safe.mjs"; import { load as loadWeek } from "./rivals-week.mjs"; import { builtByNosy } from "./page-path.mjs";
 const pm = process.argv[2] || "pm", out = process.argv[3] || "page.html";
 const rd = f => { try { return fs.readFileSync(path.join(pm, f), "utf8"); } catch { return ""; } };
 const truncate = (s, n) => { s = String(s ?? ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
@@ -55,7 +55,7 @@ function md(src) { // a small markdown subset: headings, lists, numbered lists, 
 const section = (src, title) => { const m = src.match(new RegExp(`^## ${title}[^\\n]*\\n([\\s\\S]*?)(?=^## |$(?![\\s\\S]))`, "m")); return m ? m[1].trim() : ""; };
 const field = (src, k) => (src.match(new RegExp(`\\*\\*${k}:\\*\\*\\s*(.+)$`, "m")) || [, ""])[1].trim();
 
-const M = JSON.parse(rd("matrix.json") || "{}");
+const M = (() => { let t = ""; try { t = fs.readFileSync(matrixFile(pm, readSourcesSafe(pm)), "utf8"); } catch {} return JSON.parse(t || "{}"); })(); // sources.json `matrix`, else pm/matrix.json
 // No product.md yet (a scripted setup): the repo's own name, from package.json or the folder, never a bare "Product".
 const repoName = (() => { try { const K = readSources(pm); const root = path.resolve(path.dirname(path.resolve(pm)), K.repo || "."); try { const n = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).name; if (n) return n.replace(/^@[^/]+\//, ""); } catch {} return path.basename(root); } catch { return "Product"; } })();
 const product = rd("product.md"), title = field(product, "Page name") || (product.match(/^#\s+(.+)$/m) || [, repoName])[1].replace(/\s*\(.*\)\s*$/, "");
@@ -69,6 +69,12 @@ const active = rivals.filter(r => (r.statusType || "active") === "active");
 const closedOne = rivals.filter(r => (r.statusType || "active") !== "active");
 const cats = [...new Set(active.map(r => catOf(r.category)))];
 const auto = sectionValue(pm);
+// "Rivals this week": drawn from pm/state/rivals-this-week.json (rivals-week.mjs), never typed into the HTML by hand. Only sourced, dated lines are drawn.
+const week = loadWeek(pm);
+const weekSection = week && !week.error && (week.items.length || week.nothing)
+  ? `<section id="rivals-week"><div class="head"><div class="lab">Over the fence · lately</div><h2>Rivals this week</h2><p>${week.window.from || week.window.to ? `${esc(week.window.from || "?")} to ${esc(week.window.to || "?")}. ` : ""}Each line has its source; "shipped" means usable today, "announced" means said, not delivered.</p></div>${week.items.length
+    ? `<ul class="rival-rest">${week.items.map(x => `<li><b>${esc(x.rival)}</b> ${inline(x.text)} <span class="muted">${esc(x.delivery)} · ${esc(x.date)} · <a href="${esc(x.url)}">source</a></span></li>`).join("")}</ul>${week.more ? `<p class="muted">${week.more} more in pm/state/rivals-this-week.json.</p>` : ""}`
+    : `<p>Checked: nothing new from the rivals in this window.</p>`}</section>` : "";
 // The first screen: the decision, four numbers, where we stand, the roadmap lanes, what shipped.
 const G = (() => { let picks = null; try { picks = nextPicks(pm).picks; } catch {} try { return glance(pm, { M, nextPicks: picks }); } catch (e) { console.error("glance:", e.message); return null; } })();
 const stepCount = (M.steps || []).length;
@@ -195,13 +201,14 @@ ${GLANCE_CSS}
   <p class="lede">${inline(field(product, "What"))}</p>
 </header>
 ${G ? renderGlance(G, { esc }) : ""}
-<nav aria-label="Sections">${rd("summary.md").trim() ? '<a href="#summary">Summary</a>' : ""}${stepCount ? '<a href="#coverage">Coverage</a><a href="#matrix">Matrix</a>' + (active.length ? '<a href="#head-to-head">Head to head</a>' : "") + '<a href="#rivals">Rivals</a>' : '<a href="#coverage">Rivals</a>'}${auto ? '<a href="#auto">Today</a>' : ""}${rd("waves.md") ? '<a href="#waves">Waves</a>' : ""}${logInfo.text.trim() ? '<a href="#log">Cycle log</a>' : ""}${rd("decisions.md").trim() ? '<a href="#decisions">Decisions</a>' : ""}</nav>
+<nav aria-label="Sections">${rd("summary.md").trim() ? '<a href="#summary">Summary</a>' : ""}${stepCount ? '<a href="#coverage">Coverage</a><a href="#matrix">Matrix</a>' + (active.length ? '<a href="#head-to-head">Head to head</a>' : "") + '<a href="#rivals">Rivals</a>' : '<a href="#coverage">Rivals</a>'}${auto ? '<a href="#auto">Today</a>' : ""}${rd("waves.md") ? '<a href="#waves">Waves</a>' : ""}${logInfo.text.trim() ? '<a href="#log">Cycle log</a>' : ""}${rd("decisions.md").trim() ? '<a href="#decisions">Decisions</a>' : ""}${weekSection ? '<a href="#rivals-week">This week</a>' : ""}</nav>
 ${rd("summary.md").trim() ? `<section id="summary"><details class="fold"><summary class="head"><div class="lab">Psst — the tea</div><h2>Summary</h2><span class="open">Read the summary (${rd("summary.md").split(/\s+/).length} words) ↓</span></summary><div class="prose">${md(rd("summary.md"))}</div></details></section>` : ""}
 ${stepCount ? `<section id="coverage"><div class="head"><div class="lab">Inside first · how much of the loop it covers</div><h2>Coverage</h2><p>For every product, the "exists" count out of ${stepCount} steps, "partial" counts half. "?" counts zero; a product with little info known shows up low.</p></div><div class="scroll"><table id="cov"></table></div></section>
 <section id="matrix"><div class="head"><div class="lab">Over the fence · loop matrix</div><h2>${stepCount} steps x ${rivals.length + (M.biz ? 1 : 0)} products</h2><p>Hover a cell for its evidence. Sources are in the rival files.</p></div>
 <div class="legend"><span><i class="d d-y">●</i> exists</span><span><i class="d d-p">◐</i> partial</span><span><i class="d d-n">—</i> missing</span><span><i class="d d-u">?</i> not found</span><span><i class="d d-d">◌</i> announced, not shipped</span></div>
 <div class="scroll"><table class="mx" id="mx"></table></div></section>
 ${active.length ? `<section id="head-to-head"><div class="head"><div class="lab">Us vs. the neighbours · head to head</div><h2>Against us</h2><p>We have it, they don't; they have it, we're missing it. Computed from the matrix; an acquired or closed rival doesn't count.</p></div><div class="scroll"><table class="h2h" id="h2h"></table></div></section>` : ""}
+${weekSection}
 ${rivals.length ? `<section id="rivals"><div class="head"><div class="lab">The neighbours · rivals</div><h2>What to take, where they're weak</h2></div>
 ${cats.map(c => { const here = active.filter(r => catOf(r.category) === c), full = here.filter(r => fullCards.has(r.name)), rest = here.filter(r => !fullCards.has(r.name));
   return `<h3>${esc(categoryLabel(c))}</h3>${full.length ? `<div class="cards">${full.map(rivalCard).join("")}</div>` : ""}${rest.length ? `<ul class="rival-rest">${rest.map(r => `<li><b>${esc(r.name)}</b>${r.announcementText ? ` · ${inline(String(r.announcementText).slice(0, 140))}` : ""} <span class="meta">pm/rivals/${esc(r.file)}</span></li>`).join("")}</ul>` : ""}`; }).join("")}
@@ -235,6 +242,15 @@ const gaps=D.steps.filter(a=>K(get(c,a.no)[0])==="y"&&"pn".includes(K(get(me,a.n
 t+='<tr><td>'+E(String(c.name).replace(/\\s*\\(.*$/,""))+'</td><td class="n">'+lead+'</td><td class="n">'+gaps.length+'</td><td style="font-size:13px;color:var(--muted)">'+(gaps.map(a=>E(a.name)).join(" · ")||"—")+'</td></tr>'}
 document.getElementById("h2h").innerHTML=t+'</tbody>'}
 </script>`;
+// The target may be the owner's own page (sources.json `page`, product.md): never write over a page Nosy didn't build. --force replaces it, after a copy in pm/.backup/.
+if (fs.existsSync(out)) {
+  const old = fs.readFileSync(out, "utf8");
+  if (!builtByNosy(old)) {
+    if (!process.argv.includes("--force")) { console.error(`Psst… ${out} exists and Nosy didn't build it (no Nosy data block), so it was not overwritten. It looks like your own page: \`nosy page-adopt\` keeps a hand-built page current without rebuilding it. To replace it anyway, run \`nosy page --force\` (a copy goes to pm/.backup/ first), or name another file: \`nosy page <file.html>\`.`); process.exit(1); }
+    const bak = path.join(pm, ".backup", `${path.basename(out)}.${new Date().toISOString().replace(/[:.]/g, "-")}`);
+    fs.mkdirSync(path.dirname(bak), { recursive: true }); fs.writeFileSync(bak, old); console.log(`your page kept at ${bak}`);
+  }
+}
 fs.writeFileSync(out, html); console.log("written:", out, (html.length / 1024).toFixed(0) + " KB");
 // Size guardrail: never blocks the write, just names the biggest blocks so a product
 // that's grown large (long history, many rivals) knows where the bytes went.

@@ -4,6 +4,7 @@
 // Prior art: pm-changelog-curator (product-on-purpose-pm-skills.md — don't count a release note as a separate work item from the decision record), stakeholder-update's
 // template switch by audience (anthropic-knowledge-work-plugins-pm.md), "one number, one headline" manager summary (caddie-ai.md: "Give Your Team 30 Extra Days").
 // Deterministic; no LLM/network calls (gh only with --pr, read-only). Falls back to simple TR/EN keyword classification when there's no conventional commit type (common in this repo).
+import { localDayOf } from "./today.mjs";
 import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { patternsOfLoad, refRegex } from "./refs.mjs";
 import { advice } from "./hints.mjs";
 import { readSources } from "./sources-file.mjs";
@@ -21,7 +22,7 @@ const K = readSources(pm);
 
 const git = (...a) => execFileSync("git", ["-C", K.repo, ...a], { encoding: "utf8", maxBuffer: 64 << 20 });
 const withTime = d => /\d:\d/.test(d) ? d : `${d} 00:00`;
-const dayBefore = n => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+const dayBefore = n => { const d = new Date(); d.setDate(d.getDate() - n); return localDayOf(d); };
 
 const to = argTo || K.ref || "HEAD";
 const show = f => { try { return git("show", `${to}:${f}`); } catch { return ""; } };

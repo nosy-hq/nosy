@@ -7,6 +7,9 @@ import path from "node:path";
 import { run, temporary, clean, Tool } from "./helpers.mjs";
 import { plan, render, record, watchState, tierOf, TOKENS_PER_RIVAL } from "../tools/rival-tiers.mjs";
 
+// A rival file that has been researched: a coded matrix row and a source. (A bare "# Name" is a new stub, which needs work however new it is.)
+const RESEARCHED = name => `# ${name}\n\n## Feature matrix\n\n| # | Step | Code | Evidence |\n|---|---|---|---|\n| 1 | Export | y | https://example.com/docs |\n\n## Sources\n- https://example.com/docs (2026-10-01)\n`;
+
 const dirs = [], T = path.join(Tool, "rival-tiers.mjs"), NOSY = path.join(Tool, "nosy.mjs");
 after(() => dirs.forEach(clean));
 const NOW = Date.parse("2026-10-02T12:00:00Z"), DAY = 864e5;
@@ -18,7 +21,7 @@ function pmWith(rivals, { watch, sources = {}, log } = {}) {
   const reg = {};
   for (const [slug, R] of Object.entries(rivals)) {
     reg[slug] = { name: R.name || slug.toUpperCase(), ...(R.tier !== undefined ? { tier: R.tier } : {}) };
-    if (R.age !== undefined) { const f = path.join(pm, "rivals", `${slug}.md`); fs.writeFileSync(f, `# ${reg[slug].name}\n`); const t = new Date(NOW - R.age * DAY); fs.utimesSync(f, t, t); }
+    if (R.age !== undefined) { const f = path.join(pm, "rivals", `${slug}.md`); fs.writeFileSync(f, R.bare ? `# ${reg[slug].name}\n` : RESEARCHED(reg[slug].name)); const t = new Date(NOW - R.age * DAY); fs.utimesSync(f, t, t); }
   }
   fs.writeFileSync(path.join(pm, "sources.json"), JSON.stringify({ rivals: reg, ...sources }));
   if (watch) fs.writeFileSync(path.join(pm, "state", "watch.json"), JSON.stringify({ type: "watch", generated: watch.generated || "2026-10-01T10:00:00.000Z", rivals: Object.entries(watch.states).map(([slug, state]) => ({ slug, state })) }));
@@ -111,7 +114,7 @@ test("record: the watch's states go into pm/history/watch-states.jsonl once per 
 
 test("an invalid tier counts as A and says so; a registry rival with no file and a file with no registry entry are both planned", () => {
   const pm = pmWith({ odd: { tier: "gold", age: 1 }, reg: { tier: "B" } });
-  fs.writeFileSync(path.join(pm, "rivals", "fileonly.md"), "# File Only\n");
+  fs.writeFileSync(path.join(pm, "rivals", "fileonly.md"), RESEARCHED("File Only"));
   const P = plan(pm, { now: NOW });
   assert.equal(P.total, 3);
   assert.equal(P.tiers.A.rivals.find(r => r.slug === "odd").tierInvalid, "gold");
@@ -141,7 +144,7 @@ test("--no-record leaves the log alone", () => {
 });
 
 test("nosy tiers is wired (writes pm/state/rival-tiers.json), and nosy watch logs its run for the promotion rule", () => {
-  const pm = pmWith({ a: { age: 40 } });
+  const pm = pmWith({ a: { age: 40, bare: true } }); // a bare file: no public url for the watch to read
   const t = run(NOSY, ["tiers", "--pm", pm]);
   assert.equal(t.code, 0, t.error); assert.match(t.output, /Tier A · deep research/);
   assert.equal(JSON.parse(fs.readFileSync(path.join(pm, "state", "rival-tiers.json"), "utf8")).tiers.A.needsWork[0], "a");

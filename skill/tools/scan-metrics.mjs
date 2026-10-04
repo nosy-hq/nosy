@@ -76,9 +76,9 @@ const evRe = (base, id, glossaryMap) => new RegExp(joinWords(base, id, "event", 
 export function buildSteps(glossaryList = null) {
   const glossaryMap = metricsGlossaryMap(glossaryList);
   return [
-    { id: "record", name: "Acquisition", event: evRe("sign(ed|s|ing)?.?up|regist|account.?creat|user.?creat|created.?account|\\bjoin", "record", glossaryMap), product: part(joinWords("sign-?up|signup|register|join", "record", "product", glossaryMap)), value: 2 },
+    { id: "record", name: "Acquisition", event: evRe("sign(ed|s|ing)?.?up|regist|account.?creat|user.?creat|created.?account|\\bjoin", "record", glossaryMap), product: part(joinWords("sign-?up|signup|register", "record", "product", glossaryMap)), value: 2 },
     { id: "activation", name: "Activation", event: new RegExp(joinWords("onboard|activat|first.?[a-z]|setup.?(complet|done|finish)|tutorial.?(complet|done)|welcome.?(complet|done)", "activation", "event", glossaryMap), "i"), product: part(joinWords("onboarding|onboard|getting-?started|welcome", "activation", "product", glossaryMap)), value: 3 },
-    { id: "revenue", name: "Revenue", event: evRe("checkout|purchas|(?<!un)subscri|payment|paid|upgrad|order.?(complet|placed)", "revenue", glossaryMap), product: part(joinWords("checkout|subscribe|subscription|billing|payments?|upgrade|paywall", "revenue", "product", glossaryMap)), value: 3 },
+    { id: "revenue", name: "Revenue", event: evRe("checkout|purchas|(?<!un)subscri|payment|paid|upgrad|order.?(complet|placed)", "revenue", glossaryMap), product: part(joinWords("checkout|subscribe|subscription|billing|payments?|paywall", "revenue", "product", glossaryMap)), value: 3 },
     { id: "invite", name: "Referral", event: evRe("invit|referr|shar", "invite", glossaryMap), product: part(joinWords("invite|invites|invitation|referral|referrals", "invite", "product", glossaryMap)), value: 2 },
     // Churn: subscription/account context only; "cancel" alone (cancelling an upload, a sync) is not customer churn.
     { id: "cancel", name: "Churn", event: evRe("(cancel|end|stop).?(subscri|plan|trial|account|membership)|churn|unsubscri|downgrad|(delete|close).?account", "cancel", glossaryMap), product: part(joinWords("cancel-?(subscription|plan|membership|account)|cancellation|unsubscribe|downgrade|(delete|close)-?account", "cancel", "product", glossaryMap)), value: 2 },

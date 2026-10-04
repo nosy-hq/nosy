@@ -252,3 +252,12 @@ test("hook: a file marked <!-- nosy: no-cite-check --> is skipped", () => {
   fs.writeFileSync(path.join(r.root, "RUNBOOK.md"), "<!-- nosy: no-cite-check -->\nExample of a false alarm: get_client.go:23.\n");
   assert.equal(hook({ hook_event_name: "PostToolUse", tool_name: "Write", cwd: r.root, tool_input: { file_path: "RUNBOOK.md" } }).output, "");
 });
+
+// An answer that numbers its own rows ("Row #3", "tablo #2") was blocked by the Stop hook as "there's no #3 in the repo" (BlogFactory field test; the check's own author hit it twice).
+test("a one-digit #N with no 'issue' or 'PR' beside it is a row number, not a GitHub reference; two digits, or the word, still check", () => {
+  const none = text => checkRefs(extract(text).refs, () => null, "cargo/cargo").problems; // GitHub knows no such issue or PR
+  assert.deepEqual(none("| Row | Note |\n| #3 | the third row |\nSee row #2 and step #7."), [], "ordinals are not references");
+  assert.equal(none("This is tracked in issue #3.").length, 1, "with the word it is a reference, and it doesn't exist");
+  assert.equal(none("Tracked in #42.").length, 1, "two digits are still checked");
+  assert.equal(none("PR #5 fixed it.").length, 1, "PR #5 is a reference");
+});

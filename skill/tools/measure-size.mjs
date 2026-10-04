@@ -12,6 +12,7 @@
 // no-lazy-fetch arguments and the history is read name-only (`--name-only --no-renames`: trees, no contents): files touched, active days and
 // ownership still work, line counts are unknown (reported as such, never as 0), and the confidence is one level lower. A treeless clone has no
 // trees either, so it gets commits and active days only. A call that needs a fetch and fails is not repeated. A full clone is untouched.
+import { localDay } from "./today.mjs";
 import fs from "node:fs"; import path from "node:path"; import { execFileSync, spawn } from "node:child_process"; import { patternsOfLoad, refRegex, groupKeyOf } from "./refs.mjs"; import { smallAscii, conceptGroupsOf as conceptGroupsOfCommon, idfSetup, langOfLoad } from "./text.mjs"; import { thresholds } from "./thresholds.mjs"; import { partialCloneNoticeOf } from "./integration-branch.mjs";
 import { readSources } from "./sources-file.mjs";
 import { isPartialClone, isTreeless, noLazyFetchArgs } from "./facts.mjs";
@@ -92,7 +93,7 @@ const keys = text => [...new Set(conceptGroupsOf(text).flat())];
 function rejectRulesOfRead() {
   try {
     const O = JSON.parse(fs.readFileSync(path.join(pm, "learned.json"), "utf8"));
-    const b = new Date().toISOString().slice(0, 10);
+    const b = localDay();
     return (O.rules || []).filter(k => k.tip === "reject" && (k.type === "size" || k.type === "all") && (!k.end || k.end >= b));
   } catch { return []; }
 }

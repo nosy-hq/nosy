@@ -9,7 +9,7 @@
 //   no rival files, or rivals not checked in 30+ days  → neighbors
 //   a psst list newer than the waves (or no waves yet)  → scoop
 //   bets exist: never scored, or one open too long / reverted   → score (bets are optional; never suggests placing one)
-//   pm/state newer than pm/page.html (or no page yet) → tea
+//   pm/state newer than the page (sources.json `page`, product.md's Page line, pm/page.html or pm/status-page.html; or no page yet) → tea
 //   a landing page is set up and never checked, or the weekly landing roundup is due (a week since the last check
 //   and 2+ features shipped since)                    → frontyard
 //   nothing stale                                      → stakeout (the weekly run), low priority
@@ -19,6 +19,7 @@ import { nextDecision, render as renderDecision } from "./next-decision.mjs";
 import { status as loadedStatus, render as loadedRender } from "./loaded.mjs";
 import { updateNotice } from "./update-check.mjs";
 import { readSourcesSafe, rivalsDir, rivalFiles } from "./sources-file.mjs";
+import { pagePath } from "./page-path.mjs";
 import { nosyCommand } from "./hints.mjs";
 
 const DAY = 864e5;
@@ -140,7 +141,7 @@ export function next(pm, { now = Date.now(), staleDays = 7, rivalDays = 30 } = {
   }
 
   // Share: the page is drawn from pm/state.
-  const pageAt = mtime(path.join(pm, "page.html"));
+  const pageAt = mtime(pagePath(pm, K).path);
   const dataAt = Math.max(0, ...["shipped.json", "status.json", "lowhanging.json", "score.json", "waves.json"].map(f => asOf(state(f)) || 0));
   if (dataAt && !pageAt) add("tea", "there's something to show but no page yet", 35);
   else if (dataAt && pageAt && dataAt > pageAt + 1000) add("tea", "the page is older than what Nosy knows now", 30);

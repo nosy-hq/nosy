@@ -10,6 +10,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { authorNames } from "./publish-safe.mjs";
+import { pagePath } from "./page-path.mjs"; import { readSourcesSafe } from "./sources-file.mjs";
 
 const Tool = path.dirname(fileURLToPath(import.meta.url));
 const read = f => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
@@ -87,7 +88,9 @@ export function messageSetup(pm, { notes = null, enExcess = 3 } = {}) {
     for (const m of announcement) line.push(`• ${m.title.replace(/^\([^)]*\):\s*/, "").replace(/\.+$/, "")}`);
   }
   if (!line.length) return "";
-  line.push("", process.env.NOSY_PAGE_URL ? `Page: ${process.env.NOSY_PAGE_URL}` : "Detail: pm/page.html · nosy shipped · nosy score");
+  // The page where the owner keeps it (sources.json `page`, product.md's Page line). The usual one keeps its short name; another one is named as it is.
+  const where = (() => { const f = pagePath(pm, readSourcesSafe(pm)).path, rel = path.relative(pm, f); if (rel === "page.html") return "pm/page.html"; return rel && !rel.startsWith("..") ? `${path.basename(path.resolve(pm))}/${rel}` : path.relative(process.cwd(), f) || f; })();
+  line.push("", process.env.NOSY_PAGE_URL ? `Page: ${process.env.NOSY_PAGE_URL}` : `Detail: ${where} · nosy shipped · nosy score`);
   return line.join("\n");
 }
 

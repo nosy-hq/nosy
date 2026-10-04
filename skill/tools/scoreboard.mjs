@@ -8,11 +8,12 @@
 //   - every shipped row says how it was linked; nothing on this page comes from text similarity (72);
 //   - requests nobody has decided on get their own section (85).
 // Usage: node scoreboard.mjs <pm folder> <out.html> [--min-n 5]
+import { localDayOf } from "./today.mjs";
 import fs from "node:fs"; import path from "node:path"; import { fileURLToPath } from "node:url";
 import { thresholds } from "./thresholds.mjs"; import { esc } from "./html-safe.mjs";
 
 const read = f => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
-const day = d => d ? new Date(d + (d.length === 10 ? "T12:00:00Z" : "")).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "—";
+const day = d => d ? new Date(d + (d.length === 10 ? "T12:00:00Z" : "")).toLocaleDateString("en-GB", { day: "numeric", month: "short", ...(d.length === 10 ? { timeZone: "UTC" } : {}) }) : "—"; // a bare date is a day, shown as that day in every zone
 const median = a => { const s = a.filter(x => typeof x === "number").sort((x, y) => x - y); if (!s.length) return null; const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const num = x => x == null ? "—" : typeof x !== "number" ? esc(x) : Number.isInteger(x) ? String(x) : x.toFixed(1); // always safe to put in HTML
 export const AllLinks = ["closes", "mentions", "timeline", "bet"];
@@ -142,7 +143,7 @@ ${betSec}
 ${waitSec}
 ${undSec}
 <h2>What this page can't tell you</h2><ul>${cant}</ul>
-<footer>Built ${esc(new Date(s.generated || Date.now()).toISOString().slice(0, 10))} by Nosy. Nosy was here.</footer>
+<footer>Built ${esc(localDayOf(s.generated || Date.now()))} by Nosy. Nosy was here.</footer>
 </main></body></html>`;
 }
 

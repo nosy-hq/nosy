@@ -1,5 +1,6 @@
 // matrix-proposals.mjs: the evidence gate for matrix cells the neighbor agents propose.
 // On the first real run 10 of 75 proposals had enough evidence. Pure functions first, then the CLI against a throwaway pm/.
+import { localDay } from "../tools/today.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -168,7 +169,7 @@ test("apply --dry-run lists the changes and writes nothing; apply backs up first
 
   const a = run(T, ["apply", pm]);
   assert.equal(a.code, 0, a.error); assert.match(a.output, /Backed up first: .*matrix-\d{8}T\d{6}\.json\. To put it back: `.*matrix-proposals undo`\./);
-  const M = JSON.parse(fs.readFileSync(file, "utf8")), today = new Date().toISOString().slice(0, 10);
+  const M = JSON.parse(fs.readFileSync(file, "utf8")), today = localDay();
   assert.deepEqual(M.products[0].codes[2], { k: "y", evidence: "https://rival.example/release-notes", verified_at: today });
   assert.equal(M.products[0].codes[3].k, "p"); assert.equal(M.products[0].codes[3].verified_at, today);
   const bak = fs.readdirSync(path.join(pm, ".backup")).filter(f => /^matrix-.*\.json$/.test(f) && !/meta/.test(f));

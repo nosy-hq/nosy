@@ -22,7 +22,13 @@ const MARKER = ".nosy-install.json";
 // Where the copy came from, as a label that is the same on every machine. The marker is committed with the folder, so it
 // must not carry the installing machine's own path (a home folder, npx's temp cache). `update` re-copies from the Nosy that runs it.
 const SOURCE = "github:nosy-hq/nosy";
-const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(SKILL, "..", "package.json"), "utf8")).version; } catch { return "unknown"; } })();
+// The version being installed. Run from a clone it is package.json; run from a copy `nosy install` made (.agents/skills/nosy, where nothing sits above
+// the skill folder) it is the marker that copy was written with. Without that fallback `nosy update` run from a copy stamped every copy "unknown", and
+// `doctor` could no longer tell an old copy from a current one (BlogFactory field test).
+const VERSION = (() => {
+  const version = f => { try { const v = JSON.parse(fs.readFileSync(f, "utf8")).version; return typeof v === "string" && v ? v : null; } catch { return null; } };
+  return version(path.join(SKILL, "..", "package.json")) || version(path.join(SKILL, MARKER)) || version(path.join(SKILL, "..", ".claude-plugin", "plugin.json")) || "unknown";
+})();
 
 // Where each agent reads project skills, and what in a project says the agent is used there. `global` is the
 // user-level folder, only for agents whose docs name one.
@@ -132,8 +138,8 @@ export function render(P, { dry = false } = {}) {
   for (const s of P.steps) lines.push(s.skip ? `  – ${PROVIDERS[s.provider].name}: ${s.skip}${s.target ? ` (${rel(s.target)})` : ""}` : `  ✓ ${PROVIDERS[s.provider].name}: ${verb(s)} ${rel(s.target)}`);
   const done = P.steps.filter(s => s.copy);
   if (done.length && !dry && P.action !== "uninstall") {
-    lines.push("", "Next: open your agent in this project and type " + [...new Set(done.map(s => PROVIDERS[s.provider].invoke))].join(" · ") + ". It sets Nosy up (`move-in`) the first time.");
-    if (!P.gitHooks && done.some(s => s.provider !== "claude")) lines.push("This agent has no hooks of its own: in this repo, `nosy install --git-hooks` (or later `nosy git-hooks install`) adds the after-commit nudge and the never-rule check as plain git hooks (their output comes back in `git commit`, whatever agent runs it). Say \"Nosy, what's loaded\" (or type " + [...new Set(done.filter(s => s.provider !== "claude").map(s => PROVIDERS[s.provider].invoke))].join(" · ") + ") for the version and whether a newer one is out.");
+    lines.push("", "Nosy is installed and works now. Open a new session of your agent in this project (one that was already running won't see it) and type " + [...new Set(done.map(s => PROVIDERS[s.provider].invoke))].join(" · ") + ". It sets Nosy up (`move-in`) the first time.");
+    if (done.some(s => s.provider !== "claude")) lines.push((P.gitHooks ? "Git hooks: the after-commit nudge and the never-rule check are being added to this repo (see below); Nosy works without them too." : "Optional automation is off, and Nosy doesn't need it.") + (P.gitHooks ? "" : " The after-commit nudge and the never-rule check can run as plain git hooks (their output comes back in `git commit`, whatever agent runs it): `nosy git-hooks install` adds them to this repo only (or `nosy install --git-hooks` next time).") + " Say \"Nosy, what's loaded\" (or type " + [...new Set(done.filter(s => s.provider !== "claude").map(s => PROVIDERS[s.provider].invoke))].join(" · ") + ") for the version and whether a newer one is out.");
     if (done.some(s => s.provider === "claude")) lines.push("Claude Code: the plugin adds /nosy:<command> commands and the hooks (session start, after-commit): `/plugin marketplace add nosy-hq/nosy` then `/plugin install nosy@nosy`.");
     // Nothing puts `nosy` on PATH: name the command that really runs, from the copy just written (npx's cache is temporary).
     const first = done.find(s => s.provider === "claude") || done[0], tool = path.join(first.target, "tools", "nosy.mjs");

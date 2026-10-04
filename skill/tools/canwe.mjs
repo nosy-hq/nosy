@@ -6,6 +6,7 @@
 // importing inventory.mjs if missing); (c) runs gather-evidence.mjs as a subprocess with the expanded words
 // (gather-evidence.mjs ITSELF IS UNCHANGED). Writes a gracefully missing section, without crashing, if
 // gather-evidence.mjs is missing or pm/sources.json is missing.
+import { localDay } from "./today.mjs";
 import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { small, root, ascii, words as tokens, langOfLoad } from "./text.mjs"; import { NEGATION_RE, negationRegexFor, decisionsOfRead } from "./read-decisions.mjs";
 import { demandLoad, demandForQuestion, demandLine, isCluster, interviewsLoad, interviewsForQuestion, interviewLine } from "./demand.mjs";
 import { readSources } from "./sources-file.mjs";
@@ -145,7 +146,7 @@ function matchingEndpoints() {
 let rejectRulesOf = [];
 try {
   const O = JSON.parse(fs.readFileSync(path.join(pm, "learned.json"), "utf8"));
-  const b = new Date().toISOString().slice(0, 10);
+  const b = localDay();
   rejectRulesOf = (O.rules || []).filter(k => k.tip === "reject" && (k.type === "canwe" || k.type === "all") && (!k.end || k.end >= b));
 } catch {}
 function contextIsMatching(context) {
@@ -205,6 +206,8 @@ const formsOf = g => [...new Set(g.flatMap(x => [x, ascii(x)]))].filter(x => x.l
 // Whole word for short terms (KEP, ZIP), word-start prefix for longer ones. PCRE (-P) when this git has it;
 // otherwise -w / a plain substring, which is close enough to count files. `git grep` exits 1 on no match.
 const reEsc = f => f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// A word of the question inside a text: at the start of a word, and, for a short term (KEP, ZIP), at its end. Unicode-aware: `\b` is ASCII-only, so it never matched a Japanese or Chinese term at all.
+const termIn = (f, text) => new RegExp(`(?<![\\p{L}\\p{N}])${reEsc(ascii(f.toLowerCase()))}${f.length <= 4 && /^[\\x00-\\x7f]+$/.test(f) ? "(?![\\p{L}\\p{N}])" : ""}`, "u").test(text); // the whole-word rule is for short Latin terms; a short Japanese term (ルート) is a prefix of the next word by nature
 function grepArgs(forms, mode) {
   if (mode === "pcre") return ["-P", ...forms.flatMap(f => ["-e", f.length <= 4 ? `\\b${reEsc(f)}\\b` : `\\b${reEsc(f)}`])];
   return ["-F", ...forms.flatMap(f => ["-e", f])];
@@ -312,10 +315,18 @@ function deliberateLines(c, limit = 6) {
       const low = r.text.toLowerCase(), termAt = c.forms.map(f => low.indexOf(f.toLowerCase())).filter(i => i >= 0);
       const m = (REFUSAL_RE.exec(r.text) || STRUCTURAL_REFUSAL_RE.exec(r.text)), refAt = m ? m.index : -1;
       const close = refAt >= 0 && termAt.some(i => Math.abs(i - refAt) <= 50);
-      seen.add(key); out.push({ ...r, close, structuralOnly: !wordHit, rank: (STRONG_RE.test(r.text) ? 0 : wordHit ? 4 : 6) + (r.hit ? 0 : 2) + fileRank(r.f) });
+      // BlogFactory field test (3 Oct): "Can we enforce draft-only delivery across multiple sites?" anchored on three generic words (enforce,
+      // across, multiple) because the real subject ("draft", "delivery", "sites") was too common, and an unrelated comment ("Failures are
+      // deliberately not enforced") sat next to "enforce", so the answer said the product had decided against the feature, which is its central
+      // shipped boundary. In a question of four or more words, a refusal drives the verdict only when the line (and the one above and below)
+      // mentions at least two different words of the question: sharing one word with it proves nothing. It is still listed, marked as a lead.
+      const nearby = ascii(rows.filter(x => x.f === r.f && Math.abs(x.n - r.n) <= 1).map(x => x.text).join(" ").toLowerCase());
+      const mentioned = counted.filter(g => g.forms.some(f => termIn(f, nearby))).length;
+      const corroborated = counted.length < 4 || mentioned >= 2;
+      seen.add(key); out.push({ ...r, close, corroborated, structuralOnly: !wordHit, rank: (STRONG_RE.test(r.text) ? 0 : wordHit ? 4 : 6) + (r.hit ? 0 : 2) + fileRank(r.f) });
     }
   }
-  return out.sort((a, b) => a.rank - b.rank).slice(0, limit).map(r => ({ hit: r.hit, close: r.close, structuralOnly: r.structuralOnly, line: `${r.f}:${r.n}  ${redactLine(r.f, r.text).slice(0, 140)}` }));
+  return out.sort((a, b) => a.rank - b.rank).slice(0, limit).map(r => ({ hit: r.hit, close: r.close, corroborated: r.corroborated, structuralOnly: r.structuralOnly, line: `${r.f}:${r.n}  ${redactLine(r.f, r.text).slice(0, 140)}` }));
 }
 // a fallback anchor is a COMMON word chosen only because nothing rarer exists — a
 // refusal-shaped line sitting near it (an unrelated 404 guard, an unrelated disabled flag) is far more likely
@@ -327,7 +338,7 @@ for (const a of anchorInfo) a.deliberate = (a.code.length && !anchorsAreFallback
 // (a neighbouring line can refuse something else: "bulk billing … left out" next to an invoice line). A
 // structural-only hit (a 404 guard etc, no recognized word) still drives the verdict — that's the point of
 // "prefer code shape over words" — but is flagged so the description below says it's unread prose, not a claim.
-const deliberateCode = anchorInfo.map(a => ({ ...a, own: a.deliberate.filter(d => d.hit && d.close).map(d => d.line), ownStructuralOnly: a.deliberate.filter(d => d.hit && d.close).every(d => d.structuralOnly) })).find(a => a.own.length);
+const deliberateCode = anchorInfo.map(a => ({ ...a, own: a.deliberate.filter(d => d.hit && d.close && d.corroborated).map(d => d.line), ownStructuralOnly: a.deliberate.filter(d => d.hit && d.close && d.corroborated).every(d => d.structuralOnly) })).find(a => a.own.length);
 
 // --- access layer (Q3): a portal or outside-access question is decided by the authorization
 // model (company-wide roles vs per-record grants), not by the feature's own files. When the question is about who
@@ -417,7 +428,11 @@ const decisionText = B["Decisions"] || "";
 // negationRegexFor(K): the EN+TR core plus, if sources.json has one, the product's
 // OWN not-doing words/phrases (`glossary.notDoing`) - so a German/Japanese/etc. "not doing this" decision is
 // recognized here too, not just in English/Turkish. Falls back to plain NEGATION_RE when there's nothing to add.
-const negative = negationRegexFor(K).test(decisionText);
+// A negation counts only in a sentence that is about the question: one of its words in a short question, two in a long one (the same rule as "Deliberately off?"). The whole block
+// used to be tested, so "Excel format is out of scope" in a decision that says CSV export ships first made "can we add CSV export?" a decision not to do it (field-test hunt).
+const negativeRe = negationRegexFor(K);
+const topicHits = sn => counted.filter(g => g.forms.some(f => termIn(f, ascii(sn.toLowerCase())))).length;
+const negative = decisionText.split(/(?<=[.!?])\s+|(?<=[。！？])|\n+/).some(sn => negativeRe.test(sn) && topicHits(sn) >= (counted.length >= 4 ? 2 : 1));
 
 // --- decision found, but its status couldn't be read in this language ---
 // read-decisions.mjs's decisionsOfRead() flags statusReadable:false when NOTHING in the whole decisions doc
@@ -562,7 +577,7 @@ else {
       + (a.code.length ? a.lines.map(l => `- ${l}`).join("\n") + (a.code.length > a.lines.length ? `\n- … ${a.code.length} files in all: ${[...new Set(a.code.map(f => f.split("/").slice(0, 3).join("/")))].slice(0, 6).join(", ")}` : "")
         : `No code file mentions it${a.docs.length ? ` (only docs: ${a.docs.slice(0, 3).join(", ")})` : ""}.`)).join("\n\n") + "\n\n"
     : "Every topic word is common in this repo; no rare term to anchor on. Search the code for the feature's own names yourself.\n\n";
-  if (anchorInfo.some(a => a.deliberate.length)) o += `### Deliberately off? (code that refuses it)\n\n${anchorInfo.filter(a => a.deliberate.length).map(a => a.deliberate.map(d => `- ${d.line}${d.structuralOnly ? " (structural: a status/false/disabled guard — no refusal word matched in this language, read it yourself)" : ""}`).join("\n")).join("\n")}\n\n_If these lines say the thing is refused, disabled or out of scope, the verdict is "deliberately not done", with one of these lines cited. Not "not built yet"._\n\n`;
+  if (anchorInfo.some(a => a.deliberate.length)) o += `### Deliberately off? (code that refuses it)\n\n${anchorInfo.filter(a => a.deliberate.length).map(a => a.deliberate.map(d => `- ${d.line}${d.structuralOnly ? " (structural: a status/false/disabled guard — no refusal word matched in this language, read it yourself)" : ""}${d.corroborated ? "" : " (a lead only: it shares just one word with the question; check it is about the same thing before citing it)"}`).join("\n")).join("\n")}\n\n_If these lines say the thing itself is refused, disabled or out of scope, the verdict is "deliberately not done", with one of these lines cited. Not "not built yet". A line marked "a lead only" may be about something else that shares a word: if it conflicts with what the product's docs or code say it does, the answer is "conflict, needs review", not a decision._\n\n`;
   if (accessQuestion || accessStructural) o += `### Access layer\n\n${accessStructural ? `_The question's words didn't match an access/portal pattern in this language (sources.json has no \`glossary.access\` for it); showing structural candidates found near the matched code anyway._\n\n` : ""}${accessFiles.length ? accessFiles.map(f => `- ${f}`).join("\n") + "\n\n_Who can get in is decided here. Read these and say what the model allows: company-wide roles, team, or per-record grants, and whether an outside user can exist at all._" : "_No authorization files found by name; find where roles and access are checked before answering._"}\n\n`;
   if (commonWords.length) o += `_Too common here to anchor on: ${commonWords.map(c => `"${c.term}" (${c.files.length} files)`).join(", ")}._\n\n`;
   // The question's language vs the code's: a Turkish question over English identifiers only anchors on comments.

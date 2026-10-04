@@ -48,6 +48,8 @@ Other ways: [b) disable](#b-disable-or-remove) · [c) cloud sessions](#c-claude-
 - Turn off for now: `/plugin disable nosy`; back on: `/plugin enable nosy`.
 - Remove: `/plugin uninstall nosy@nosy`, then `/plugin marketplace remove nosy` for a clean slate.
 
+**Where Nosy has been run.** Claude Code (the plugin) daily. Codex: a real product, 3–4 October 2026, install, the tour, the local commands, a weekly run and the Cloud sign-in; the problems that run found are fixed and listed in the changelog. Cursor, Gemini CLI, Copilot, OpenCode and Kiro: installed by the same command, not yet run on a real product by us; say so in an issue if one doesn't behave. What an agent without sub-agents, an Artifact tool or hooks does instead is in `skill/SKILL.md` ("Works in every agent").
+
 ## c) Claude Code on the web and cloud sessions
 
 A cloud session (claude.ai/code, routines, the mobile app, `claude --cloud`) does not load plugins installed on your machine, according to Claude Code's plugin docs. There, `/nosy:<command>`, the four hooks and the three agents (`nosy-neighbor`, `nosy-auditor`, `nosy-refuter`) do not exist. Nosy still works through the skill's fallbacks (`skill/SKILL.md`, "Works in every agent"): the agent researches rivals and runs the refuter pass itself.
@@ -101,14 +103,14 @@ It looks for the agents the project uses (a `.claude/`, `.cursor/`, `.gemini/`, 
 `npx github:…` runs a repo's code on your machine. Pin a release tag to say which code (replace with the latest release tag); without `#<tag>` you get the default branch as it is right now:
 
 ```
-npx github:nosy-hq/nosy#v0.21.0 install
+npx github:nosy-hq/nosy#v0.21.1 install
 ```
 
 - `--providers claude,codex,cursor,gemini,copilot,opencode,kiro` chooses; `--dry-run` shows first; `--global` uses your user folder (Claude Code `~/.claude/skills`, Codex `~/.agents/skills`).
 - **What you don't get outside Claude Code, and what stands in for it.** Only Claude Code's plugin has hooks. In the other agents: the after-commit nudge and the never-rule check come from `nosy git-hooks install`, run once in the repo: `nosy install --git-hooks` does it together with the install (and `nosy uninstall` removes it again); it writes plain git hooks (`post-commit` and `post-merge`; a hook you already have is kept and ours is added to it, a hook that isn't a shell script is left alone), and what they print comes back in the result of `git commit` and `git pull`, whichever agent ran it, or a person. They only print, never fail a commit, send nothing, and run only where `pm/sources.json` exists. `nosy git-hooks status` shows them, `nosy git-hooks uninstall` removes only our block, `NOSY_NO_GIT_HOOKS=1` silences one run. The opening summary and the "newer Nosy is out" line are what `/nosy` (Codex: `$nosy`) with no command prints; the reference check is `nosy cite-check <answer.md> --gh`; the three sub-agents are spec files the skill tells your agent to follow itself (`agents/`).
 - `nosy update` refreshes every copy it made; `nosy uninstall` removes them. Both touch only folders with the marker, so a `nosy` folder you made yourself is never overwritten or removed.
 - It changes no settings file and adds no hooks; the Claude Code plugin ([a](#a-claude-code-terminal-desktop-vs-code-jetbrains-the-default)) adds `/nosy:<command>` and the hooks. It refuses to run inside Nosy's own repo. Exit 0 done or nothing to do, 1 couldn't run ([CLI-CONTRACT.md](CLI-CONTRACT.md)).
-- Without an Artifact tool, `tea` writes `pm/status-page.html`; without sub-agents, `neighbors` researches rivals in sequence; without a session-start hook, "Psst…" is said in the first message.
+- Without an Artifact tool, `tea` writes the page to disk (`nosy page`: where `sources.json` `page` or the `Page:` line of `product.md` says, else `pm/page.html`); without sub-agents, `neighbors` researches rivals in sequence; without a session-start hook, "Psst…" is said in the first message.
 
 `AGENTS.md` at the repo root is the agent-neutral entry point: the command table and rule summary, with each command linking to `skill/commands/<name>.md`. To work on Nosy itself with another agent, Codex reads `AGENTS.md` from the repo root, Cursor reads `.cursor/rules/nosy.mdc` (which points to `AGENTS.md`) and Gemini CLI reads `AGENTS.md` through `.gemini/settings.json`. Any other agent: have it read `AGENTS.md` and apply one of the commands. `node skill/tools/audit-package.mjs` checks the local links in `AGENTS.md` and the adapters, and that its command list matches `skill/SKILL.md`.
 
@@ -173,9 +175,21 @@ Nosy has no connector of its own. `spill` writes its draft to `pm/prd/`; if your
 
 `nosy publish` sends counts and structure of `pm/` (never quotes) to a Nosy Cloud dashboard, so your team can open it. It does nothing until you configure a target and say yes. What goes, key by key: [DATA.md](DATA.md).
 
+**Which way to connect.** Three, in this order of preference:
+
+1. **From your agent, with the browser sign-in (the usual way).** Connect the Nosy Cloud MCP at `https://cloud.nosy.sh/mcp`; no token is made or pasted anywhere. Codex: `codex mcp add nosy-dashboard --url https://cloud.nosy.sh/mcp --oauth-client-registration auto`, then `codex mcp login nosy-dashboard` (a browser opens: sign in with GitHub, click Allow). Claude Code: `claude mcp add --transport http --scope user nosy-dashboard https://cloud.nosy.sh/mcp`, then `/mcp` and **Authenticate**. Claude's app: Settings → Connectors → Add custom connector. Cursor and others: add a remote (streamable HTTP) MCP server with that address; the client handles the sign-in. **Then open a new chat:** a chat that was already running does not see tools added after it started (Codex does not hot-load them), so say "Publish the current Nosy workspace to Nosy Cloud" there, and check that it can see Cloud by asking it to list your projects, not only by `codex mcp list`.
+2. **From a script or CI, with a token** (below): for a machine with no browser. Keep it out of chat.
+3. **Local only.** Nothing leaves the machine; `nosy page` leaves the HTML on disk.
+
+*Three different things are called "MCP" here:* the Nosy skill (the commands, which read and write `pm/` on your machine), the optional local stdio server (`nosy mcp`, section i) and the remote Nosy Cloud MCP above (dashboard actions). When a doc says "connect MCP" it means the last one.
+
+Using a token (2):
+
 1. Set the address once: `cloud.url` in `pm/sources.json`, or `NOSY_CLOUD_URL`, or `--url <address>`.
 2. Make a token on the dashboard (**Connect your agent**, then **Make a token**). Save it in a text file that only you can read, so it never sits in a command line, your shell history or a chat: `~/.config/nosy/token` (`$XDG_CONFIG_HOME/nosy/token` if you set that), then `chmod 600` on it. A file that other users can read is refused and nothing is sent.
 3. `nosy publish --dry-run` lists the files that would go and connects to nothing (`--full` prints them).
 4. `nosy publish --yes` sends them. It looks for the token in `NOSY_CLOUD_TOKEN`, then `--token-file <path>`, then `NOSY_CLOUD_TOKEN_FILE`, then the default file above.
 
 After the send it prints what the dashboard says it read, for example the matrix as areas by rivals. If the dashboard drew no matrix, it says so and exits 1: the files arrived, but the page is not what you meant to publish. A secret or personal data in the files stops the send (`--allow-sensitive` overrides it, after you have read what it found).
+
+**A name that stops the send but is a public product or company** (a rival called Mercury CMS, a commit author called Mercury): list it in `pm/sources.json` as `"privacy": { "publicNames": ["Mercury CMS"] }`. It is then let through only as that whole name; the bare word, a person's name, an e-mail or a secret still stop the send, so there is no reason to reach for `--allow-sensitive`. Rival names, your product's name and well-known product names (Claude Code, Codex CLI…) are let through without listing.

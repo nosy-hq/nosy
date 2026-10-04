@@ -185,4 +185,6 @@ list("First snapshot (compared from the next run on)", by("baseline"), x => `- $
 list("Not read", [...by("unreachable"), ...by("no pages")], x => `- ${x.name}: ${x.pages.length ? x.pages.map(p => `${p.url} (${p.error})`).join(", ") : `no public URL in ## Sources; add sources.json watch.${x.slug}`}`);
 if (by("same").length) o += `Unchanged: ${by("same").map(x => x.name).join(", ")}.\n`;
 process.stdout.write(o);
+// Exit 2 when no rival's pages could be read at all (offline, blocked): a watch that read nothing is not an all-clear, and `weekly` marked it ✓ (field-test hunt).
+process.exitCode = results.length && results.some(x => x.state === "unreachable") && results.every(x => x.state === "unreachable" || x.state === "no pages") ? 2 : 0; // nothing at all could be read (offline, blocked): not an all-clear. One rival that is down is named in the output and is not the whole run; "no pages" is a setup gap the output already names
 if (jsonOut) { fs.mkdirSync(path.dirname(jsonOut), { recursive: true }); fs.writeFileSync(jsonOut, JSON.stringify({ type: "watch", generated: today, rivals: results }, null, 1)); }

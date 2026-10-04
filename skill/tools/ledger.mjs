@@ -7,6 +7,8 @@
 //   node ledger.mjs <pm> write "<question>" --verdict "<verdict>" --basis <code|document|intent> [--size S|M|L] [--reason "<why now>"] [--evidence <file>] [--note "<note>"]
 //   node ledger.mjs <pm> list                   every answer
 // Files: <pm>/canwe/<date>-<topic>.md and <pm>/canwe/ledger.json. The agent gives the verdict; the ledger only records and compares.
+import { localDayOf } from "./today.mjs";
+import { refuseDamaged } from "./owner-json.mjs";
 import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { smallAscii } from "./text.mjs";
 import { readSources } from "./sources-file.mjs";
 const argv = process.argv.slice(2), opt = k => { const i = argv.indexOf(k); return i >= 0 ? argv.splice(i, 2)[1] : null; };
@@ -105,10 +107,12 @@ if (action === "find") {
   // Don't write if the evidence is another question's skeleton (pm/state/canwe-last.md gets overwritten on every canwe run).
   const evidenceQuestion = (evidenceText.match(/^# canwe: (.+)$/m) || [])[1];
   if (evidenceQuestion && low(evidenceQuestion.trim()) !== low(question)) { console.error(`The evidence file belongs to a different question ("${evidenceQuestion.trim()}"). Run \`canwe.mjs pm "${question}"\` first, then write.`); process.exit(1); }
+  refuseDamaged(idx); // before anything is written: a damaged index must not be replaced by a one-record one
   const previous = findMatching(question)[0]?.e || null, date = new Date().toISOString();
   const slug = smallAscii(question).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 50) || "question";
   fs.mkdirSync(dir, { recursive: true });
-  let file = `${date.slice(0, 10)}-${slug}.md`; for (let i = 2; fs.existsSync(path.join(dir, file)); i++) file = `${date.slice(0, 10)}-${slug}-${i}.md`;
+  const dayName = localDayOf(date) || date.slice(0, 10); // the owner's day names the file
+  let file = `${dayName}-${slug}.md`; for (let i = 2; fs.existsSync(path.join(dir, file)); i++) file = `${dayName}-${slug}-${i}.md`;
   const e = { date, question, keys: survey, verdict, basis: basisA, size: sizeA || null, reason: reason || null, ref: now, repoRef: K.repo ? ref : null, file, evidence, inventory: inventoryMatch(inventoryRead(), evidence, survey), previous: previous ? { file: previous.file, verdict: previous.verdict, date: previous.date } : null, note: note || null };
   const md = `# canwe: ${question}\n\n- **Date:** ${dateWrite(date)}\n- **Verdict:** ${verdict}\n- **Basis:** ${Basis[basisA]}\n${e.size ? `- **Size:** ${e.size}\n` : ""}${reason ? `- **Why now:** ${reason}\n` : ""}${now ? `- **Repo state:** ${ref} @ ${now}\n` : ""}${previous ? `- **Previous answer:** ${dateWrite(previous.date)} · ${previous.verdict}${previous.verdict === verdict ? " (unchanged)" : ` -> ${verdict} (changed)`} · \`${previous.file}\`\n` : ""}` +
     `${e.inventory.length ? `\n## Endpoints (inventory at the time)\n\n${e.inventory.map(u => `- \`${u.method} ${u.path}\`: ${u.used ? "onScreen" : "noScreen"}`).join("\n")}\n` : ""}` +

@@ -20,13 +20,14 @@ const noise = f => /(^|\/)(node_modules|dist|build|vendor|\.next|coverage)\//.te
 // exact match happens in JS.
 // Billing trace: a payment provider, a subscription, or in-app purchase code.
 const BILLING_ERE = "stripe|paddle|lemon_?squeezy|chargebee|revenuecat|recurly|braintree|iyzico|storekit|purchase|billing|subscription|checkout|price_";
-const Billing = /\b(stripe|paddle|lemon_?squeezy|chargebee|revenuecat|recurly|braintree|iyzico|storekit)|in_?app_?purchase|\bbilling|\bsubscriptions?\b|checkout[._]?session|\bprice_[A-Za-z0-9]{8,}/i;
+const Billing = /\b(stripe|paddle|lemon_?squeezy|chargebee|revenuecat|recurly|braintree|iyzico|storekit)|in_?app_?purchase|\bbilling|\bsubscriptions?\b(?=.{0,60}(?:plan|price|pricing|invoice|payment|trial|tier|renew|cancel|seat))|checkout[._]?session|\bprice_[A-Za-z0-9]{8,}/i;
 // The word alone isn't enough: real usage is what's searched for (an SDK import, a billing API call, or code
 // inside a billing folder).
 // Nosy's own privacy scanner contains the "stripe" keyword pattern, so it looked like it "had billing" too.
-const FAT_ICE = /(\bimport\b|\brequire\s*\(|\bfrom\b|\buse\b)[^\n]*["'`(]?(stripe|@stripe\/|paddle|@paddle\/|@lemonsqueezy|chargebee|react-native-purchases|revenuecat|purchases_flutter|recurly|braintree|iyzipay|storekit|github\.com\/stripe)/i;
+const FAT_ICE = /(\bimport\b|\brequire\s*\(|\bfrom\b|\buse\b)[^\n]*["'`(]?(stripe(?![a-z])|@stripe\/|paddle(?![a-z])|@paddle\/|@lemonsqueezy|chargebee|react-native-purchases|revenuecat|purchases_flutter|recurly|braintree|iyzipay|storekit|github\.com\/stripe)/i; // a word boundary after the provider: "paddleboard" is not Paddle
 const FAT_API = /checkout\.sessions\.create|billing_?portal|subscriptions\.(create|update|cancel)|Purchases\.(configure|shared)|SKPaymentQueue|Product\.purchase|new\s+Stripe\s*\(|stripe\.\w+\.(create|retrieve)/i;
-const FAT_DIRECTORY = /(^|\/)(billing|subscriptions?|payments?|paywall|checkout)(\/)/i;
+// "subscriptions" and "payments" folders are as often a realtime handler or a ledger as billing: only the unambiguous names count on their own.
+const FAT_DIRECTORY = /(^|\/)(billing|paywall|checkout)(\/)/i;
 // Product-sourced billing glossary (internal request 108, the language audit §1 "plan-gates.mjs:21-46
 // Billing/Gate/Infrastructure"): the billing SDK imports/API calls above (FAT_ICE/FAT_API) are code shape -
 // library names like "stripe"/"iyzico" stay the same regardless of the product's own language, so they're

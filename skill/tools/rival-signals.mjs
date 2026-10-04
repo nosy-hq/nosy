@@ -36,6 +36,7 @@
 //        node rival-signals.mjs note <pm> <slug> "<text>" --source <url> [--date YYYY-MM-DD]
 //        node rival-signals.mjs notes <pm> [<slug>] [--json]
 // Exit: 0 read · 2 something couldn't be read (the table still prints) · 1 nothing configured / no sources.json / refused note.
+import { localDayOf } from "./today.mjs";
 import fs from "node:fs"; import path from "node:path"; import { execFile } from "node:child_process"; import { fileURLToPath } from "node:url";
 import { sourcesProblem } from "./hints.mjs";
 import { readSources, rivalsDir, rivalFiles } from "./sources-file.mjs";
@@ -213,21 +214,24 @@ export function readHistory(pm) { try { return parseLines(fs.readFileSync(histor
 // The value on the oldest line from the last 28 days that has this signal (today's own line, which this run replaces, doesn't count).
 export function previousOf(history, today, slug, key) {
   const from = isoDay(new Date(Date.parse(today + "T00:00:00Z") - HISTORY_DAYS * DAY));
-  const rows = history.map(h => ({ day: h.at.slice(0, 10), v: h.rivals[slug] && h.rivals[slug][key] })).filter(x => x.day < today && x.day >= from && typeof x.v === "number").sort((a, b) => (a.day < b.day ? -1 : 1));
+  const rows = history.map(h => ({ day: localDayOf(h.at) || h.at.slice(0, 10), v: h.rivals[slug] && h.rivals[slug][key] })).filter(x => x.day < today && x.day >= from && typeof x.v === "number").sort((a, b) => (a.day < b.day ? -1 : 1));
   return rows.length ? { previous: rows[0].v, since: rows[0].day } : { previous: null, since: null };
 }
 // Appends this run's values as one line; the line already written for the same day is replaced, every other line is kept as it is.
 export function saveHistory(pm, result, now) {
-  const today = isoDay(now), rivals = {};
+  const today = localDayOf(now), rivals = {};
   for (const R of result) if (R.signals.length) rivals[R.slug] = Object.fromEntries(R.signals.map(s => [s.key, s.value]));
-  const f = historyFile(pm); let kept = []; try { kept = parseLines(fs.readFileSync(f, "utf8")).filter(x => !(x.at && x.at.slice(0, 10) === today)).map(x => x.raw); } catch {}
+  const sameDay = x => x.at && (localDayOf(x.at) || x.at.slice(0, 10)) === today; // the owner's day, not the UTC day of the stamp
+  const f = historyFile(pm); let kept = [], earlier = []; try { const all = parseLines(fs.readFileSync(f, "utf8")); earlier = all.filter(sameDay); kept = all.filter(x => !sameDay(x)).map(x => x.raw); } catch {}
+  // A rerun the same day that read nothing (offline, rate limited) must not replace the good line already written for that day with an empty one.
+  if (!Object.keys(rivals).length && earlier.some(x => Object.keys(x.rivals || {}).length)) return;
   fs.mkdirSync(path.dirname(f), { recursive: true });
   const tmp = `${f}.tmp`; fs.writeFileSync(tmp, [...kept, JSON.stringify({ at: now.toISOString(), rivals })].join("\n") + "\n"); fs.renameSync(tmp, f);
 }
 
 // ---- state + table ----
 export function buildState(result, history, now) {
-  const today = isoDay(now);
+  const today = localDayOf(now);
   return { type: "rivalSignals", generated: now.toISOString(), rivals: result.map(R => ({ slug: R.slug, name: R.name,
     signals: R.signals.map(s => ({ key: s.key, label: s.label, value: s.value, ...previousOf(history, today, R.slug, s.key), source: s.source })),
     unread: R.unread.map(u => ({ key: u.key, why: u.why })) })) };
@@ -331,7 +335,7 @@ const MAX_NOTE = 600;
 export function readNotes(pm) { try { return fs.readFileSync(notesFile(pm), "utf8").split("\n").filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(n => n && n.slug && n.text && n.source); } catch { return []; } }
 const knownSlugs = (pm, K) => { const dir = rivalsDir(pm, K); return new Set([...Object.keys((K && K.rivals) || {}), ...rivalFiles(dir, { nested: dir !== path.join(pm, "rivals") }).map(f => path.basename(f).replace(/\.md$/i, ""))]); };
 export function addNote(pm, { slug, text, source, date }, { now = new Date() } = {}) {
-  const day = isoDay(now), S = httpUrl(source);
+  const day = localDayOf(now), S = httpUrl(source); // the owner's calendar day: a note dated today is not "in the future" at 02:00 east of UTC
   if (!S) return { code: 1, text: "A note needs a source: pass --source <http(s) address> of where it was published. A signal without a source is a rumour, so nothing was saved." };
   const body = String(text ?? "").replace(/\s+/g, " ").trim();
   if (!body) return { code: 1, text: "A note needs text: nosy rival-signals note <slug> \"<what you saw>\" --source <url>." };

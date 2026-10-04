@@ -6,6 +6,7 @@
 // and what shipped this week. Every string is cut to a budget; the long text stays below it on the page.
 // Reads pm/ only (matrix.json, state/*.json, learned outcomes via waves.json); the landing-roundup line comes from
 // next.mjs, which reads git. Every block is left out when its data is missing, never shown empty.
+import { readSourcesSafe, matrixFile } from "./sources-file.mjs";
 import fs from "node:fs"; import path from "node:path";
 import { nextDecision } from "./next-decision.mjs";
 import { thresholds } from "./thresholds.mjs";
@@ -28,7 +29,7 @@ const OWNER_CALL = /\b(owner)('s)? (call|decides|decision)\b|\bthe decision to\b
 const offMeta = r => { const t = String(r || ""); return /knowingly/.test(t) ? "your standing call" : /^matrix:/.test(t) ? "decided in the matrix" : /^decision:/.test(t) ? "decided" : /^signal:/.test(t) ? "not doing" : ""; };
 
 // refsOnly: the shipped tags name the references, not the commit subjects (what `nosy publish` sends).
-export function glance(pm, { M = readJson(path.join(pm, "matrix.json")), nextPicks = null, refsOnly = false } = {}) {
+export function glance(pm, { M = readJson(matrixFile(pm, readSourcesSafe(pm))), nextPicks = null, refsOnly = false } = {}) {
   const st = f => readJson(path.join(pm, "state", f));
   const W = st("waves.json"), F = st("psst-final.json"), T = st("team-next.json"), S = st("status.json");
   const G = {};

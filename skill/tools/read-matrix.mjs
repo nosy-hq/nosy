@@ -40,7 +40,7 @@ export function matrixRead(source, { codes } = {}) {
   const mapCode = v => (codes && v !== undefined && v !== null && !OWN.has(v) && Object.prototype.hasOwnProperty.call(codes, v) ? codes[v] : v);
   const mapCodes = o => (codes ? Object.fromEntries(Object.entries(o || {}).map(([k, v]) => [k, mapCode(v)])) : o || {});
   let M = source;
-  if (typeof source === "string") { try { M = JSON.parse(fs.readFileSync(source, "utf8")); } catch { return null; } }
+  if (typeof source === "string") { try { M = JSON.parse(fs.readFileSync(source, "utf8").replace(/^\uFEFF/, "")); } catch { return null; } } // a file saved with a BOM (Windows editors) is the same JSON; it was silently ignored
   if (!M || typeof M !== "object") return null;
   const rawLines = pick(M, "lines");
   if (Array.isArray(rawLines)) {

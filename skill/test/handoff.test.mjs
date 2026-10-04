@@ -581,3 +581,21 @@ test("handing an item off with --area records the area in the state file, also o
   const f = q.state().done.find(x => x.issue === 31);
   assert.ok(f && f.area === "12", "an item that is already an issue is remembered too");
 });
+
+test("--review --brief: only what a merged pull request closed, with its proposals; marks what is new since the last look; nothing at all when nothing merged", () => {
+  const p = product({ state: { done: [entry("k1", 7, { area: "12" }), entry("k2", 8, { area: "12" })] }, fixture: { views: { 7: closedBy(40, "customer") } } }); withMatrix(p);
+  const first = p.go("--review", "--brief");
+  assert.equal(first.status, 0, first.stderr);
+  assert.match(first.stdout, /- #7 Item 7: merged in #40 \(2026-10-02\) · new since the last look/);
+  assert.match(first.stdout, /Matrix area 12 \(Task distribution, assignment to people\): Nosy p → y\?/);
+  assert.doesNotMatch(first.stdout, /#8 Item 8/, "an open one is not shown");
+  assert.doesNotMatch(first.stdout, /\| Issue \|/, "no table");
+  const second = p.go("--review", "--brief");
+  assert.doesNotMatch(second.stdout, /new since the last look/, "seen once, no longer new");
+  assert.equal(p.writes().length, 0);
+  const none = product({ state: { done: [entry("k1", 7)] } });
+  const r = none.go("--review", "--brief");
+  assert.equal(r.status, 0); assert.equal(r.stdout, ""); assert.equal(r.stderr, "");
+  const empty = product(); const e = empty.go("--review", "--brief");
+  assert.equal(e.stdout, ""); assert.equal(e.stderr, "", "nothing handed off yet is silent in brief mode");
+});

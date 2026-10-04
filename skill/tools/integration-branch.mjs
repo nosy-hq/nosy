@@ -65,3 +65,11 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
   console.error(`${self} is a library used by ${callers.join(", ") || "no other tool"}; did you mean \`nosy peek\` or \`node skill/tools/collect-status.mjs\`?`);
   process.exit(1);
 }
+
+// The ref to read for an integration branch: `origin/<branch>` when it exists here, else the local branch of that name, else `fallback`. A repo with no `origin` (or another remote
+// name) and `integrationBranch: "develop"` made `peek` and `shipped` fail with "ambiguous argument 'origin/develop'" and a hint that blamed `ref` (field-test hunt).
+export function refFor(repo, branch, fallback) {
+  const has = r => { try { execFileSync("git", ["-C", repo || ".", "rev-parse", "--verify", "--quiet", `${r}^{commit}`], { stdio: ["ignore", "pipe", "ignore"] }); return true; } catch { return false; } };
+  for (const r of [`origin/${branch}`, branch]) if (has(r)) return r;
+  return fallback;
+}

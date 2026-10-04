@@ -37,6 +37,12 @@ let cleanValueOf = null;
 // --- base helpers ---
 const read = f => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
 const zamanStampOf = () => new Date().toISOString().slice(0, 16).replace(":", "");
+// Only folders named like a snapshot (2026-10-04T1230, or with a -2 suffix for a second one in the same minute) are snapshots.
+// pm/history also holds other things (watch/, the matrix-before-build-*.json backups): treating every directory as a snapshot
+// made `watch/` the "latest snapshot" (it sorts after the timestamps) and produced a huge false diff, and `--clean` could delete it.
+const SnapshotName = /^\d{4}-\d{2}-\d{2}T\d{4}(?:-\d+)?$/;
+const snapshotFolders = historyDirectory => fs.existsSync(historyDirectory)
+  ? fs.readdirSync(historyDirectory, { withFileTypes: true }).filter(d => d.isDirectory() && SnapshotName.test(d.name)).map(d => d.name).sort() : [];
 const stampDateOf = name => { const m = String(name).match(/^(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})$/); return m ? Date.parse(`${m[1]}T${m[2]}:${m[3]}:00Z`) : Date.parse(name); };
 // Snapshot files and the key each one gets in a package (explicit, so file names and accessors can't drift apart).
 const STATUS_FILES = { "status.json": "status", "lowhanging.json": "lowHanging", "signals.json": "signal", "waves.json": "waves", "size.json": "size", "inventory.json": "inventory" };
@@ -201,14 +207,14 @@ function age(historyDirectory, currentLowHanging, keys) {
 
 // --- save: take a snapshot, append a line to runs.jsonl, clean up old ones if asked ---
 function clean(historyDirectory, n) {
-  const folders = fs.readdirSync(historyDirectory, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name).sort();
+  const folders = snapshotFolders(historyDirectory);
   const toBeDeleted = folders.slice(0, Math.max(0, folders.length - n));
   for (const name of toBeDeleted) { const goal = path.join(historyDirectory, name); if (path.dirname(goal) === historyDirectory) fs.rmSync(goal, { recursive: true, force: true }); }
   console.log(`clean: deleted ${toBeDeleted.length} old records (kept ${n})${toBeDeleted.length ? ": " + toBeDeleted.join(", ") : ""}`);
 }
 function saveRun() {
   const historyDirectory = path.join(pm, "history"); fs.mkdirSync(historyDirectory, { recursive: true });
-  const folders = fs.readdirSync(historyDirectory, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name).sort();
+  const folders = snapshotFolders(historyDirectory);
   const lastFolder = folders.at(-1) || null;
   const livePackage = noktaRead(null), freshSummary = contentSummary(livePackage);
   const lastSummary = lastFolder ? contentSummary(noktaRead(path.join(historyDirectory, lastFolder))) : null;
@@ -259,7 +265,7 @@ function printMarkdown(previous, current, shown, moreCount, pendingOnes, hiddenO
 }
 function diffRun() {
   const historyDirectory = path.join(pm, "history");
-  const folders = fs.existsSync(historyDirectory) ? fs.readdirSync(historyDirectory, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name).sort() : [];
+  const folders = snapshotFolders(historyDirectory);
   const lastFolder = folders.at(-1) || null;
   const livePackage = noktaRead(null), lastPackage = lastFolder ? noktaRead(path.join(historyDirectory, lastFolder)) : null;
   let currentLabel, currentPackage, previousLabel, previousPackage;

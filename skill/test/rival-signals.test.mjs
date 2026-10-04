@@ -7,6 +7,8 @@ import { LABEL, parseInclude, makeContext, readSignals, jobPostingsIn, previousO
   signalsIn, initProposal, renderInit, addNote, readNotes, renderNotes, notesFile, historyFile, USER_AGENT } from "../tools/rival-signals.mjs";
 import { demandInputs } from "../tools/demand.mjs";
 import { run, temporary, clean, Tool } from "./helpers.mjs";
+// The fixtures are UTC instants and "the same day" means the same calendar day: pin the owner's zone, so the suite gives one answer in every zone it is run under.
+process.env.NOSY_TZ = "UTC";
 
 const NOW = new Date("2026-10-03T09:00:00Z");
 const res = (status, body, headers = {}) => ({ status, headers: { get: k => headers[k.toLowerCase()] ?? null }, text: async () => typeof body === "string" ? body : JSON.stringify(body) });

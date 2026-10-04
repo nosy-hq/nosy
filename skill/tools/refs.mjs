@@ -15,7 +15,7 @@ export const Default = [
   "#\\d+",
   "§\\d+[a-z]?",
   "\\bK\\d{2,3}(?:\\s*m\\.\\s*\\d+(?:[-–,]\\s*(?:m\\.)?\\d+)*)?",
-  "\\b[A-Z][A-Z0-9]{1,9}-\\d+\\b",
+  "\\b(?!(?:UTF|SHA|ISO|RFC|HTTP|TLS|SSL|AES|RSA|MD|IPV|WPA|TCP|UDP|MP|CRC|EBCDIC)-)[A-Z][A-Z0-9]{1,9}-\\d+\\b", // PROJ-123 style keys; not UTF-8, SHA-256, ISO-8601, HTTP-2 (encodings and standards read as requests: psst called a comment "held on purpose")
   "\\bnb-\\d{6}-[a-z0-9]+(?:-[a-z0-9]+){0,3}\\b", // bet ids (N3): bet.mjs's nb-<yyMMdd>-<slug>
 ];
 

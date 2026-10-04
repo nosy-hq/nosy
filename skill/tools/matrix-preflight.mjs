@@ -16,12 +16,28 @@ import { matrixRead } from "./read-matrix.mjs";
 const VALID = new Set(["y", "p", "n", "u", "d"]);
 const codeOf = v => (v && typeof v === "object" ? v.k : v);
 
+// The own-product column (BlogFactory incident, 4 Oct 2026). A step-shaped matrix with rows but no `biz` (or one with no name or no codes at all) was accepted, drawn as
+// "0 of 6 done, lead -4.5" and published: an unconfigured input shown as a measured score. Everything that reads a matrix asks this one question. Not for the line shape
+// (its own product is the first column of `products`) and not for a matrix with no rows yet (a new product has nothing to compare). Cells missing from a valid `biz.codes`
+// are fine: they read as unknown.
+export function ownColumnProblem(M) {
+  if (!M || typeof M !== "object" || !Array.isArray(M.steps) || !M.steps.length) return null;
+  const biz = M.biz, codes = biz && typeof biz === "object" ? biz.codes : null;
+  const why = biz == null ? "biz is empty" : typeof biz !== "object" || Array.isArray(biz) ? "biz isn't an object" : !String(biz.name ?? "").trim() ? "biz has no name" : !codes || typeof codes !== "object" || Array.isArray(codes) || !Object.keys(codes).length ? "biz has no codes" : null;
+  if (!why) return null;
+  return { rows: M.steps.length, why, reason: "own-column",
+    problem: `pm/matrix.json has ${M.steps.length} rows but no usable column for your own product (${why}), so the dashboard would show the product itself with 0 done and every comparison as a real score. Nothing was sent.`,
+    fix: "put it back from the newest pm/history/matrix-before-build-*.json (its `biz` key), or write pm/us.json ({\"name\": \"…\", \"codes\": {\"1\": \"y\", …}}) and rebuild the matrix, then publish again" };
+}
+
 export function preflightMatrix(text, { codes = {} } = {}) {
   let M;
   try { M = JSON.parse(String(text).replace(/^﻿/, "")); }
   catch (e) { // where the parser stopped, not the text around it (the message quotes a piece of the file)
     const at = String(e.message).match(/position \d+(?: \(line \d+ column \d+\))?/)?.[0];
     return { ok: false, problem: `pm/matrix.json isn't valid JSON${at ? ` (${at})` : ""}. Fix that spot, then publish again.` }; }
+  const own = ownColumnProblem(M);
+  if (own) return { ok: false, reason: own.reason, rows: own.rows, why: own.why, problem: `${own.problem} To fix: ${own.fix}.`, fix: own.fix };
   let raw;
   try { raw = matrixRead(M); }
   catch { return { ok: false, problem: "pm/matrix.json has a row or a product that is not an object (a null, a number, a string where a row should be), so the dashboard could not draw it. `nosy doctor --check` shows what it found." }; }

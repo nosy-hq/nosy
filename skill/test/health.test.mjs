@@ -273,3 +273,18 @@ test("a matrix file that can't be read, or whose reader throws, is one warning a
   assert.ok(line(R, /optional setup:/), "and the check went on");
   assert.equal(exitCode(R), 0, "a damaged matrix is a warning, not a hard failure");
 });
+
+// BlogFactory field test (3 Oct): an own column of `biz: null` passed every structural check, and the page showed the product as "0 done".
+test("pm/ contents: a matrix with rows but no own-product column is a warning that says how to put it back", async () => {
+  const root = plugin(), cwd = tmp("nosy-cwd-");
+  put(cwd, { "a.txt": "x" }); git(cwd, "init", "-q", "-b", "main"); git(cwd, "add", "-A"); git(cwd, "commit", "-qm", "first");
+  const matrix = biz => ({ update: "2026-10-04", codes: { y: "exists" }, steps: [{ no: "1", name: "Draft" }, { no: "2", name: "Review" }], biz, products: [{ name: "Rival", codes: { 1: { k: "y", evidence: "x" }, 2: { k: "n", evidence: "" } } }] });
+  put(cwd, { "pm/sources.json": { repo: ".", ref: "main" }, "pm/matrix.json": matrix(null) });
+  const R = await checkPlugin(root, { cwd });
+  const l = line(R, /has 2 rows but no column for your own product/);
+  assert.ok(l, R.lines.map(x => x.what).join(" | ")); assert.equal(l.level, "warn");
+  assert.match(l.fix, /matrix-before-build-\*\.json.*us\.json/);
+  assert.equal(exitCode(R), 0, "a warning, not a hard failure");
+  put(cwd, { "pm/matrix.json": matrix({ name: "Us", codes: { 1: "y", 2: "y" } }) });
+  assert.equal(line(await checkPlugin(root, { cwd }), /no column for your own product/), undefined, "no warning when the column is there");
+});

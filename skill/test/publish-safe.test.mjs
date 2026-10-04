@@ -8,7 +8,7 @@ import http from "node:http";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { temporary, clean, Tool } from "./helpers.mjs";
-import { safeStatus, safeDiff, safeLowhanging, safePsstFinal, finalIsCurrent, safeSummary, safeRuns, safeGlance, withoutIssueTitle, authorNames, branchNames, safeRoadmap, safeRivalSignals, safeSignalSource, SignalKeys, SignalHosts, PayloadKeys } from "../tools/publish-safe.mjs";
+import { safeStatus, safeDiff, safeLowhanging, safePsstFinal, finalIsCurrent, safeSummary, safeRuns, safeGlance, withoutIssueTitle, authorNames, branchNames, safeRoadmap, safeRivalSignals, safeFrontier, safeSignalSource, SignalKeys, SignalHosts, PayloadKeys } from "../tools/publish-safe.mjs";
 
 const PUBLISH = path.join(Tool, "publish.mjs");
 let tmp, pm, server, url, got;
@@ -384,4 +384,32 @@ test("unit: the payload list names both files and says what they carry", () => {
   assert.match(PayloadKeys["pm/state/roadmap.json"], /title, #N reference, GitHub issue or PR link/);
   assert.match(PayloadKeys["pm/state/rival-signals.json"], /never your own notes on a rival/);
   assert.match(PayloadKeys["pm/state/rival-signals.json"], /App Store rating, open roles/);
+});
+
+// ---- state/frontier.json: atlas's matrix, cut down -----------------------------------------------------------------------------------------------
+const FRONTIER = { generatedAt: "2026-10-03", days: 90, axes: ["Data", "Market"], ranked: [{ candidate: "A" }], notRanked: [{ candidate: "B", slug: "b", why: ["x"] }], candidates: [
+  { candidate: "Georgia", slug: "georgia", owner: "no (3 Oct, in my own words: too small, call Ahmet)", readOn: "2026-10-03", verifiedOn: "2026-10-04", score: 4.25, read: 2, of: 3, rankable: true, notRankedBecause: [],
+    cells: [{ axis: "Data", score: 4, grade: "read", date: "2026-10-03", basis: "https://secret.example/page SECRET-LINE", stale: false, ageDays: 0, counts: true, problems: [] },
+      { axis: "Market", score: 9, grade: "bogus", date: "not a date", basis: "x", stale: true, counts: false, problems: ["a long warning with words"] }], warnings: ["warning words"] },
+  { candidate: "B".repeat(200), owner: "undecided", cells: "nope" }, null, 7, { candidate: "  " }] };
+
+test("safeFrontier: names, scores, grades and dates stay; the basis of a score, the words behind a decision and warnings never do", () => {
+  const R = safeFrontier(FRONTIER), g = R.candidates[0];
+  assert.equal(R.type, "frontier"); assert.equal(R.generated, "2026-10-03"); assert.deepEqual(R.axes, ["Data", "Market"]);
+  assert.equal(g.candidate, "Georgia"); assert.equal(g.owner, "no", "the word, not the sentence"); assert.equal(g.score, 4.25); assert.equal(g.rankable, true); assert.equal(g.verifiedOn, "2026-10-04");
+  assert.deepEqual(g.cells[0], { axis: "Data", score: 4, grade: "read", date: "2026-10-03", stale: false, counts: true });
+  assert.deepEqual(g.cells[1], { axis: "Market", score: null, grade: "judgment", date: null, stale: true, counts: false }, "a score outside 1-5, an unknown grade and a bad date are not passed on");
+  const text = JSON.stringify(R);
+  for (const leaked of ["secret.example", "SECRET-LINE", "Ahmet", "in my own words", "warning words", "ageDays", "warnings", "basis", "ranked\""]) assert.ok(!text.includes(leaked), `leaked: ${leaked}`);
+});
+
+test("safeFrontier: hostile and odd input is cut down or dropped, never thrown on, never grown", () => {
+  const R = safeFrontier(FRONTIER);
+  assert.equal(R.candidates.length, 2, "null, numbers and a blank name are dropped");
+  assert.equal(R.candidates[1].candidate.length, 80); assert.deepEqual(R.candidates[1].cells, []); assert.match(R.candidates[1].slug, /^candidate-2$/); assert.equal(R.candidates[1].owner, "undecided");
+  const big = safeFrontier({ axes: Array.from({ length: 50 }, (_, i) => `A${i}`), candidates: Array.from({ length: 500 }, (_, i) => ({ candidate: `C${i}`, cells: Array.from({ length: 40 }, (_, j) => ({ axis: `A${j}`, score: 3 })) })) });
+  assert.equal(big.candidates.length, 60); assert.equal(big.axes.length, 12); assert.equal(big.candidates[0].cells.length, 12);
+  assert.equal(safeFrontier({ candidates: [] }).days, 90);
+  for (const bad of [null, 7, "x", [], {}, { candidates: null }, { candidates: {} }]) assert.throws(() => safeFrontier(bad), /not a frontier file/, JSON.stringify(bad));
+  assert.match(PayloadKeys["pm/state/frontier.json"], /never the basis of a score, the report text or your words behind a decision/);
 });

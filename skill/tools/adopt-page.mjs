@@ -3,7 +3,7 @@
 // Usage: node adopt-page.mjs adopt   <pm> [--page <file>] [--dry-run] [--apply --yes]
 //        node adopt-page.mjs refresh <pm> [--page <file>] [--dry-run]
 //        node adopt-page.mjs undo    <pm> [--page <file>] [--force]
-//   adopt    reads the page (default <pm>/page.html), finds its tables (HTML <table> elements, and `const NAME = [ {…}, … ]` arrays inside
+//   adopt    reads the page (default: the one sources.json or product.md names, else <pm>/page.html), finds its tables (HTML <table> elements, and `const NAME = [ {…}, … ]` arrays inside
 //            <script>) and says, for each, which Nosy data could feed it: "your table -> Nosy source -> N rows match, M differ". It matches
 //            by what is IN the table (an identity column whose cells are the step numbers / feature names / PR numbers / titles Nosy has,
 //            then the other columns by their values), never by the words of the headers alone, so a page in any language works. A table it
@@ -21,7 +21,7 @@
 //   listed as stale wording. Report only; the owner's prose is never rewritten.
 // No dependencies; git and gh only for that last check, and only when present.
 import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { fileURLToPath } from "node:url";
-import { readSourcesSafe } from "./sources-file.mjs"; import { matrixRead } from "./read-matrix.mjs"; import { esc } from "./html-safe.mjs"; import { nosyCommand } from "./hints.mjs";
+import { readSourcesSafe } from "./sources-file.mjs"; import { pagePath, builtByNosy } from "./page-path.mjs"; import { matrixRead } from "./read-matrix.mjs"; import { esc } from "./html-safe.mjs"; import { nosyCommand } from "./hints.mjs";
 
 const BACKUP = ".backup";
 const readJson = f => { try { return JSON.parse(fs.readFileSync(f, "utf8").replace(/^\uFEFF/, "")); } catch { return null; } };
@@ -327,8 +327,12 @@ const staleReport = (list, K) => !list.length ? "" : `\nStale wording (the page 
 const row = (...c) => `| ${c.join(" | ")} |`;
 const clip = (s, n) => { s = String(s ?? ""); return s.length > n ? `${s.slice(0, n - 1)}…` : s; };
 const headers = T => !T.cols.length ? "…" : T.kind === "js" ? `{ ${T.cols.slice(0, 5).map(c => c.header).join(", ")}${T.cols.length > 5 ? ", …" : ""} }` : T.cols.slice(0, 5).map(c => clip(c.header || `col ${c.loc + 1}`, 18)).join(", ");
+// The page Nosy builds (`nosy page`) has empty <table> shells and a data block (`const D={"steps":…}`) that its own script draws from when it opens, so there is nothing
+// in the HTML to adopt. It was reported as "3 tables found, none can be fed" (BlogFactory field test); it is said as what it is.
 function adopt(pm, page, { apply, dryRun, yes }) {
-  const html = fs.readFileSync(page, "utf8"), K = readSourcesSafe(pm), DS = datasets(pm, K), lines = lineIndex(html), tables = findTables(html), adopted = markedRegions(html);
+  const html = fs.readFileSync(page, "utf8");
+  if (builtByNosy(html)) { process.stdout.write(`# Adopting ${path.basename(page)}\n\nThis page is built by \`nosy page\` from pm/ and draws its tables from its own data when it opens, so there is nothing to adopt: it is current whenever it is rebuilt. \`page-adopt\` is for a page you made by hand.\n`); return 0; }
+  const K = readSourcesSafe(pm), DS = datasets(pm, K), lines = lineIndex(html), tables = findTables(html), adopted = markedRegions(html);
   const results = tables.map(T => ({ T, ...analyze(T, DS, K) }));
   const matched = results.filter(r => r.match);
   let o = `# Adopting ${path.basename(page)}: ${tables.length + adopted.length} table${tables.length + adopted.length === 1 ? "" : "s"} found${adopted.length ? ` (${adopted.length} already adopted)` : ""}, ${matched.length} can be fed from Nosy data\n\n`;
@@ -342,7 +346,7 @@ function adopt(pm, page, { apply, dryRun, yes }) {
     }
     for (const r of matched) { const m = r.match, left = r.T.cols.filter(c => c.loc !== m.kc.loc && !m.bound.some(b => b.loc === c.loc)); o += `\n${r.T.name}: fed columns ${m.bound.map(b => `${b.header || `col ${b.loc + 1}`} (${b.field.replace(/^code:/, "")})`).join(", ") || "none besides the key"}${left.length ? `; left alone: ${left.map(c => c.header || `col ${c.loc + 1}`).join(", ")}` : ""}`; }
     o += "\n";
-  } else if (!adopted.length) o += "No tables on the page.\n";
+  } else if (!adopted.length) o += "No <table> and no `const NAME = [ {…}, … ]` array of rows on the page: nothing here for Nosy to feed.\n";
   const cells = pageCells(html, [...tables, ...adopted.map(a => regionTable(html, a, lines).T).filter(T => T && !T.problem)], lines);
   const stale = K ? staleWording(cells, K) : [];
   o += staleReport(stale, K);
@@ -499,7 +503,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
   const dryRun = flag("--dry-run"), apply = flag("--apply"), yes = flag("--yes"), force = flag("--force"), pageArg = opt("--page"), [sub, pm = "pm"] = argv;
   const usage = () => { console.error("Usage: node adopt-page.mjs adopt|refresh|undo <pm folder> [--page <file>] [--dry-run] [--apply --yes] [--force]"); process.exit(1); };
   if (!["adopt", "refresh", "undo"].includes(sub) || pageArg === "") usage();
-  const page = pageArg || path.join(pm, "page.html");
+  const page = pageArg || pagePath(pm, readSourcesSafe(pm)).path;
   if (sub !== "undo" && !fs.existsSync(page)) { console.error(`No page at ${page}; pass --page <file>.`); process.exit(1); }
   if (!fs.existsSync(pm)) { console.error(`No pm folder at ${pm}.`); process.exit(1); }
   process.exitCode = sub === "adopt" ? adopt(pm, page, { apply, dryRun, yes }) : sub === "refresh" ? refresh(pm, page, { dryRun }) : undo(pm, pageArg, { force });

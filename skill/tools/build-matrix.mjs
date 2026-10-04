@@ -6,6 +6,7 @@
 // field is missing, old (19-row) files still work: no Status means "active", no announcement leaves the text empty.
 // Code "d": announced but not usable today (coming soon, waitlist, invite-only beta).
 // Doesn't count as "exists".
+import { localDay } from "./today.mjs";
 import fs from "node:fs"; import path from "node:path";
 const pm = process.argv[2] || "pm";
 const dir = path.join(pm, "rivals");
@@ -101,12 +102,22 @@ if (!products.length) {
 }
 for (const s of existing?.steps || []) if (s && s.no != null && !steps.has(String(s.no))) steps.set(String(s.no), s.name);
 const usPath = path.join(pm, "us.json");
-const us = fs.existsSync(usPath) ? JSON.parse(fs.readFileSync(usPath, "utf8")) : null;
+// Our own column: pm/us.json when there is one; otherwise the one already in matrix.json (move-in writes it inline there). A rebuild
+// from the rival files must never drop it: with no us.json this wrote `biz: null` and the page showed "0 done" for the product itself.
+// pm/us.json wins for the name and the codes; what only matrix.json holds (the owner's decided-against map `declined`, `notes`, any key we don't know) is kept.
+const usFile = fs.existsSync(usPath) ? JSON.parse(fs.readFileSync(usPath, "utf8")) : null, was = existing?.biz && typeof existing.biz === "object" ? existing.biz : null;
+const us = usFile ? (was ? { ...was, ...usFile, ...(was.notes || usFile.notes ? { notes: { ...(was.notes || {}), ...(usFile.notes || {}) } } : {}), ...(was.declined || usFile.declined ? { declined: { ...(was.declined || {}), ...(usFile.declined || {}) } } : {}) } : usFile) : (existing?.biz ?? null);
+// Products the owner put in matrix.json that have no rival file (written by hand, or from an earlier layout) are kept as they are; the rival files add and update, never remove.
+const fileNames = new Set(products.map(u => String(u.name).toLowerCase()));
+const handKept = (Array.isArray(existing?.products) ? existing.products : []).filter(u => u && typeof u === "object" && u.name && !fileNames.has(String(u.name).toLowerCase()));
+if (handKept.length) console.log(`kept ${handKept.length} product${handKept.length === 1 ? "" : "s"} that ${handKept.length === 1 ? "has" : "have"} no rival file: ${handKept.map(u => u.name).join(", ")}`);
+if (!fs.existsSync(usPath) && existing?.biz) console.log("our own column kept from the existing matrix.json (no pm/us.json)");
+if (!us) console.error("Psst… the matrix has no column for your own product: there is no pm/us.json and no `biz` in matrix.json. The rivals are written, but the page would show the product itself with 0 done and `nosy publish` will stop until it is set: write pm/us.json ({\"name\": \"…\", \"codes\": {\"1\": \"y\", …}}), or put `biz` back from pm/history/matrix-before-build-*.json.");
 const out = {
-  update: new Date().toISOString().slice(0, 10),
+  update: localDay(),
   codes: { y: "exists", p: "partial", n: "missing", u: "notFound", d: "announced, not shipped" },
   steps: [...steps].sort((a, b) => a[0] - b[0]).map(([no, nameValue]) => ({ no, name: nameValue })),
-  biz: us, products: products,
+  biz: us, products: [...products, ...handKept],
 };
 if (fs.existsSync(target)) {
   const before = fs.readFileSync(target, "utf8"), after = JSON.stringify(out, null, 1);
@@ -118,3 +129,5 @@ if (fs.existsSync(target)) {
 }
 fs.writeFileSync(target, JSON.stringify(out, null, 1));
 console.log(`${products.length} products, ${out.steps.length} steps -> ${path.join(pm, "matrix.json")}`);
+// A matrix kept in the line shape (`lines` with a code per product) is rebuilt as the step shape: its rows are not copied. The old file is in pm/history/, said here so it isn't a surprise (field-test hunt).
+if (existing && Array.isArray(existing.lines) && !Array.isArray(existing.steps)) console.error("Psst… pm/matrix.json was in the line shape (lines with a code per product); it is now the step shape built from the rival files. Rows, `declined` flags and decisions that only the old file had were not copied: the old file is the matrix-before-build copy in pm/history/ (see above).");

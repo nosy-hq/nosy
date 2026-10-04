@@ -14,9 +14,20 @@ import fs from "node:fs"; import path from "node:path"; import { execFileSync } 
 import { advice, sourcesProblem } from "./hints.mjs";
 import { readSources } from "./sources-file.mjs";
 
-export function rulesOf(K) {
-  return (K?.preread?.never || []).flatMap(r => { try { return [{ name: r.name || r.pattern, pattern: r.pattern, re: new RegExp(r.pattern, "i") }]; } catch { return []; } });
+// The rules that can be used, and the ones that can't, with why. A rule with a broken regex, or written as a plain word instead of {name, pattern}, was dropped without a
+// word, and the check then said "No never rules": a rule the owner wrote was silently not enforced (field-test hunt). A plain string is read as a literal word; an unusable
+// rule is reported.
+export function rulesAndProblems(K) {
+  const raw = K?.preread?.never, list = Array.isArray(raw) ? raw : raw == null ? [] : [raw], rules = [], invalid = [];
+  list.forEach((r, i) => {
+    const obj = typeof r === "string" ? { name: r, pattern: r.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") } : r;
+    const name = String(obj?.name || obj?.pattern || `rule ${i + 1}`);
+    if (!obj || typeof obj !== "object" || typeof obj.pattern !== "string" || !obj.pattern) { invalid.push({ name, why: "no `pattern` (a rule is { \"name\": \"…\", \"pattern\": \"<regex>\" })" }); return; }
+    try { rules.push({ name: obj.name || obj.pattern, pattern: obj.pattern, re: new RegExp(obj.pattern, "i") }); } catch (e) { invalid.push({ name, why: `the pattern isn't a valid regular expression (${String(e.message).replace(/^Invalid regular expression: /, "")})` }); }
+  });
+  return { rules, invalid };
 }
+export const rulesOf = K => rulesAndProblems(K).rules;
 
 // Unified diff (-U0) → added lines with their file and new line number.
 export function addedLines(diff) {
@@ -33,13 +44,16 @@ export function addedLines(diff) {
 
 const isDocOrPm = f => /\.(md|mdx|txt|rst|adoc)$/i.test(f) || /^pm\//.test(f);
 
+// An added line that NEGATES a rule is not adding it: a comment ("// we deliberately do not use Stripe here") or a test that asserts the dependency is absent (`not.toContain`,
+// `without`, `no longer`). A comment that merely mentions the thing, and every code or config line, count as before.
+const negatedAround = (text, re) => { const m = re.exec(text); if (!m) return false; const before = text.slice(Math.max(0, m.index - 40), m.index); return /\b(?:not|never|no longer|without|n't|isn't|absent|forbid\w*|reject\w*)\W+(?:\w+\W+){0,3}$/i.test(before) || /\.\s*not\.\s*to/i.test(before) || /\bnot\.toContain\b|\bnot\.to\w+/.test(text.slice(0, m.index + m[0].length + 20)); };
 export function check(K, diff, { allFiles = false } = {}) {
-  const rules = rulesOf(K), hits = [];
+  const { rules, invalid } = rulesAndProblems(K), hits = [];
   for (const a of addedLines(diff)) {
     if (!allFiles && isDocOrPm(a.file)) continue;
-    for (const r of rules) if (r.re.test(a.text)) hits.push({ rule: r.name, file: a.file, line: a.line, text: a.text.trim().slice(0, 160) });
+    for (const r of rules) if (r.re.test(a.text) && !negatedAround(a.text, new RegExp(r.re.source, "i"))) hits.push({ rule: r.name, file: a.file, line: a.line, text: a.text.trim().slice(0, 160) });
   }
-  return { rules: rules.length, hits };
+  return { rules: rules.length, hits, invalid };
 }
 
 export function diffOf(repo, { mode = "staged", base = null } = {}) {
@@ -74,6 +88,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
   const R = check(K, diff, { allFiles });
   if (jsonOut) { fs.mkdirSync(path.dirname(jsonOut), { recursive: true }); fs.writeFileSync(jsonOut, JSON.stringify({ type: "never-check", generated: new Date().toISOString(), mode, base: mode === "base" ? ref : null, ...R }, null, 1)); }
   const what = mode === "base" ? `the branch's changes since ${ref}` : mode === "last-commit" ? "the last commit's changes" : mode === "worktree" ? "the changes" : "the staged changes";
-  console.log(!R.rules ? "No never rules in sources.json (preread.never): nothing to check." : R.hits.length ? render(R, { what }) : `No never rule matched in ${what} (${R.rules} rule${R.rules === 1 ? "" : "s"}).`);
-  process.exitCode = R.hits.length ? 2 : 0;
+  if (R.invalid.length) console.error(`Psst… ${R.invalid.length} never rule${R.invalid.length === 1 ? " is" : "s are"} not being enforced: ${R.invalid.map(x => `"${x.name}": ${x.why}`).join("; ")}. Fix it in sources.json (preread.never).`);
+  console.log(!R.rules ? (R.invalid.length ? "No usable never rule: nothing was checked." : "No never rules in sources.json (preread.never): nothing to check.") : R.hits.length ? render(R, { what }) : `No never rule matched in ${what} (${R.rules} rule${R.rules === 1 ? "" : "s"}).`);
+  process.exitCode = R.hits.length ? 2 : R.invalid.length ? 1 : 0;
 }

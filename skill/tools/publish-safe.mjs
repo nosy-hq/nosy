@@ -250,5 +250,32 @@ export const PayloadKeys = {
   "pm/state/rival-demand.json": "computed, only if you ran `nosy rival-demand`: titles, vote counts and links of open issues and Discussions on your open-source rivals' own public trackers (their public data, not yours), and which rivals share an ask",
   "pm/state/roadmap.json": "computed, only if you ran `nosy roadmap`: the lines of your ROADMAP.md as title, #N reference, GitHub issue or PR link and (shipped lines) a date, plus the file's path and how many lines it keeps private; nothing else from the file",
   "pm/state/rival-signals.json": "computed, only if you ran `nosy rival-signals`: public numbers about each rival (GitHub stars, forks, releases and commits, npm downloads, App Store rating, open roles) with the earlier value, its date and the public address it came from, and which numbers could not be read; never your own notes on a rival (pm/signal/)",
+  "pm/state/frontier.json": "computed, only if you ran `nosy atlas`: the candidate × axis matrix: axes, and per candidate its name, your decision as one word, read and verified dates, score, how many axes are graded read, whether it is ranked and why not, and per axis the score, grade, date and stale flag; never the basis of a score, the report text or your words behind a decision",
   "pm/state/demand.json": "computed: counts per goal from your matrix and psst items, sources by format, hidden counts; no quotes, no customer names",
 };
+
+// ---- state/frontier.json: `atlas`'s candidate × axis matrix (atlas-matrix.mjs). Cloud reads the axes and, per candidate, its name (your own word, like a matrix row),
+// your decision as one word (yes, no or undecided: never the words you gave), when it was read and verified, the score, how many axes were graded `read` of how many,
+// whether it is ranked and the tool's own reasons why not, and per axis the score, grade, date and whether it is stale. Never a cell's `basis` (the line or the URL
+// a score rests on), never the report text, never a warning's wording. Scores only count when they are 1 to 5. ----
+const GRADES = ["read", "snippet", "unreadable", "terms-unread", "judgment"];
+export function safeFrontier(F) {
+  if (!F || typeof F !== "object" || Array.isArray(F) || !Array.isArray(F.candidates)) throw new Error("not a frontier file (no candidates)");
+  const score = v => (typeof v === "number" && Number.isFinite(v) && v >= 1 && v <= 5 ? Math.round(v * 100) / 100 : null);
+  const slugOf = (c, i) => (typeof c.slug === "string" && /^[a-z0-9][a-z0-9-]{0,79}$/.test(c.slug) ? c.slug : `candidate-${i + 1}`);
+  const candidates = F.candidates.slice(0, 60).map((c, i) => {
+    if (!c || typeof c !== "object") return null;
+    const name = cut(c.candidate, 80);
+    if (!name) return null;
+    const cells = (Array.isArray(c.cells) ? c.cells : []).slice(0, 12).map(x => {
+      if (!x || typeof x !== "object") return null;
+      const axis = cut(x.axis, 40);
+      return axis ? { axis, score: score(x.score), grade: GRADES.includes(x.grade) ? x.grade : "judgment", date: day(x.date), stale: x.stale === true, counts: x.counts === true } : null;
+    }).filter(Boolean);
+    const owner = /^(yes|no|undecided)\b/i.exec(String(c.owner ?? "").trim());
+    return { candidate: name, slug: slugOf(c, i), owner: owner ? owner[1].toLowerCase() : "undecided", readOn: day(c.readOn), verifiedOn: day(c.verifiedOn), score: score(c.score),
+      read: count(c.read), of: count(c.of), rankable: c.rankable === true, why: (Array.isArray(c.notRankedBecause) ? c.notRankedBecause : []).slice(0, 6).map(w => cut(w, 160)).filter(Boolean), cells };
+  }).filter(Boolean);
+  return { type: "frontier", generated: day(F.generatedAt) || stamp(F.generatedAt), days: count(F.days) || 90,
+    axes: (Array.isArray(F.axes) ? F.axes : []).slice(0, 12).map(a => cut(a, 40)).filter(Boolean), candidates };
+}

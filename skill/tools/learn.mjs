@@ -5,6 +5,8 @@
 // Patterns: CodeRabbit "Learnings" (a fix goes into persistent memory, never flagged again), Kiro steering/Crew
 // ("a fix turns into a persistent rule"), Visualping 👍/👎 (task-specific "important" learning), Linear
 // accept/dismiss + opt-in auto-apply, DeepWiki's hand-editable steering file (repo_notes).
+import { localDayOf } from "./today.mjs";
+import { refuseDamaged } from "./owner-json.mjs";
 import fs from "node:fs"; import path from "node:path"; import { createHash } from "node:crypto";
 import { readSources } from "./sources-file.mjs";
 
@@ -19,7 +21,7 @@ const error = m => { console.error(`Error: ${m}`); process.exit(1); };
 if (!pmDir || !command) error('usage: learn.mjs <pm> <mute|knowingly|important|reject|list|remove|apply|suggest> ...');
 
 const now = () => new Date().toISOString();
-const today = () => now().slice(0, 10);
+const today = () => localDayOf(new Date()); // the owner's day (rules are dated and expire by calendar day)
 const dayDiffOf = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
 const small = s => String(s ?? "").toLocaleLowerCase("tr");
 // lowhanging.mjs's add() function appends " (in #438)" and " · in PR" to items touching an open PR; stripped before matching.
@@ -32,7 +34,7 @@ const equalRef = (a, b) => small(plain(a)).replace(/\s+/g, "") === small(plain(b
 
 const filePath = path.join(pmDir, "learned.json");
 const read = () => { try { return JSON.parse(fs.readFileSync(filePath, "utf8")); } catch { return { version: 1, rules: [] }; } };
-const write = rules => fs.writeFileSync(filePath, JSON.stringify({ version: 1, rules }, null, 1));
+const write = rules => { refuseDamaged(filePath); const old = read(); fs.writeFileSync(filePath, JSON.stringify({ ...(old && typeof old === "object" ? old : {}), version: 1, rules }, null, 1)); }; // a damaged file is refused, and a key this tool doesn't know is kept
 const writeJson = (file, data) => { if (file) fs.writeFileSync(file, JSON.stringify(data, null, 1)); };
 // id is short and stable: kind + a key digest. type/reason/duration/who are updatable fields; if the key+kind match, no duplicate opens.
 const shortId = (tip, key) => `${tip}-${createHash("sha1").update(`${tip}:${REGEX_FORMAT_OF.test(key) ? key : small(plain(key))}`).digest("hex").slice(0, 8)}`;
@@ -44,7 +46,7 @@ function ruleAdd(tip) {
   const { rules } = read();
   const id = shortId(tip, key);
   const existing = rules.find(k => k.id === id);
-  const end = argDuration ? new Date(Date.now() + Number(argDuration) * 864e5).toISOString().slice(0, 10) : (existing?.end ?? null);
+  const end = argDuration ? localDayOf(Date.now() + Number(argDuration) * 864e5) : (existing?.end ?? null);
   const current = { id, tip, key, type: argType || existing?.type || "all", reason: argReason || existing?.reason || "", who: argWho || existing?.who || null, date: today(), end, match: existing?.match || 0, last_match: existing?.last_match || null };
   if (existing) Object.assign(existing, current); else rules.push(current);
   write(rules);
@@ -63,7 +65,7 @@ function rejectAdd() {
   const { rules } = read();
   const id = shortId("reject", `${small(plain(argContext))}::${key}`);
   const existing = rules.find(k => k.id === id);
-  const end = argDuration ? new Date(Date.now() + Number(argDuration) * 864e5).toISOString().slice(0, 10) : (existing?.end ?? null);
+  const end = argDuration ? localDayOf(Date.now() + Number(argDuration) * 864e5) : (existing?.end ?? null);
   const current = { id, tip: "reject", key, context: argContext, type: argType || existing?.type || "all", reason: argReason || existing?.reason || "", who: argWho || existing?.who || null, date: today(), end, match: existing?.match || 0, last_match: existing?.last_match || null };
   if (existing) Object.assign(existing, current); else rules.push(current);
   write(rules);

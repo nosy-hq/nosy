@@ -28,6 +28,7 @@
 // Language: the block's fixed phrases come from skill/data/lang/<code>/roadmap.json (`--lang`, else sources.json `language`, else English; an unknown
 // language is English with one stderr line). The marker comments stay English.
 // Only the block between <!-- nosy:roadmap --> and <!-- /nosy:roadmap --> is Nosy's; the rest of the file stays as written.
+import { localDayOf } from "./today.mjs";
 import fs from "node:fs"; import path from "node:path"; import os from "node:os"; import { execFileSync, spawnSync } from "node:child_process"; import { fileURLToPath } from "node:url";
 import { readSourcesSafe } from "./sources-file.mjs";
 import { nosyCommand } from "./hints.mjs";
@@ -95,8 +96,8 @@ export function model({ waves, cfg, repoUrl = null, merged = [], tags = [], now 
   }
   const since = now - cfg.shipped.days * 864e5, clean = s => String(s).replace(/\s+/g, " ").trim();
   const prs = merged.filter(p => p && p.title && Date.parse(p.mergedAt) >= since).sort((a, b) => Date.parse(b.mergedAt) - Date.parse(a.mergedAt));
-  out.shipped = prs.slice(0, cfg.shipped.max).map(p => ({ title: clean(p.title), ref: `#${p.number}`, url: repoUrl ? `${repoUrl}/pull/${p.number}` : null, date: String(p.mergedAt).slice(0, 10) }));
-  if (!out.shipped.length) out.shipped = tags.filter(t => Date.parse(t.date) >= since).slice(0, cfg.shipped.max).map(t => ({ title: clean(t.name), ref: null, url: null, date: String(t.date).slice(0, 10) }));
+  out.shipped = prs.slice(0, cfg.shipped.max).map(p => ({ title: clean(p.title), ref: `#${p.number}`, url: repoUrl ? `${repoUrl}/pull/${p.number}` : null, date: localDayOf(p.mergedAt) || String(p.mergedAt).slice(0, 10) }));
+  if (!out.shipped.length) out.shipped = tags.filter(t => Date.parse(t.date) >= since).slice(0, cfg.shipped.max).map(t => ({ title: clean(t.name), ref: null, url: null, date: localDayOf(t.date) || String(t.date).slice(0, 10) }));
   return out;
 }
 
@@ -256,7 +257,7 @@ export function build(pm, { now = Date.now(), lang = null, gh = null } = {}) {
   if (!curated?.sections && !waves?.waves) return { error: `No ${path.join(pm, "state", "waves.json")}: run scoop first (the roadmap is built from its waves).`, warnings };
   const repo = path.resolve(K.repo || "."), repoUrl = repoUrlOf(K), source = curated?.sections ? cfg.source : "evidence", P = phrases(lang || K.language, w => warnings.push(w));
   const m = model({ waves, cfg, repoUrl, merged: mergedPrs(K, cfg.shipped.days), tags: tagList(repo), now, curated: curated?.sections || null });
-  const day = new Date(now).toISOString().slice(0, 10), block = render(m, { day, P, source }), json = jsonOf(m, { now, path: cfg.path });
+  const day = localDayOf(now), block = render(m, { day, P, source }), json = jsonOf(m, { now, path: cfg.path });
   return { K, cfg, repo, m, day, block, json, now, source, warnings, notes: curated && !curated.sections ? curated.warnings.map(w => w.replace(/^Psst… /, "")) : [] };
 }
 

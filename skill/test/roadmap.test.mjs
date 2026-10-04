@@ -1,5 +1,6 @@
 // roadmap.mjs: the roadmap lives in the repo. Now / Next / Later from scoop's waves become a block of ROADMAP.md,
 // proposed as a PR from a throwaway worktree; merging is the approval. Real git (a bare remote), a fake `gh`, temp folders only.
+import { localDay } from "../tools/today.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -8,7 +9,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { model, render, splice, blockOf, changes, configOf, lineOf, lineFor, tidy, jsonOf, phrases, readGithub, scan, HEAD, FOOT } from "../tools/roadmap.mjs";
 import { run, temporary, clean, Tool } from "./helpers.mjs";
 
-const ROADMAP = path.join(Tool, "roadmap.mjs"), dirs = [], today = new Date().toISOString().slice(0, 10);
+const ROADMAP = path.join(Tool, "roadmap.mjs"), dirs = [], today = localDay();
 after(() => dirs.forEach(clean));
 const ID = { GIT_AUTHOR_NAME: "Ada", GIT_AUTHOR_EMAIL: "ada@example.test", GIT_COMMITTER_NAME: "Ada", GIT_COMMITTER_EMAIL: "ada@example.test", GIT_TERMINAL_PROMPT: "0" };
 const task = (title, extra = {}) => ({ title, ref: null, type: "Checked by psst", score: 9, effort: "M", reason_now: "Acme asked twice, ada@example.test", evidenceList: ["apps/web/secret-path.ts:12"], day: 3, ...extra });

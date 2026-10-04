@@ -149,6 +149,33 @@ test("the roadmap and the rival signals go up only if you made them, cut to what
   } finally { for (const f of ["roadmap.json", "rival-signals.json"]) fs.rmSync(path.join(pm, "state", f), { force: true }); fs.rmSync(path.join(pm, "signal"), { recursive: true, force: true }); }
 });
 
+test("the atlas matrix goes up only if you made it, cut to scores, grades and dates; the basis of a score and the words behind a decision stay home", async () => {
+  const before = await run([pm, "--url", url, "--dry-run", "--full"]);
+  assert.ok(!before.output.includes("frontier.json"), "no file, nothing sent");
+  fs.writeFileSync(path.join(pm, "state", "frontier.json"), JSON.stringify({ generatedAt: "2026-10-03", days: 90, axes: ["Data", "Market"], ranked: [], notRanked: [], candidates: [
+    { candidate: "Georgia", slug: "georgia", owner: "no (said in my own words zq-decision-words)", readOn: "2026-10-03", verifiedOn: null, score: 3.5, read: 0, of: 2, rankable: false, notRankedBecause: ["only 0 of 2 axes are graded read (half are needed)"],
+      cells: [{ axis: "Data", score: 3, grade: "judgment", date: "2026-10-03", basis: "zq-basis-line https://example.test/zq", stale: false, ageDays: 0, counts: false, problems: [] }] }] }));
+  try {
+    const after = await run([pm, "--url", url, "--dry-run", "--full"]);
+    assert.equal(after.code, 0, after.error);
+    assert.match(after.output, /pm\/state\/frontier\.json \([\d.]+ KB\): computed, only if you ran `nosy atlas`/);
+    assert.match(after.output, /apart from pm\/state\/frontier\.json: the candidate names, scores, grades and dates of your `atlas` matrix/);
+    assert.ok(!after.output.includes("zq-basis-line") && !after.output.includes("zq-decision-words") && !after.output.includes("example.test/zq"), "the basis and the decision words never leave");
+    const sent = JSON.parse(after.output.split("--- pm/state/frontier.json ---\n")[1].split("\n---")[0].trim());
+    assert.equal(sent.candidates[0].owner, "no"); assert.equal(sent.candidates[0].cells[0].grade, "judgment");
+    got = null;
+    const r = await run([pm, "--url", url, "--yes"], { NOSY_CLOUD_TOKEN: "nsy_good" });
+    assert.equal(r.code, 0, r.error);
+    assert.ok("pm/state/frontier.json" in got.body.files);
+    fs.writeFileSync(path.join(pm, "state", "frontier.json"), JSON.stringify({ candidates: "no" }));
+    got = null;
+    const bad = await run([pm, "--url", url, "--yes"], { NOSY_CLOUD_TOKEN: "nsy_good" });
+    assert.equal(bad.code, 0, bad.error);
+    assert.match(bad.error, /\(frontier\.json skipped: not a frontier file/);
+    assert.ok(!("pm/state/frontier.json" in got.body.files));
+  } finally { fs.rmSync(path.join(pm, "state", "frontier.json"), { force: true }); }
+});
+
 // ---- the token is read from a file, never from the command line ----
 // On the first real run the key was typed into a command, so it stayed in the shell history and in the chat log. The environment still
 // works; a file is now the better way, and a file other users can read is refused before anything is sent.

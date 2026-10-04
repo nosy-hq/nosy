@@ -24,6 +24,11 @@ const SKIP_NAME = /(^|\/)(readme|changelog|changes|history|license|licence|contr
 // Agent instruction folders (a skill's commands/ and agents/ specs, .claude/, .cursor/) are specs, not notes: on Nosy's own repo
 // they won the "most edited" count.
 const SKIP_DIR = /(^|\/)(node_modules|vendor|\.yarn|dist|build|\.github|\.claude|\.cursor|commands|agents|prompts|templates)\//;
+// A next step is something to do: a checkbox left open, a TODO, a question, a "should / needs to / next / not yet". An architecture page says what IS
+// ("Production runs the Hono app with Bun", "This repository is the canonical shared core") and cites the code just as often, so on BlogFactory those
+// sentences came out as the team's next list and went on into psst, the handoff and the weekly message. English and Turkish cues (the notes can be in
+// either); a file the owner named (sources.json next.path) is never filtered: that is their word that it is a list of next steps.
+const ACTION = /\[ \]|\?|\b(?:todo|fixme|wip|next|later|soon|need(?:s|ed)?\s+to|should|must|will|plan(?:ned)?|wire|add|fix|implement|build|ship|migrate|remove|rename|replace|decide|decision|open question|blocked|pending|missing|not yet|follow-?up|in progress|investigate|verify|refactor|enable|disable|support|to do)\b|yap(?:ılacak|ılmalı|ilacak|ilmali)|eklen|düzelt|bağla|gerek|lazım|henüz|sırada|sonra|planla|karar|bekle|eksik/i;
 const CITE = /`[^`\n]*[\w-]+\/[\w./-]+`|`[\w.-]+\.[a-z]{1,5}(:\d+)?`|\b[\w./-]+\.[a-z]{1,5}:\d+|`[0-9a-f]{7,12}`/;
 
 // The team's working notes, found by structure (find-sources proposes them, teamNext falls back on them).
@@ -38,10 +43,20 @@ export function findNextDocs(repo, ref = "HEAD", { day = 14, own = [] } = {}) {
   for (const f of [...counts.keys()]) if (/^---\s*\n[\s\S]*?\n---/.test(git("show", `${ref}:${f}`).slice(0, 2000))) counts.delete(f);
   const tracked = new Set(git("ls-tree", "-r", "--name-only", ref).split("\n").filter(Boolean)), trackedList = [...tracked];
   const real = p => { const q = p.replace(/^[`(./]+/, ""); return tracked.has(q) || trackedList.some(t => t.endsWith("/" + q)); };
-  const realCites = f => git("show", `${ref}:${f}`).split(/\n\s*\n/).filter(para => (para.match(/[\w@~.-]*\/[\w@~./-]+\.[a-z]{1,5}/g) || []).some(real)).length;
-  const scored = [...counts].filter(([, c]) => c >= 5).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([f, c]) => [f, c, realCites(f)]).filter(x => x[2] >= 5).sort((a, b) => b[1] * b[2] - a[1] * a[2]);
-  return { files: scored.slice(0, 2).map(x => x[0]), candidates: scored.map(([file, commits, cites]) => ({ file, commits, cites })),
-    found: scored.length ? `auto (confirm with the owner): ${scored.slice(0, 2).map(([f, c, r]) => `${f} edited in ${c} commits, ${r} paragraphs cite the code`).join("; ")}` : "none" };
+  const citing = f => git("show", `${ref}:${f}`).split(/\n\s*\n/).filter(para => (para.match(/[\w@~.-]*\/[\w@~./-]+\.[a-z]{1,5}/g) || []).some(real));
+  const realCites = f => citing(f).length;
+  // A page that only describes how things are (an architecture page, an operations guide) is edited often and cites the code on every line, and was proposed as the
+  // team's working notes (BlogFactory field test). Working notes are about things to do: at least three of the paragraphs that cite code must carry a doing cue (an
+  // open checkbox, a TODO, "needs to", "next", a decision or request ref). A file that fails that is not proposed; `rejected` says why, so find-sources can show it.
+  // A doing cue, an open checkbox, a bold lead title (the way notes head a step) or a decision/request ref (K12, #40): the same signals teamNext keeps an item for.
+  const stepLike = para => ACTION.test(para) || /\[ \]/.test(para) || /\*\*[^*]{4,160}\*\*/.test(para) || /(?:^|[\s(])(?:#\d+|[A-Z]{1,5}-?\d+)\b/.test(para);
+  const actionable = f => citing(f).filter(stepLike).length;
+  const rejected = [];
+  const scored = [...counts].filter(([, c]) => c >= 5).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([f, c]) => [f, c, realCites(f)]).filter(x => x[2] >= 5)
+    .map(([f, c, r]) => [f, c, r, actionable(f)]).filter(x => { if (x[3] >= 3) return true; rejected.push({ file: x[0], commits: x[1], cites: x[2], actionable: x[3], why: "reads as a description of how things are: fewer than 3 code-citing paragraphs say something is to be done" }); return false; })
+    .sort((a, b) => b[1] * b[2] - a[1] * a[2]);
+  return { files: scored.slice(0, 2).map(x => x[0]), candidates: scored.map(([file, commits, cites, doing]) => ({ file, commits, cites, actionable: doing })), ...(rejected.length ? { rejected } : {}),
+    found: scored.length ? `auto (confirm with the owner): ${scored.slice(0, 2).map(([f, c, r, a]) => `${f} edited in ${c} commits, ${r} paragraphs cite the code (${a} say something is to be done)`).join("; ")}` : "none" };
 }
 
 export function teamNext(pm, { day = 14 } = {}) {
@@ -60,7 +75,7 @@ export function teamNext(pm, { day = 14 } = {}) {
   }
 
   const refRe = refRegex(patternsOfLoad(K));
-  const items = [], datedBy = {};
+  const items = [], datedBy = {}; let declarative = 0;
   for (const file of files) {
     const text = git("show", `${ref}:${file}`); if (!text) continue;
     const lines = text.replace(/\n$/, "").split("\n"); // blame counts lines without the final newline
@@ -96,7 +111,11 @@ export function teamNext(pm, { day = 14 } = {}) {
       const title = (bold || body.replace(/^[-*\d.)\s]+/, "").split(/(?<=[.!?:])\s/)[0]).replace(/[`*]/g, "").slice(0, 110).trim();
       const cited = [...new Set((body.match(/[\w@~.-]*\/[\w@~./-]+\.[a-z]{1,5}(?::\d+)?|\b[\w.-]+\.(?:go|ts|tsx|js|mjs|py|rb|rs|java|kt|swift|sql|yaml|yml|json)(?::\d+)?/g) || []).map(p => p.replace(/^[`(]|[`),.;]$/g, "")))].slice(0, 6);
       refRe.lastIndex = 0;
-      items.push({ file, line: at, title, date: new Date(last).toISOString().slice(0, 10), time: last, cited, refs: [...new Set(body.match(refRe) || [])].slice(0, 4), text: body.slice(0, 600) });
+      const refs = [...new Set(body.match(refRe) || [])].slice(0, 4);
+      // A step has a verb of doing, or is tied to a decision or request (K12, #40), or leads with a bold title the way notes do ("**Wire the matter link.**").
+      // Otherwise it is a sentence about how things are, and in a file nobody named as the team's list it is skipped (and counted, not hidden).
+      if (found !== "sources.json" && !ACTION.test(body) && !refs.length && !bold) { declarative++; return; }
+      items.push({ file, line: at, title, date: new Date(last).toISOString().slice(0, 10), time: last, cited, refs, text: body.slice(0, 600) });
     };
     lines.forEach((l, i) => {
       if (/^\s*```/.test(l)) { flush(); fence = !fence; return; }
@@ -111,7 +130,7 @@ export function teamNext(pm, { day = 14 } = {}) {
     flush();
   }
   items.sort((a, b) => b.time - a.time);
-  return { type: "teamNext", generated: new Date().toISOString(), ref, files, found, dated: datedBy, items: items.slice(0, 12).map(({ time, ...x }) => x) };
+  return { type: "teamNext", generated: new Date().toISOString(), ref, files, found, dated: datedBy, items: items.slice(0, 12).map(({ time, ...x }) => x), ...(declarative ? { skippedDeclarative: declarative } : {}) };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

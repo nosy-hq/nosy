@@ -8,6 +8,8 @@ import { run, temporary, clean, Tool } from "./helpers.mjs";
 import { todoId, todoParse, todoRender, todoSummary, todoLine, todoLoad } from "../tools/todo.mjs";
 import { glance, renderGlance } from "../tools/glance.mjs";
 import { safeGlance } from "../tools/publish-safe.mjs";
+// The fixtures are UTC instants and calendar days: pin the owner's zone so the suite answers the same under every zone it is run in.
+process.env.NOSY_TZ = "UTC";
 
 const TODO = path.join(Tool, "todo.mjs"), NOSY = path.join(Tool, "nosy.mjs"), MCP = path.join(Tool, "mcp.mjs");
 const HOOK = path.join(Tool, "..", "..", "hooks", "psst-summary.mjs");

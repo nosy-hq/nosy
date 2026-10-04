@@ -24,7 +24,8 @@ const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // Japanese product). A state word alone isn't enough: `NotReadyNextStep` or `PendingInvites` are runtime states the
 // user sees, not unbuilt work (the first product's NotReadyNextStep was the first false positive), so the state word has to sit
 // next to Backend/Api/Server/Endpoint, or be one of the few names that only ever mean "not built".
-const MARKER_NAME = /(Pending|Awaiting|Waiting|Missing|NotReady|Todo|Stub|Mock)(Backend|Api|Server|Endpoint)|^(Backend|Api|Server|Endpoint)(Pending|Missing|Stub|NotReady|Todo)|^(ComingSoon|NotImplemented|Unimplemented)[A-Z]?\w*$/;
+// Anchored at the start of the name, and the state word must be followed by Backend/Api/Server/Endpoint and nothing that makes it another thing: `MissingApiKeyBanner` (a banner that asks for an API key) is a runtime message, not a screen waiting for the backend.
+const MARKER_NAME = /^(Pending|Awaiting|Waiting|Missing|NotReady|Todo|Stub|Mock)(Backend|Api|Server|Endpoint)(?!Key|Token|Secret|Credential|Config|Setting|Error|Url|Status)|^(Backend|Api|Server|Endpoint)(Pending|Missing|Stub|NotReady|Todo)|^(ComingSoon|NotImplemented|Unimplemented)[A-Z]?\w*$/;
 const MARKER_GREP = "(function|const|class)[[:space:]]+[A-Za-z0-9]*(Backend|Api|Server|Endpoint|ComingSoon|NotImplemented|Unimplemented)";
 // Test and Storybook scaffolding isn't a screen: on Twenty the "screens on mock data" were testing/decorators/*.tsx
 //.

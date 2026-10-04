@@ -109,7 +109,7 @@ function main(argv) {
   const jsonFile = al("--json"), nowArg = al("--now"), days = Number(al("--days") ?? STALE_DAYS), [pm] = argv;
   if (!pm || !(days > 0) || (nowArg && !isDate(nowArg))) { console.error("Usage: atlas-matrix.mjs <pm> [--json file] [--now YYYY-MM-DD] [--days N]"); return 1; }
   const fs_ = files(path.join(pm, "atlas"));
-  if (!fs_.length) { console.error(`Psst… no reports in ${path.join(pm, "atlas")}. Run \`atlas\` first: one nosy-scout per candidate writes pm/atlas/<slug>.md (templates/market.md).`); return 1; }
+  if (!fs_.length) { console.error(`Psst… no reports in ${path.join(pm, "atlas")} yet. This command only ranks the reports: the research that writes them is the atlas step in your agent (/nosy:atlas in Claude Code, \`$nosy atlas\` in Codex, /nosy atlas elsewhere), where one nosy-scout per candidate writes pm/atlas/<slug>.md (templates/market.md). Run that, then this again.`); return 1; }
   const m = build(fs_.map(f => parseReport(fs.readFileSync(f, "utf8"), f)), { now: nowArg ? Date.parse(nowArg) : Date.now(), days });
   console.log(render(m, days));
   if (jsonFile) { fs.mkdirSync(path.dirname(path.resolve(jsonFile)), { recursive: true }); fs.writeFileSync(jsonFile, JSON.stringify({ generatedAt: new Date(nowArg ? Date.parse(nowArg) : Date.now()).toISOString().slice(0, 10), days, ...m }, null, 1) + "\n"); console.log(`\nWrote ${jsonFile}`); }

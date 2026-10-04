@@ -8,6 +8,8 @@ import { tour, render, TOKENS_PER_RIVAL } from "../tools/tour.mjs";
 import { next } from "../tools/next.mjs";
 import { run, temporary, clean, Tool } from "./helpers.mjs";
 
+// A researched rival file: a coded row and a source. A file with just "x" in it is a new stub, which needs a pass however recently it was written.
+const RESEARCHED = "# R\n\n## Feature matrix\n\n| # | Step | Code | Evidence |\n|---|---|---|---|\n| 1 | Export | y | https://example.com/d |\n\n## Sources\n- https://example.com/d (2026-10-01)\n";
 const dirs = [];
 after(() => dirs.forEach(clean));
 const NOW = Date.parse("2026-10-02T12:00:00Z");
@@ -61,7 +63,7 @@ test("what pm/ already holds is not run again: fresh outputs are ✓, and the ri
     "map.md": "# map", "state/facts.md": "x", "state/inventory.json": {}, "state/shipped.json": { generated: "2026-10-02T08:00:00Z" },
     "state/lowhanging.json": { generated: "2026-10-02T08:00:00Z" }, "state/psst-final.json": { generated: "2026-10-02T09:00:00Z" },
     "state/waves.json": { generated: "2026-10-02T10:00:00Z" }, "page.html": "<html>",
-    "rivals/acme.md": "x", "rivals/beta.md": "x", "rivals/gamma.md": "x",
+    "rivals/acme.md": RESEARCHED, "rivals/beta.md": RESEARCHED, "rivals/gamma.md": RESEARCHED,
     "state/watch.json": { rivals: [{ slug: "acme", state: "changed" }, { slug: "beta", state: "same" }, { slug: "gamma", state: "error" }] },
   });
   for (const f of ["state/facts.md", "page.html", "rivals/acme.md", "rivals/beta.md", "rivals/gamma.md"]) at(pm, f, "2026-10-02T11:30:00Z");

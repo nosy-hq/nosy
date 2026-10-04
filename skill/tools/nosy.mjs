@@ -5,6 +5,7 @@
 // Usage: node nosy.mjs <command> [--pm <pm folder>] [...]      (via npx: `npx nosy <command>`)
 // Commands: next (the default), tour, roadmap, facts, find, sweep, matrix-proposals, tiers, atlas, cite-check, team-next, fields, receipts, refute, decision, nudge, install, update, uninstall, doctor, setup, check, explain, shipped, ship-notes, handoff, board-status, peek, inventory, gates, metrics, frontyard, signals, watch, rival-demand, rival-signals, psst, bet, score, todo, canwe, notes, page, page-adopt, weekly, notify, publish, mcp, help.
 // No dependencies; uses git and (if present) gh. The commands that write outward are `notify` (only to the given webhook), `ship-notes --yes` (one comment per issue that asked, on GitHub), `handoff --yes` (one issue, its assignee and project card, on GitHub) and `publish` (opt-in: counts and structure only, to a Nosy Cloud you configured, after the privacy scan); `watch` only reads public rival pages (plain GET).
+import { localDay, localDayOf } from "./today.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -13,6 +14,7 @@ import { demandInputs, interviewInputs } from "./demand.mjs";
 import { advice, cleanTrace, closest, nosyCommand, nosyPrefix, oldLayout, repoProblem, sourcesProblem } from "./hints.mjs";
 import { versionOf } from "./loaded.mjs";
 import { readSources, findPm } from "./sources-file.mjs";
+import { pagePath } from "./page-path.mjs";
 
 const Tool = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -26,7 +28,9 @@ const since = al("--since"), target = al("--for"), short = flag("--short"), scor
 flag("--all"); flag("--decision"); // older flags: the full cycle and the decision page are the defaults again
 const [given = "next", ...args] = argv;
 const command = ["--version", "-v", "-V"].includes(given) ? "version" : ["--help", "-h"].includes(given) ? "help" : given;
-const today = new Date().toISOString().slice(0, 10);
+// sources.json `timezone` (an IANA name, e.g. "Europe/Istanbul") fixes the calendar day for this run and for every script it starts; NOSY_TZ wins.
+if (!process.env.NOSY_TZ) { try { const z = readSources(pm)?.timezone; if (typeof z === "string" && z.trim()) process.env.NOSY_TZ = z.trim(); } catch { /* no sources.json yet */ } }
+const today = localDay();
 
 const sources = () => { try { return readSources(pm); } catch { return null; } };
 const statusWrite = (name, content) => { fs.mkdirSync(path.join(pm, "state"), { recursive: true }); fs.writeFileSync(path.join(pm, "state", name), content); };
@@ -37,7 +41,7 @@ const localize = text => {
   const prefix = nosyPrefix(); if (prefix === "nosy" || !text) return text;
   return text.replace(new RegExp("`nosy (" + [...Object.keys(Commands), "help"].join("|") + ")\\b([^`\\n]*)`", "g"), (_, c, rest) => "`" + prefix + " " + c + rest + "`");
 };
-const NoStateDir = new Set(["adopt-page.mjs", "tour.mjs", "rivals-import.mjs", "doctor.mjs", "health.mjs", "find-sources.mjs", "install.mjs", "git-hooks.mjs", "explain.mjs", "next.mjs", "verify-setup.mjs", "atlas-seed.mjs"]);
+const NoStateDir = new Set(["adopt-page.mjs", "tour.mjs", "rivals-import.mjs", "doctor.mjs", "health.mjs", "find-sources.mjs", "install.mjs", "git-hooks.mjs", "explain.mjs", "next.mjs", "verify-setup.mjs", "atlas-seed.mjs", "page-validate.mjs", "rivals-week.mjs", "sweep-reconcile.mjs", "history-import.mjs", "rival-universe.mjs"]);
 // Runs a script; prints its output or (silently) returns it. Never throws, returns the exit code instead.
 function script(name, a = [], { silent = false } = {}) {
   // A fresh repo has no pm/state yet: every step writes there (first-run `nosy inventory` / `nosy shipped` used to crash).
@@ -61,7 +65,15 @@ function sourceRequired({ repo = true } = {}) {
   return false;
 }
 // "7d" / "30d" → date; a date or ref is passed through unchanged.
-const start = s => { const m = /^(\d+)d$/.exec(s || "7d"); return m ? new Date(Date.now() - m[1] * 864e5).toISOString().slice(0, 10) : s; };
+const start = s => { const m = /^(\d+)d$/.exec(s || "7d"); return m ? localDayOf(Date.now() - m[1] * 864e5) : s; };
+// `--days N` is how recent, sweep, atlas and ship-notes spell a window, so peek and notes take it too: it was read as a git ref and failed with `--days..origin/main`
+// (BlogFactory field test). Returns "Nd" and takes the flag out of args; a flag without a number is said, not guessed.
+const windowFlag = () => {
+  const i = args.indexOf("--days"); if (i < 0) return null;
+  const n = args[i + 1];
+  if (!/^\d+$/.test(n || "") || +n < 1) { console.error("Psst… --days needs a number of days, like `--days 30` (or give a window as 30d, a date or a git ref)."); process.exitCode = 1; return "bad"; }
+  args.splice(i, 2); return `${n}d`;
+};
 
 const Commands = {
   // No command (or `next`): the 2-3 front-door steps worth running now, each with its reason, then the grouped menu.
@@ -99,9 +111,9 @@ const Commands = {
   // setup also opens an empty matrix (the product's own column, no rows yet) so `nosy check` doesn't fail on a missing
   // file right after setup; move-in step 4 or neighbors fills the rows and the rival columns.
   setup: () => {
-    const r = script("find-sources.mjs", [args[0] || ".", "--pm", pm, "--write"]);
+    const r = script("find-sources.mjs", [args[0] || ".", "--pm", pm, "--write", ...args.slice(1)]); // --onTop and the like reach find-sources (they were dropped, and its hint pointed at them)
     const mx = path.join(pm, "matrix.json");
-    if (fs.existsSync(path.join(pm, "sources.json")) && !fs.existsSync(mx)) {
+    if (r && r.code === 0 && fs.existsSync(path.join(pm, "sources.json")) && !fs.existsSync(mx)) { // only after a setup that worked
       let name = path.basename(path.resolve(args[0] || "."));
       try { name = JSON.parse(fs.readFileSync(path.join(args[0] || ".", "package.json"), "utf8")).name?.replace(/^@[^/]+\//, "") || name; } catch {}
       fs.writeFileSync(mx, JSON.stringify({ steps: [], biz: { name, codes: {} }, products: [] }, null, 1) + "\n");
@@ -217,11 +229,12 @@ const Commands = {
   peek: () => {
     if (!sourceRequired()) return;
     // No end-ref given: collect-status.mjs detects the integration branch itself from --pm's sources.json.
-    const K = sources(), r = script("collect-status.mjs", [K.repo || ".", start(since || args[0]), "--pm", pm, "--json", path.join(pm, "state", "status.json")]);
+    const win = windowFlag(); if (win === "bad") return;
+    const K = sources(), r = script("collect-status.mjs", [K.repo || ".", start(since || win || args[0]), "--pm", pm, "--json", path.join(pm, "state", "status.json")]);
     if (r.code === 0 && r.output) statusWrite(`${today}-delivery.md`, r.output);
     return r;
   },
-  notes: () => sourceRequired() && script("write-notes.mjs", [pm, start(since || args[0]), "--audience", target || "customer"]),
+  notes: () => { if (!sourceRequired()) return; const win = windowFlag(); if (win === "bad") return; return script("write-notes.mjs", [pm, start(since || win || args[0]), "--audience", target || "customer"]); },
   // Recency (wave N2): merged since the last run (incremental, pm/history/runs.jsonl) + open PRs close to
   // merging (approved / green CI), each tied to its decision/request/issue via refs.mjs. `overheard`'s
   // "which decision does this PR serve" question now lives here as a standing view.
@@ -266,6 +279,11 @@ const Commands = {
       process.stdout.write(r.stdout || ""); if (r.status !== 0) console.log(notRead(r.stderr || "gh failed"));
       else { explicitShipped = shippedCountOf(r.stdout); explicitSource = K.issue.repo; }
     } else if (!K.issue?.repo && !K.preread?.decisions) console.log("(no GitHub repo and no decisions doc in sources.json: the record below uses the references in commits and merges only)");
+    // What was handed off and has been merged since (handoff.mjs --review --brief): silent when nothing was, never fatal, nothing written to GitHub or the matrix.
+    if (K.issue?.repo && !process.env.NOSY_OFFLINE && fs.existsSync(path.join(pm, "state", "handoff.json"))) {
+      const h = spawnSync(process.execPath, [path.join(Tool, "handoff.mjs"), pm, "--review", "--brief"], { encoding: "utf8", maxBuffer: 16 << 20 });
+      if (h.status === 0 && h.stdout.trim()) { console.log("\n── Handed off, and now merged ──"); process.stdout.write(h.stdout); }
+    }
     console.log("\n── Work that landed, by reference (any ref-tagged commit — not the same question as above) ──");
     codes.push(Commands.peek()?.code ?? 1);
     if (explicitShipped === 0) {
@@ -289,8 +307,19 @@ const Commands = {
   handoff: () => sourceRequired() && script("handoff.mjs", [pm, ...args]),
   // The week as a status update on the Projects board the roadmap reads (board-status.mjs): previewed, posted only with --yes, once per ISO week.
   "board-status": () => sourceRequired() && script("board-status.mjs", [pm, ...args]),
+  // Where the decision page is, as a path from here (the Action and scripts ask this instead of guessing pm/page.html).
+  "page-path": () => { const f = pagePath(pm, sources()).path, real = x => { try { return fs.realpathSync.native(x); } catch { return path.join(fs.realpathSync.native(path.dirname(x)), path.basename(x)); } }; let r; try { r = path.relative(fs.realpathSync.native(process.cwd()), real(f)); } catch { r = path.relative(process.cwd(), f); } console.log(r && !r.startsWith("..") ? r : f); }, // relative when it is under here (a /var → /private/var link must not make it ../../..)
+  // What rivals did lately, as the page draws it (pm/state/rivals-this-week.json, rivals-week.mjs): says what the page will show and what was left out.
+  "rivals-week": () => script("rivals-week.mjs", [pm, ...args]),
+  // The market, not just the researched rivals (rival-universe.mjs): coverage and whether the discovery search may stop.
+  universe: () => script("rival-universe.mjs", [pm, ...args]),
+  // The repository's past before Nosy arrived (history-import.mjs): 30 or 90 days of commits, tags and, with gh, merged PRs. Local; a different thing from Nosy's own snapshots.
+  history: () => { if (!sourceRequired()) return; const a = [...args], i = a.findIndex(x => /^\d+d$/.test(x)); if (i >= 0) a.splice(i, 1, "--days", a[i].slice(0, -1)); return script("history-import.mjs", [pm, ...a]); }, // `nosy history 90d` or `--days 90`
+  // Does what the rival files say agree with what the sweep just read? (sweep-reconcile.mjs) A rival whose newest swept entry is later than its file's "Latest major announcement" is behind.
+  "sweep-check": () => sourceRequired({ repo: false }) && script("sweep-reconcile.mjs", [pm, "--json", path.join(pm, "state", "sweep-reconcile.json"), ...args]),
   // The page: the decision page by default (tea); --scoreboard builds the bets/shipped scoreboard from pm/state/shipped.json.
   page: () => {
+    if (args[0] === "validate") return script("page-validate.mjs", [pm, ...args.slice(1)]); // one command that checks the page (page-validate.mjs)
     // No pm/ at all: say so and how to make one, instead of failing on the file it can't write.
     if (!fs.existsSync(pm) || (!fs.existsSync(path.join(pm, "sources.json")) && oldLayout(pm).length)) { console.error(`Psst… ${sourcesProblem(pm)}`); process.exitCode = 1; return; }
     // The scoreboard is its own file (pm/scoreboard.html): it never overwrites the decision page.
@@ -298,7 +327,7 @@ const Commands = {
       if (fs.existsSync(path.join(pm, "state", "shipped.json"))) return script("scoreboard.mjs", [pm, args[0] || path.join(pm, "scoreboard.html")]);
       console.log(`(no record yet: pm/state/shipped.json is written by \`${nosyCommand("shipped")}\`; building the decision page instead)`);
     }
-    return script("build-page.mjs", [pm, args[0] || path.join(pm, "page.html")]);
+    { const force = args.includes("--force"), a = args.filter(x => x !== "--force"); return script("build-page.mjs", [pm, a[0] || pagePath(pm, sources()).path, ...(force ? ["--force"] : [])]); }
   },
   // A hand-built page: adopt finds its tables and says which Nosy data could feed each (read only; --apply --yes
   // marks them), refresh rewrites only the marked tables from the current data, undo puts the newest page backup back (adopt-page.mjs).
@@ -382,7 +411,12 @@ Model-free counts (judgment stays with the agent; these just gather evidence):
   nosy canwe "<question>"  an evidence skeleton for "can we do this?"
   nosy notes [7d] [--for customer|team|manager]   shareable release notes
   nosy recent [--since d|date] [--days N] [--branch b]   merged since the last run + close to merging
-  nosy page [output.html]  the decision page (default pm/page.html); --scoreboard: the bets/shipped scoreboard (default pm/scoreboard.html)
+  nosy page validate [--page file] [--json f]   check the page: it is there, its scripts parse, our own column is in the data, no stale lines, the privacy scan
+  nosy sweep-check   compare the last nosy sweep with each rival file's "Latest major announcement": a rival whose newest entry is later is behind, and the file may not say "nothing new" about it
+  nosy history [30d|90d]   the repository's past before Nosy arrived: commits by week and area, tags, and with gh the merged PRs and issue counts → pm/state/history.json + history.md (local; not Nosy's own snapshots)
+  nosy universe   every rival-shaped product found, researched or not (pm/state/rival-universe.json): coverage, and whether the search may stop (two searches in a row that add nothing, or you say stop)
+  nosy rivals-week   what the page's "Rivals this week" box will show, from pm/state/rivals-this-week.json (a line without a source and a day is left out)
+  nosy page [output.html] [--force]  the decision page (default: the page named in sources.json (page) or product.md's Page line, else pm/page.html); --scoreboard: the bets/shipped scoreboard (default pm/scoreboard.html)
   nosy page-adopt adopt|refresh|undo   keep a hand-built page current: adopt lists its tables and the Nosy data that fits each (--apply --yes marks them), refresh rewrites only the marked tables, undo restores the page backup
   nosy watch               which rivals' public pages changed since the last run
   nosy rival-signals [run|init|note|notes]   did a rival grow? GitHub stars/releases/commits, npm downloads, App Store rating, open roles, against the last 28 days → pm/state/rival-signals.json (init proposes the config; note keeps a sourced observation)

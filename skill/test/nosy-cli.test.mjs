@@ -1,5 +1,6 @@
 // Contract tests for skill/tools/nosy.mjs (the single entry point), news.mjs (Slack/Discord message) and mcp.mjs (MCP server).
 // Fake product "Cargo" + a fake `gh` (no network). No real request is made to the webhook: the privacy test stops before sending.
+import { localDay } from "../tools/today.mjs";
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
@@ -41,7 +42,7 @@ test("weekly --short: shipped → score (only with pm/bets/) → page; shipped r
 
 test("notify leads with what merged and bets, and never sends a stale psst list", () => {
   const pm = path.join(tmp, "news"); fs.mkdirSync(path.join(pm, "state"), { recursive: true });
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay();
   fs.writeFileSync(path.join(pm, "state", "shipped.json"), JSON.stringify({ recent: { merged: [{ n: 431, title: "Bulk export", merged: today, ref: "#412" }], close: [] } }));
   fs.writeFileSync(path.join(pm, "state", "score.json"), JSON.stringify({ bets: [{ bet: "Bulk export", estimate: "S", actual: "M", landed: today, status: "landed", origin: "placed" }] }));
   fs.writeFileSync(path.join(pm, "state", "lowhanging.json"), JSON.stringify({ generated: "2026-01-01T00:00:00Z", items: [{ title: "old item", type: "x" }] }));
@@ -100,7 +101,12 @@ test("mcp: answers initialize, tools/list and tools/call with one JSON-RPC line 
   assert.equal(answer[1].result.protocolVersion, "2025-06-18");
   const names = answer[2].result.tools.map(t => t.name);
   for (const name of ["nosy_psst", "nosy_canwe", "nosy_peek", "nosy_inventory", "nosy_evidence", "nosy_ledger", "nosy_publish"]) assert.ok(names.includes(name), name);
-  assert.ok(answer[2].result.tools.every(t => !("cmd" in t) && !("openWorld" in t)), "an internal field shouldn't leak out");
+  assert.ok(answer[2].result.tools.every(t => !("cmd" in t) && !("openWorld" in t) && !("readOnly" in t) && !("destructive" in t)), "an internal field shouldn't leak out");
+  // Annotations tell a client what a tool does: the two that only read say so; the ones that write generated files under pm/ do not; publish is the one that replaces and talks outward.
+  const ann = Object.fromEntries(answer[2].result.tools.map(t => [t.name, t.annotations]));
+  for (const n of ["nosy_evidence", "nosy_ledger"]) assert.deepEqual(ann[n], { readOnlyHint: true, destructiveHint: false, openWorldHint: false }, n);
+  for (const n of ["nosy_psst", "nosy_canwe", "nosy_peek", "nosy_inventory", "nosy_todo"]) assert.deepEqual(ann[n], { readOnlyHint: false, destructiveHint: false, openWorldHint: false }, n);
+  assert.deepEqual(ann.nosy_publish, { readOnlyHint: false, destructiveHint: true, openWorldHint: true });
   assert.deepEqual(answer[2].result.tools.filter(t => t.annotations.openWorldHint).map(t => t.name), ["nosy_publish"], "only publish writes outward");
   assert.equal(answer[3].result.isError, false);
   assert.match(answer[3].result.content[0].text, /§21/);
@@ -117,4 +123,17 @@ test("exit contract: weekly marks a step that found something with ! and exits 2
   const r = run(NOSY, ["weekly", "--short", "--pm", pm, "--since", "30d"], { env: { ...gh.env, NOSY_OFFLINE: "1" } });
   assert.match(r.output, /score: !/);
   assert.equal(r.code, 2);
+});
+
+// BlogFactory field test: `peek --days 30` was read as a git ref and failed with `--days..origin/main`; recent, sweep, atlas and ship-notes all take --days.
+test("peek and notes take --days N like the other window commands, and a bad value is said, not guessed", () => {
+  const env = { ...gh.env, NOSY_OFFLINE: "1" };
+  const a = run(NOSY, ["peek", "30d", "--pm", K.pm], { env }), b = run(NOSY, ["peek", "--days", "30", "--pm", K.pm], { env });
+  assert.equal(b.code, a.code, `peek --days 30 behaves like peek 30d: ${b.error}`);
+  assert.doesNotMatch(b.output + b.error, /--days\.\./, "not read as a git ref");
+  assert.equal(b.output, a.output, "same window, same answer");
+  const bad = run(NOSY, ["peek", "--days", "soon", "--pm", K.pm], { env });
+  assert.equal(bad.code, 1); assert.match(bad.error, /--days needs a number of days/);
+  const n = run(NOSY, ["notes", "--days", "30", "--for", "team", "--pm", K.pm], { env });
+  assert.doesNotMatch(n.output + n.error, /--days\.\./);
 });

@@ -16,6 +16,7 @@ You are Nosy's auditor. Your only job: read the `pm/rivals/<slug>.md` file you'r
 5. **Shipped vs. announced:** flag a "y"-coded cell whose only evidence is a blog/press release, "coming soon," a waitlist, or invite-only beta — it should be "d". Note it if the "Latest major announcement" row is missing a `delivery:` suffix.
 6. **Positioning:** does the file contain any code-quality/review commentary (it shouldn't; only product/market positioning) — anything that conflicts with Nosy's "inside first, then rivals" principle?
 7. **Freshness:** are the "Latest major announcement" and read dates reasonably current (flag it if it carries a very old date, but don't make a hard call).
+8. **Against the sweep:** if you were given `pm/state/sweep-reconcile.json`, find this rival's row. `status: "behind"` means its own pages show an entry newer than this file's "Latest major announcement": that is **Needs fixes**, whatever else is fine. Quote the file's date and the sweep's newest entry (date, text, page).
 
 ## Report format
 - First line: **Pass** / **Needs fixes** / **Missing** (one word/short phrase).

@@ -5,6 +5,7 @@
 // (5) issue opened against us, (6) inventory has an endpoint but no screen (if state/inventory.json exists),
 // (7) shipped but not tied to any plan (if state/plan-gates.json exists), (8) a key step isn't measured (if state/metrics.json exists).
 // Deterministic; the agent does the interpretation.
+import { localDay } from "./today.mjs";
 import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { matrixRead } from "./read-matrix.mjs"; import { thresholds } from "./thresholds.mjs";
 import { demandLoad, demandFor, demandLine, trendWord, isCluster, windowText } from "./demand.mjs";
 import { advice } from "./hints.mjs";
@@ -241,7 +242,7 @@ items.forEach(i => i.score = +(i.value / i.effort).toFixed(2));
 const Ships = ["On the team's next list", "Screen built, waiting for backend", "Backend ready, not on screen", "Served, no screen", "Matrix: backend ready", "Endpoint exists, no screen"];
 const shipsRank = t => { const i = Ships.findIndex(s => String(t).startsWith(s)); return i < 0 ? Ships.length : i; };
 items.sort((a, b) => b.score - a.score || (b.demand?.count || 0) - (a.demand?.count || 0) || b.value - a.value || shipsRank(a.type) - shipsRank(b.type));
-let o = `# Low-hanging fruit · ${new Date().toISOString().slice(0, 10)} · ${K.ref}\n\nScore = value (1–3) / effort (S=1, M=2, L=3). The list is evidence; a decision-maker owns what gets done.\n\n| # | Score | Effort | Type | Work | Asked for | Evidence |\n|---|---|---|---|---|---|---|\n`;
+let o = `# Low-hanging fruit · ${localDay()} · ${K.ref}\n\nScore = value (1–3) / effort (S=1, M=2, L=3). The list is evidence; a decision-maker owns what gets done.\n\n| # | Score | Effort | Type | Work | Asked for | Evidence |\n|---|---|---|---|---|---|---|\n`;
 // An empty list says why: which signals had nothing to read (a fresh repo, or a product without those documents).
 let emptyWhy = null;
 if (!items.length) {

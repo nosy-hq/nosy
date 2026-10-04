@@ -10,6 +10,8 @@ import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 import { run, temporary, clean, Tool } from "./helpers.mjs";
 import { betId, betParse, betRender } from "../tools/bet.mjs";
+// The fixtures are UTC instants and calendar days: pin the owner's zone so the suite answers the same under every zone it is run in.
+process.env.NOSY_TZ = "UTC";
 
 const NOW = "2026-09-28T12:00:00Z", DAY = 864e5;
 const at = d => new Date(Date.parse(NOW) - d * DAY).toISOString();

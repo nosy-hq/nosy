@@ -22,5 +22,5 @@ jobs:
         with:
           slack-webhook: ${{ secrets.NOSY_SLACK_WEBHOOK }}      # optional
           discord-webhook: ${{ secrets.NOSY_DISCORD_WEBHOOK }}  # optional
-          commit: "false"   # "true" makes the Action commit pm/state/ and pm/page.html and push them. pm/state/ can hold issue and PR text.
+          commit: "false"   # "true" makes the Action commit pm/state/ and the decision page and push them. pm/state/ can hold issue and PR text.
           roadmap: "false"  # "true" proposes ROADMAP.md as a pull request each week (updates the open one). Needs pm/sources.json "roadmap": {}, permissions contents: write + pull-requests: write, and the repo setting that lets Actions create pull requests.

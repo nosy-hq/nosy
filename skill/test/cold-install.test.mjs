@@ -45,7 +45,8 @@ const actionSteps = () => {
   return out;
 };
 const step = name => { const s = actionSteps(); const k = Object.keys(s).find(x => x.includes(name)); assert.ok(k, `no step "${name}" in action.yml`); return s[k].replace(/\$\{\{ inputs\.pm \}\}/g, "pm"); };
-const bash = (script, cwd, env = {}) => spawnSync("bash", ["-e", "-c", script], { cwd, encoding: "utf8", env: { ...process.env, NOSY_PM: "pm", ...env } });
+// GITHUB_ACTION_PATH is the folder the Action runs from; the commit step asks `nosy page-path` there for where the page is.
+const bash = (script, cwd, env = {}) => spawnSync("bash", ["-e", "-c", script], { cwd, encoding: "utf8", env: { ...process.env, NOSY_PM: "pm", GITHUB_ACTION_PATH: ROOT, ...env } });
 
 test("action.yml: the commit step adds the current folder names (pm/state, not the old durum) and works in a real repo with a remote", () => {
   const text = fs.readFileSync(path.join(ROOT, "action.yml"), "utf8");

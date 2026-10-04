@@ -33,6 +33,8 @@
 // --type dresscode` also eliminates a matching line, the same way an exception pattern does (read by dresscode,
 // written to by dresscode itself whenever a ✓ line is rejected — the bridge, so the owner manages rejections
 // in one place, `learn list`/`remove`/`--duration`, instead of two separate mechanisms).
+import { refuseDamaged } from "./owner-json.mjs";
+import { localDay } from "./today.mjs";
 import fs from "node:fs"; import path from "node:path"; import { fileURLToPath } from "node:url"; import { createHash } from "node:crypto"; import { execFileSync } from "node:child_process"; import { read } from "./read-design.mjs"; import { small, root, smallAscii } from "./text.mjs"; import { thresholds } from "./thresholds.mjs";
 
 const arg = (a, f) => { const i = a.indexOf(f); return i >= 0 ? a[i + 1] : undefined; };
@@ -41,10 +43,10 @@ const summary = t => createHash("sha1").update(t).digest("hex").slice(0, 12);
 const definitionSummary = id => Definition[id] ? summary(Definition[id]) : "";
 const window = (s, i, r = 2) => s.slice(Math.max(0, i - r), i + r + 1).map(x => x.trim()).join("\n");
 export const keyYap = (id, file, lines, i) => `${id}|${file}|${summary(window(lines, i))}`;
-export function approvalRead(pm) { try { const o = JSON.parse(fs.readFileSync(path.join(pm, "design", "approvals.json"), "utf8")); return { decisions: o.decisions || {}, add: o.add || {}, exception: o.exception || [] }; } catch { return { decisions: {}, add: {}, exception: [] }; } }
+export function approvalRead(pm) { try { const o = JSON.parse(fs.readFileSync(path.join(pm, "design", "approvals.json"), "utf8")); return { ...o, decisions: o.decisions || {}, add: o.add || {}, exception: o.exception || [] }; } catch { return { decisions: {}, add: {}, exception: [] }; } }
 export const EXCEPTION_PATH = process.env.NOSY_EXCEPTION || fileURLToPath(new URL("../data/dresscode-exceptions.json", import.meta.url)); // tests supply a temporary file
 export function exceptionRead(filePath = EXCEPTION_PATH) { try { return JSON.parse(fs.readFileSync(filePath, "utf8")).patterns || []; } catch { return []; } }
-function approvalWrite(pm, o) { fs.mkdirSync(path.join(pm, "design"), { recursive: true }); fs.writeFileSync(path.join(pm, "design", "approvals.json"), JSON.stringify(o, null, 1)); }
+function approvalWrite(pm, o) { refuseDamaged(path.join(pm, "design", "approvals.json")); fs.mkdirSync(path.join(pm, "design"), { recursive: true }); fs.writeFileSync(path.join(pm, "design", "approvals.json"), JSON.stringify(o, null, 1)); }
 
 // --- the owner's/agent's `learn.mjs reject --type dresscode` records, the same
 // filterRejects pattern measure-size.mjs (context) and canwe.mjs (context) already use. --context is the
@@ -54,7 +56,7 @@ function approvalWrite(pm, o) { fs.mkdirSync(path.join(pm, "design"), { recursiv
 export function learnRejectRulesOf(pm) {
   try {
     const O = JSON.parse(fs.readFileSync(path.join(pm, "learned.json"), "utf8"));
-    const b = new Date().toISOString().slice(0, 10);
+    const b = localDay();
     return (O.rules || []).filter(k => k.tip === "reject" && (k.type === "dresscode" || k.type === "all") && (!k.end || k.end >= b));
   } catch { return []; }
 }
@@ -285,7 +287,7 @@ const TO_SCREEN_LINKED = new Set(["Components", "Documents", "Tokens", "Design�
 
 export function score(pm, options = {}) {
   const m = read(pm, options);
-  const today = options.today || new Date().toISOString().slice(0, 10);
+  const today = options.today || localDay();
   if (m.notFound) return { date: today, notFound: true, reason: m.reason, model: m };
   const approval = options.approval || approvalRead(pm);
   const ES = options.thresholds || thresholds(pm);
@@ -548,7 +550,7 @@ export function suggest(pms, options = {}) {
 }
 
 // Records a verdict. The owner's verdict overrides the agent's; the agent can't override the owner's.
-export function verdictWrite(pm, inputs, source, today = new Date().toISOString().slice(0, 10)) {
+export function verdictWrite(pm, inputs, source, today = localDay()) {
   const o = approvalRead(pm); let n = 0;
   for (const g of inputs) {
     if (!g?.key || !/^(yes|no)$/i.test(g.decision || "")) continue;
@@ -586,7 +588,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     list.forEach((o, n) => console.log(`${n + 1}. \`${o.id}\` /${o.pattern}/ · covers ${o.support} rejection(s) · in ${o.products.length} product(s) (${o.products.join(", ")}) · eliminates none of the ${o.check_that_is_done} protected line(s)`
       + (o.merged ? `\n   generalization: ${o.neighbors.length} observed neighbor(s)${o.instead.length ? ` · replaces: ${o.instead.map(y => `/${y.pattern}/ (${y.scope})`).join(", ")}` : ""}` : "")
       + `\n   example: ${o.example}\n   reason: ${o.reason || "—"}`));
-    const date = new Date().toISOString().slice(0, 10);
+    const date = localDay();
     // --sec 1,3: only the selected ones. No selection: --apply writes all of them to this product; --publish writes
     // only patterns seen in ≥2 products to Nosy (a pattern seen in one product hasn't proven it's general; the owner
     // can publish it deliberately with --sec).
@@ -614,7 +616,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     if (!id || !evidence) { console.error(`Usage: node dresscode.mjs <pm> ${alt} <check id, e.g. Goals#2> <file:line> [--reason "..."]`); process.exit(1); }
     try {
       const { file, s, i } = lineFind(pm, sec, evidence);
-      if (alt === "add") { const o = approvalRead(pm); o.add[id] = { file, line_text_of: s[i].trim(), reason, date: new Date().toISOString().slice(0, 10) }; approvalWrite(pm, o); }
+      if (alt === "add") { const o = approvalRead(pm); o.add[id] = { file, line_text_of: s[i].trim(), reason, date: localDay() }; approvalWrite(pm, o); }
       else verdictWrite(pm, [{ key: keyYap(id, file, s, i), decision: alt === "accept" ? "yes" : "no", reason, id, evidence, line: s[i].trim() }], "owner");
       console.log(`${id}: ${alt} recorded (${file}:${i + 1}).`); process.exit(0);
     } catch (e) { console.error(e.message); process.exit(1); }

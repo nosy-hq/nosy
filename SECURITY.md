@@ -20,7 +20,7 @@ Customer quotes are masked before Nosy prints or writes them, a secret in a line
 
 ## Pin a release
 
-`npx github:nosy-hq/nosy` runs whatever is on the default branch. Pin a release tag instead, for example `npx github:nosy-hq/nosy#v0.21.0 install`, and read the release notes before you move to a newer one. Do the same for a marketplace install in a shared or CI setup.
+`npx github:nosy-hq/nosy` runs whatever is on the default branch. Pin a release tag instead, for example `npx github:nosy-hq/nosy#v0.21.1 install`, and read the release notes before you move to a newer one. Do the same for a marketplace install in a shared or CI setup.
 
 ## Supported versions
 

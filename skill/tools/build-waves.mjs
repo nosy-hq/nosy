@@ -9,7 +9,8 @@
 // (status) pair (jira-product-discovery-rovo.md "5/8/9"), Linear's cycle/Loops capacity (linear-agent.md "19").
 // Work the owner has set aside ("haven't decided yet" etc., matrix decision:"notDoing") doesn't enter a
 // wave; listed separately. No LLM/network call, deterministic.
-import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { patternsOfLoad, refRegex, groupKeyOf } from "./refs.mjs"; import { matrixRead } from "./read-matrix.mjs"; import { small, root, langOfLoad } from "./text.mjs"; import { thresholds } from "./thresholds.mjs"; import { decisionsOfRead, NEGATION_RE } from "./read-decisions.mjs";
+import { localDay } from "./today.mjs";
+import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { patternsOfLoad, refRegex, groupKeyOf } from "./refs.mjs"; import { matrixRead } from "./read-matrix.mjs"; import { small, root, langOfLoad } from "./text.mjs"; import { thresholds } from "./thresholds.mjs"; import { decisionsOfRead, NEGATION_RE, statementOf } from "./read-decisions.mjs";
 import { readSources } from "./sources-file.mjs";
 
 // "Haven't decided yet" family: English plus, for decisions written in Turkish (see
@@ -96,7 +97,7 @@ function bestTextFind(ref, title, blocks) {
 function decisionStatusOf(ref, title) {
   const blk = bestTextFind(ref, title, decisionBlock); if (!blk) return null;
   const summary = blk.trim().replace(/\s+/g, " ").slice(0, 220);
-  if (NotDoing.test(blk)) return { tip: "outside", summary };
+  if (NotDoing.test(statementOf(blk))) return { tip: "outside", summary }; // what the decision states, not every sentence in its block (a decision that says X ships first isn't "not doing" because it also rules Y out)
   if (Waiting.test(blk)) return { tip: "waiting", summary };
   return null;
 }
@@ -286,7 +287,7 @@ const formula = "Score = Value x Confidence / Effort. Value = psst score + deman
 const Description = { "Now": "screen-only work / the existing backend is enough", "When code lands": "the backend or a linked task is in an open PR", "Needs backend": "widespread among rivals, no backend evidence", "Open requests": "asked for: an issue opened against us, or an open item on the team's own list; which wave it enters is the owner's call", "Documentation fix": "the request doc's status is stale versus the code; update the doc (not roadmap work)", "After": "didn't fit a wave rule, or exceeded capacity" };
 const outsideList = [...outside.values()];
 
-let o = `# Waves · ${new Date().toISOString().slice(0, 10)} · ${pm}\n\n${formula}\n\n`;
+let o = `# Waves · ${localDay()} · ${pm}\n\n${formula}\n\n`;
 const missing = Object.entries(inputs).filter(([, v]) => !v).map(([k]) => k);
 o += missing.length ? `Missing input: ${missing.join(", ")} (that component counted as neutral).\n\n` : "All inputs present.\n\n";
 for (const name of Order) {
@@ -305,7 +306,7 @@ process.stdout.write(o);
 if (mdOut) {
   const Marker = "<!-- nosy:build-waves -->", Last = "<!-- /nosy:build-waves -->";
   const body = o.replace(/^# .*\n+/, "").replace(/^## /gm, "### ");
-  const block = `${Marker}\n## From the script · ${new Date().toISOString().slice(0, 10)} (\`build-waves.mjs\`, not hand-edited)\n\n${body.trim()}\n${Last}`;
+  const block = `${Marker}\n## From the script · ${localDay()} (\`build-waves.mjs\`, not hand-edited)\n\n${body.trim()}\n${Last}`;
   let md = ""; try { md = fs.readFileSync(mdOut, "utf8"); } catch {}
   const i = md.indexOf(Marker), j = md.indexOf(Last);
   md = i >= 0 && j > i ? md.slice(0, i) + block + md.slice(j + Last.length) : (md ? md.replace(/\s*$/, "\n\n") : "") + block + "\n";

@@ -16,16 +16,17 @@
 // Calibration (estimate vs actual) is shown only with at least `minN` settled bets (thresholds.mjs, default 10;
 // internal request 84); backfill bets stay out unless --include-backfill.
 // Writes: each bet file's Status line and "## Score" section, pm/bets/bets.json, pm/state/score.json (read by `tea`, N4).
+import { localDayOf } from "./today.mjs";
 import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { fileURLToPath } from "node:url";
 import { betsLoad, betSave, indexWrite } from "./bet.mjs";
 import { thresholds } from "./thresholds.mjs";
-import { integrationBranchOf } from "./integration-branch.mjs";
+import { integrationBranchOf, refFor } from "./integration-branch.mjs";
 import { readSources } from "./sources-file.mjs";
 
 const DAY = 864e5, SIZES = ["S", "M", "L"];
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const idRe = id => new RegExp(`(?<![A-Za-z0-9_-])${esc(id)}(?![A-Za-z0-9_-])`);
-const ymd = d => d ? new Date(d).toISOString().slice(0, 10) : null;
+const ymd = d => d ? localDayOf(d) : null; // the owner's calendar day
 
 export function calculate(pm, { now = Date.now(), includeBackfill = false } = {}) {
   const K = readSources(pm);
@@ -41,7 +42,7 @@ export function calculate(pm, { now = Date.now(), includeBackfill = false } = {}
   const bets = betsLoad(pm);
   const defaultRef = K.ref || "origin/main", defaultBranch = defaultRef.replace(/^origin\//, "");
   const det = integrationBranchOf({ ghRepo: K.issue?.repo, defaultBranch, explicit: K.integrationBranch });
-  const INT = det.branch === defaultBranch ? defaultRef : `origin/${det.branch}`;
+  const INT = det.branch === defaultBranch ? defaultRef : refFor(K.repo || ".", det.branch, defaultRef);
   const base = { type: "score", generated: new Date(now).toISOString(), minN, integration: INT, integrationReason: det.reason };
   if (!bets.length) return { ...base, bets: [], calibration: null };
 
@@ -97,7 +98,7 @@ export function calculate(pm, { now = Date.now(), includeBackfill = false } = {}
       const work = new Set(); for (const l of workLandings) for (const h of broughtIn(l.h)) work.add(h);
       for (const c of hits) if (workLandings.some(l => l.h === landingOf(c.h))) work.add(c.h);
       const workC = [...work].map(h => C.get(h)).filter(Boolean), nonMerge = workC.filter(c => c.parents.length < 2);
-      r.days = new Set((nonMerge.length ? nonMerge : workC).map(c => ymd(c.adate))).size || 1;
+      r.days = new Set((nonMerge.length ? nonMerge : workC).map(c => String(c.adate).slice(0, 10))).size || 1; // the day the author wrote it, in the author's own offset: two commits an hour apart are one day, not two
       r.actual = r.days <= sizeDays.S ? "S" : r.days <= sizeDays.M ? "M" : "L";
       r.calendarDays = Math.round((Date.parse(L.date) - placedT) / DAY);
       const betPrs = new Set([...prMerged.keys(), ...landings.map(l => prOfMerge(l.h)).filter(Boolean), ...(ghPrs.get(b.id) || []).map(p => p.number)]);

@@ -10,6 +10,7 @@
 //     "Once" is a marker file (claimFirstRun); if the marker can't be written the hook stays silent, never nags.
 // Off switches: the same ones the hooks have (docs/INSTALL.md, f). NOSY_NO_PSST silences the hook, so the first-run
 // lines too; the skill with no command still prints them, and shows the opening summary as off.
+import { findPm } from "./sources-file.mjs";
 import fs from "node:fs"; import os from "node:os"; import path from "node:path"; import { fileURLToPath } from "node:url";
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -45,7 +46,7 @@ export function status({ cwd = process.cwd(), env = process.env, skill = SKILL }
   const commands = mdCount(path.join(root, "commands")) || mdCount(path.join(skill, "commands"));
   const hooksInstalled = !!readJson(path.join(root, "hooks", "hooks.json"))?.hooks;
   const hooks = HOOKS.map(h => ({ name: h.name, on: !hookOff(h, env), off: h.env }));
-  const pm = path.resolve(cwd, env.NOSY_PM || "pm");
+  const pm = path.resolve(cwd, findPm(cwd, { explicit: env.NOSY_PM })); // the nearest pm/ above this folder, like every command
   let state = "none";
   if (fs.existsSync(path.join(pm, "sources.json"))) state = readJson(path.join(pm, "sources.json")) ? "ready" : "broken";
   else if (fs.existsSync(path.join(pm, "kaynaklar.json"))) state = "older";

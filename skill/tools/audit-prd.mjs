@@ -8,6 +8,7 @@
 // Shape Up "appetite" → check 8), kiro.md (Requirements Analysis: scan for contradictions/gaps before coding/writing → checks 7 and 9).
 // Deterministic; no LLM or network calls (only local `git show`, when --pm is given).
 // Exit code: 1 if there's a "blocker" finding with --strict.
+import { localDay } from "./today.mjs";
 import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { fileURLToPath } from "node:url"; import { patternsOfLoad, refRegex } from "./refs.mjs"; import { small, langOfLoad } from "./text.mjs"; import { decisionsOfRead, NEGATION_RE } from "./read-decisions.mjs";
 import { readSources } from "./sources-file.mjs";
 const SKILL = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -301,7 +302,7 @@ function expandPaths(ps) { const out = [];
 
 const files = expandPaths(goals);
 const results = files.map(f => audit(f, fs.readFileSync(f, "utf8")));
-let out = `# PRD audit · ${new Date().toISOString().slice(0, 10)}\n\n`;
+let out = `# PRD audit · ${localDay()}\n\n`;
 if (results.length > 1) out += `| File | Score | Blocker | Warning | Note |\n|---|---|---|---|---|\n${results.map(r => `| ${r.file} | ${r.score} | ${r.numbers.blocker} | ${r.numbers.warning} | ${r.numbers.not} |`).join("\n")}\n\n`;
 for (const r of results) out += sectionWrite(r);
 process.stdout.write(out);

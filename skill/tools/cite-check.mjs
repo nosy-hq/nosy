@@ -118,6 +118,9 @@ export function extract(text) {
     }
     for (const r of lineRefs) {
       const both = `${r.b} ${r.a}`;
+      // A one-digit "#3" with no "issue" or "PR" beside it is a row or step number ("Row #3", "tablo #2"), not a GitHub reference: checking it against the tracker blocked
+      // answers that numbered their own tables (BlogFactory field test, and this tool's own author). Two digits and up, or any number with the word, is still checked.
+      if (r.n < 10 && !SAYS_ISSUE_RE.test(both) && !SAYS_PR_RE.test(both)) continue;
       refs.push({ at: r.at, n: r.n, saysIssue: SAYS_ISSUE_RE.test(both), saysPR: SAYS_PR_RE.test(both), saysAbsent: saysAbsent(r.b, r.a),
         // "the matrix still lists #438 as open": someone else's words, not the answer's claim about #438.
         saysOpen: SAYS_OPEN_RE.test(r.a) && !SAYS_DONE_RE.test(r.a) && !REPORTED_RE.test(both), saysDone: SAYS_DONE_RE.test(r.a) && !SAYS_OPEN_RE.test(r.a) && !REPORTED_RE.test(both) });

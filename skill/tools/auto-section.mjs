@@ -42,7 +42,7 @@ const fill = (s, v = {}) => String(s).replace(/\{(\w+)\}/g, (_, k) => v[k] ?? ""
 export function section(pm, { lang, now = new Date() } = {}) {
   const P = phrases(lang), t = (parts, v) => fill(parts.split(".").reduce((o, k) => o[k], P), v);
   const hour = iso => new Date(iso).toLocaleString(P.locale, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-  const range = a => { const m = a.match(/^--since (\S+)(?: (\S+))? (\S+)$/); return m ? t("since", { date: new Date(m[1]).toLocaleDateString(P.locale, { day: "numeric", month: "short" }), time: m[2] || "", ref: m[3] }) : a; };
+  const range = a => { const m = a.match(/^--since (\S+)(?: (\S+))? (\S+)$/); return m ? t("since", { date: new Date(m[1]).toLocaleDateString(P.locale, { day: "numeric", month: "short", ...(/^\d{4}-\d{2}-\d{2}$/.test(m[1]) ? { timeZone: "UTC" } : {}) }) /* a bare calendar date is a day, not an instant: formatted in the zone of the machine it showed the day before, west of UTC */, time: m[2] || "", ref: m[3] }) : a; };
   const gen = when => t("generated", { when });
   // If the owner's feedback exists (learn.mjs apply → lowhanging.filtered.json), the page shows that: a muted item shouldn't return to the page.
   const d = read(path.join(pm, "state", "status.json")), l = read(path.join(pm, "state", "lowhanging.filtered.json")) || read(path.join(pm, "state", "lowhanging.json"));

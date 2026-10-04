@@ -47,7 +47,9 @@ async function main() {
 
   const cwd = readStdinCwd() || process.cwd();
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const pm = path.join(cwd, "pm");
+  // The same lookup as the CLI (NOSY_PM, ./pm, else the nearest pm/ above this folder): a session started in packages/web of a monorepo found no pm/ and said nothing.
+  let pm = path.join(cwd, "pm");
+  try { const { findPm } = await import(path.join(here, "..", "skill", "tools", "sources-file.mjs")); pm = path.resolve(cwd, findPm(cwd, { explicit: process.env.NOSY_PM })); } catch {}
 
   // The first session after install: three lines, once.
   let hello = null;

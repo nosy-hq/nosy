@@ -9,7 +9,7 @@
 // Deterministic work: not left to the LLM (ccpm pattern).
 import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process";
 import { patternsOfLoad, refRegex, groupKeyOf } from "./refs.mjs";
-import { integrationBranchOf } from "./integration-branch.mjs";
+import { integrationBranchOf, refFor } from "./integration-branch.mjs";
 import { waveMapOf } from "./waves-map.mjs";
 import { localBranchesCloseToMerging } from "./local-branches.mjs";
 import { readSources } from "./sources-file.mjs";
@@ -23,7 +23,7 @@ if (!to) {
   const defaultRef = (K && K.ref) || "origin/main";
   const defaultBranch = defaultRef.replace(/^origin\//, "");
   const det = integrationBranchOf({ ghRepo: K?.issue?.repo, defaultBranch, explicit: K?.integrationBranch });
-  to = det.branch === defaultBranch ? defaultRef : `origin/${det.branch}`;
+  to = det.branch === defaultBranch ? defaultRef : refFor((K && K.repo) || ".", det.branch, defaultRef);
   toReason = det.reason;
 }
 const local = d => new Date(d).toLocaleString("en-US", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(/[,/]/g, m => m === "/" ? "." : "");

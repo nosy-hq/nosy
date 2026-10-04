@@ -8,6 +8,7 @@
 // enterpret.md "citation-based exploration", unwrap-ai.md "mention count + link to source"); Productboard
 // Spark's insight → feature linking, opportunities "ranked by evidence" (pm/rivals/productboard-spark.md);
 // Dovetail's bridge from tag frequency to prioritization (pm/rivals/dovetail.md).
+import { localDay } from "./today.mjs";
 import fs from "node:fs"; import path from "node:path"; import crypto from "node:crypto"; import { execFileSync } from "node:child_process"; import { matrixRead } from "./read-matrix.mjs"; import { patternsOfLoad } from "./refs.mjs"; import { small, smallAscii, root, ascii, langOfLoad } from "./text.mjs"; import { thresholds } from "./thresholds.mjs";
 import { mask } from "./mask.mjs";
 import { windowText } from "./demand.mjs";
@@ -171,11 +172,16 @@ const dateParse = s => { if (!s) return null;
   return null; };
 
 // --- small CSV parser: quoted fields, commas/newlines inside a field, "" escaping ---
-const csvParse = t => { t = t.replace(/^﻿/, ""); const rows = []; let row = [], f = "", q = false;
+// The delimiter is read from the header line: Excel in Turkish, German and other locales saves ";" (and some tools tab), and a comma-only parser read a whole row, date included,
+// as one text and dated it wrong (field-test hunt). Counted outside quotes on the first line; a comma wins a tie.
+const csvDelimiter = t => { const head = t.split(/\r?\n/, 1)[0] || ""; let q = false; const n = { ",": 0, ";": 0, "\t": 0 };
+  for (const c of head) { if (c === '"') q = !q; else if (!q && c in n) n[c]++; }
+  return n[";"] > n[","] && n[";"] >= n["\t"] ? ";" : n["\t"] > n[","] ? "\t" : ","; };
+const csvParse = t => { t = t.replace(/^﻿/, ""); const D = csvDelimiter(t); const rows = []; let row = [], f = "", q = false;
   for (let i = 0; i < t.length; i++) { const c = t[i];
     if (q) { if (c === '"') { if (t[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; continue; }
     if (c === '"') { q = true; continue; }
-    if (c === ",") { row.push(f); f = ""; continue; }
+    if (c === D) { row.push(f); f = ""; continue; }
     if (c === "\r") continue;
     if (c === "\n") { row.push(f); rows.push(row); row = []; f = ""; continue; }
     f += c; }
@@ -275,7 +281,7 @@ const Extension = /\.(csv|json|jsonl|md|txt)$/i;
 const expand = p => { if (!fs.existsSync(p)) return []; const st = fs.statSync(p);
   if (st.isFile()) return Extension.test(p) ? [p] : [];
   return fs.readdirSync(p, { recursive: true }).map(f => path.join(p, String(f))).filter(f => { try { return fs.statSync(f).isFile() && Extension.test(f) && path.basename(f) !== "rival-notes.jsonl"; } catch { return false; } }); }; // rival-notes.jsonl: the owner's notes on rivals (rival-signals.mjs), not customer feedback
-const inputPathsOf = paths.length ? paths : (K.signal?.path?.length ? K.signal.path : [path.join(pm, "signal")]);
+const inputPathsOf = paths.length ? paths : ([].concat(K.signal?.path ?? []).filter(x => typeof x === "string" && x.trim()).length ? [].concat(K.signal.path).filter(x => typeof x === "string" && x.trim()) : [path.join(pm, "signal")]); // a string or a list (docs/DATA.md says "the folder signal.path names")
 const files = [...new Set(inputPathsOf.flatMap(expand))];
 
 // Sample values for the "columns not recognized" warning below: at most 2 sample rows/records, at most 2
@@ -286,6 +292,10 @@ const sampleLine = (headers, samples) => headers.map((h, i) => {
 }).join(" · ");
 
 const warnings = [], sources = [], unrecognizedFiles = [];
+// Files in the signal folders that are of a type this doesn't read (an .xlsx, .pdf, .docx export) are named, not ignored: "no demand input" over a folder full of exports was a
+// silent false negative (field-test hunt).
+{ const skipped = inputPathsOf.flatMap(p => { try { if (!fs.statSync(p).isDirectory()) return []; return fs.readdirSync(p, { recursive: true }).map(f => path.join(p, String(f))).filter(f => { try { return fs.statSync(f).isFile() && !Extension.test(f) && !path.basename(f).startsWith("."); } catch { return false; } }); } catch { return []; } });
+  if (skipped.length) warnings.push(`${skipped.length} file${skipped.length === 1 ? "" : "s"} in the signal folder not read: this reads .csv, .json, .jsonl, .md and .txt, so export these as one of those (${[...new Set(skipped.map(f => path.extname(f).toLowerCase() || "(no extension)"))].join(", ")}): ${skipped.slice(0, 5).map(f => path.basename(f)).join(", ")}${skipped.length > 5 ? ", …" : ""}`); }
 let rawSignals = [];
 for (const file of files) { let rows = [];
   try { const r = fileRead(file);
@@ -316,7 +326,7 @@ if (GH && K.issue?.repo) { try {
     const stamps = js.map(it => Date.parse(it.createdAt)).filter(Number.isFinite);
     ghWindow = { kind: "github issues", limit: GhLimit, count: js.length, states: "open and closed", complete: js.length < GhLimit,
       oldest: stamps.length ? new Date(Math.min(...stamps)).toISOString().slice(0, 10) : null, newest: stamps.length ? new Date(Math.max(...stamps)).toISOString().slice(0, 10) : null,
-      as_of: new Date().toISOString().slice(0, 10) };
+      as_of: localDay() };
     sources.push({ path: sourceNameOf, format: "github", signal: js.length - workItemsRaw.length, window: ghWindow });
   } catch (e) { warnings.push(`gh issue list could not be read: ${String(e.message).slice(0, 120)}`); } }
 else if (GH) warnings.push("--gh was given but sources.json has no issue.repo");
@@ -442,7 +452,7 @@ aggregate(candidateSetup(s => s.order.slice(0, -1).map((w, i) => `${w} ${s.order
 if (themes.length < 10) aggregate(candidateSetup(s => s.words));
 
 // --- report (stdout) ---
-let o = `# Demand signal · ${new Date().toISOString().slice(0, 10)} · ${signals.length} signals (${files.length} files${GH ? " + gh" : ""}), ${goalsOut.length} targets matched, ${unmatchedOnes.length} unmatched\n\n`;
+let o = `# Demand signal · ${localDay()} · ${signals.length} signals (${files.length} files${GH ? " + gh" : ""}), ${goalsOut.length} targets matched, ${unmatchedOnes.length} unmatched\n\n`;
 o += `Sources: ${sources.map(k => `${k.path} (${k.format}, ${k.signal})`).join(" · ") || "—"}\n\n`;
 if (ghWindow) o += `GitHub window: ${windowText(ghWindow)}. A count from these issues is a topic cluster of related issues within this window, not the number of times one thing was asked.\n\n`;
 if (workItemsOut) o += `Team-authored issues (sources.json \`team\`): ${workItemsOut.count} are work items, not demand: left out of every count above (${workItemsOut.matched} match a target).\n\n`;

@@ -10,6 +10,7 @@
 // The tour runs commands; this file only decides and remembers. Order is inside → fence → ahead → share (SKILL.md).
 import fs from "node:fs"; import path from "node:path"; import { fileURLToPath } from "node:url";
 import { readSourcesSafe } from "./sources-file.mjs";
+import { pagePath } from "./page-path.mjs";
 import { examine } from "./doctor.mjs";
 import { nosyCommand } from "./hints.mjs";
 import { plan as tierPlan, TOKENS_PER_RIVAL } from "./rival-tiers.mjs";
@@ -70,7 +71,10 @@ export function tour(pm, { now = Date.now(), staleDays = 7 } = {}) {
   // 3. What Nosy knows from git and the issues, no model.
   const factsAge = age("facts.md");
   step("facts", "facts", factsAge == null ? "the product's hard facts aren't built yet (commits by person, kind and area; unmerged branches)" : `facts are ${plural(factsAge, "day")} old`, factsAge == null || factsAge >= 1 ? "todo" : "fresh", { writes: "pm" });
-  step("inventory", "inventory", fs.existsSync(state("inventory.json")) ? "the backend's endpoints are listed" : "the backend's endpoints aren't listed yet", fs.existsSync(state("inventory.json")) ? "fresh" : "todo", { writes: "pm" });
+  // The file being there is not the step having worked: an inventory that found no backend wrote the file too (field-test hunt: the tour said "✓ the backend's endpoints are listed").
+  const inv = readJson(state("inventory.json"));
+  step("inventory", "inventory", !inv && !fs.existsSync(state("inventory.json")) ? "the backend's endpoints aren't listed yet" : inv?.backend_missing ? "ran, and found no backend in this repo (if it lives elsewhere, `inventory.backend` in sources.json says where)" : "the backend's endpoints are listed",
+    fs.existsSync(state("inventory.json")) ? "fresh" : "todo", { writes: "pm" });
   const shippedAge = Math.min(...["shipped.json", "status.json"].map(f => age(f) ?? 1e9));
   step("shipped", "shipped", shippedAge >= 1e9 ? "no record of what shipped yet" : `the record is ${plural(shippedAge, "day")} old`, shippedAge >= staleDays ? "todo" : "fresh", { writes: "pm" });
 
@@ -121,8 +125,9 @@ export function tour(pm, { now = Date.now(), staleDays = 7 } = {}) {
     { writes: "outside", skip: roadmapOn ? null : "optional: a `roadmap` key in sources.json (Now / Next / Later as a pull request on ROADMAP.md)",
       ask: roadmapOn ? { id: "roadmap", kind: "send", question: `Open a pull request that updates the roadmap block in ${K.roadmap.path || "ROADMAP.md"}? It pushes a branch and opens a PR in your repo; merging is the approval, and only the block changes (\`${nosyCommand("roadmap")}\` shows it first).` } : null });
   const V = K.frontyard;
-  step("frontyard", "frontyard", "shipped features against the landing page", asOf(state("frontyard.json")) ? "fresh" : "todo", { writes: "pm", skip: V && (V.path || V.url) ? null : "no landing page set in sources.json" });
-  const pageAt = mtime(path.join(pm, "page.html")), dataAt = Math.max(0, ...["shipped.json", "lowhanging.json", "waves.json"].map(f => asOf(state(f)) || 0));
+  const fy = readJson(state("frontyard.json")), fyMissing = !!(fy && fy.page_missing);
+  step("frontyard", "frontyard", fyMissing ? "couldn't read the landing page (`frontyard.path` isn't in the repo, or `frontyard.url` hasn't been fetched and saved to pm/state/frontyard-page.html)" : "shipped features against the landing page", asOf(state("frontyard.json")) && !fyMissing ? "fresh" : "todo", { writes: "pm", skip: V && (V.path || V.url) ? null : "no landing page set in sources.json" });
+  const pageAt = mtime(pagePath(pm, K).path), dataAt = Math.max(0, ...["shipped.json", "lowhanging.json", "waves.json"].map(f => asOf(state(f)) || 0));
   step("tea", "tea", !pageAt ? "no page yet" : dataAt > pageAt + 1000 ? "the page is older than what Nosy knows" : "the page is current", !pageAt || dataAt > pageAt + 1000 ? "todo" : "fresh", { writes: "pm" });
 
   // 7. Share: leaves the machine, so it asks, and says what goes.

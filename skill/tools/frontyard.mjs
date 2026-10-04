@@ -30,7 +30,7 @@ export const Maintenance = new RegExp(`^(chore|docs?|test|tests|ci|build|refacto
 const Filler = new Set(["the", "and", "for", "with", "from", "that", "this", "into", "when", "only", "also", "more", "over", "than", "then", "their", "your", "our", "each", "every", "same", "add", "adds", "added", "new", "now", "support", "supports", "make", "makes", "use", "uses", "first", "one", "two", "all", "not", "its", "it's", "can", "via", "writing", "building", "reading", "checking", "making",
   ...LangData.stopwords]);
 // "roadmap" can be a product's own subject matter (like Nosy itself); doesn't count as a promise phrase.
-const Phrase = new RegExp(`\\b(coming soon|soon|waitlist|wait-list|early access|private beta|in beta|${LangData.promisePhrases.join("|")})\\b`, "i");
+const Phrase = new RegExp(`\\b(coming soon|soon to be|launching soon|available soon|waitlist|wait-list|early access|private beta|in beta|${LangData.promisePhrases.join("|")})\\b`, "i");
 // the language audit #8: sources.json's `glossary.landing` — the product's OWN
 // "coming soon"/maintenance/waitlist words, a flat array like `glossary.notDoing` — merged on top of the
 // EN+TR core above (never replacing it). Kept as a function (not a module-level const) since it depends on a
@@ -55,15 +55,18 @@ function phraseRegexFor(K) {
 // button/input, `aria-disabled="true"`, a waitlist/email-capture form, or a dead `href="#"` anchor read the
 // SAME regardless of what language the page's own words are in - unlike Phrase above, which needs actual
 // words. Read from the page's own untouched markup (before pageTextOf strips tags), not the stripped prose.
-const DISABLED_CONTROL_RE = /<(?:button|input|a)\b[^>]*\bdisabled\b[^>]*>/i;
+// A literal `disabled` attribute (bare, or ="…"), not a conditional one ({!valid}, :disabled="x"): a submit button that waits for a valid form is not a feature held back.
+const DISABLED_CONTROL_RE = /<(?:button|input|a)\b[^>]*(?<![:@{\w-])\bdisabled(?:\s*=\s*(?:"(?:true|disabled|)"|'(?:true|disabled|)'|true))?(?=[\s>\/])[^>]*>/i;
 const ARIA_DISABLED_RE = /\baria-disabled\s*=\s*["']?true["']?/i;
 const WAITLIST_FORM_RE = /<form\b[^>]{0,400}?>[\s\S]{0,600}?<input\b[^>]*\btype\s*=\s*["']?email["']?[^>]*>/i;
-const DEAD_ANCHOR_RE = /<a\b[^>]*\bhref\s*=\s*["']#["']?[^>]*>/gi;
+// ...and only when that form asks for nothing else: a sign-in form (email + password) or a contact form is not a waitlist capture.
+const isWaitlistForm = markup => { for (const m of markup.matchAll(/<form\b[\s\S]*?<\/form>/gi)) { const f = m[0], visible = [...f.matchAll(/<input\b[^>]*>/gi)].filter(i => !/type\s*=\s*["']?(hidden|submit|button|checkbox)/i.test(i[0])); if (WAITLIST_FORM_RE.test(f) && !/type\s*=\s*["']?password/i.test(f) && visible.length <= 1 && !/<textarea|<select/i.test(f)) return true; } return false; };
+const DEAD_ANCHOR_RE = /<a\b[^>]*\bhref\s*=\s*(?:"#"|'#')[^>]*>/gi; // href="#" with the closing quote: an anchor to a section (href="#pricing") is navigation, not a dead link
 function structuralPromiseSignalsOf(markup) {
   const out = [];
   if (DISABLED_CONTROL_RE.test(markup)) out.push("a disabled button/input/link on the page");
   if (ARIA_DISABLED_RE.test(markup)) out.push('aria-disabled="true" on an element');
-  if (WAITLIST_FORM_RE.test(markup)) out.push("a form that only collects an email (waitlist/early-access capture)");
+  if (isWaitlistForm(markup)) out.push("a form that only collects an email (waitlist/early-access capture)");
   const deadAnchors = [...markup.matchAll(DEAD_ANCHOR_RE)].length;
   if (deadAnchors >= 2) out.push(`${deadAnchors} link(s) that go nowhere (href="#") — often a placeholder for something not built yet`);
   return out;
@@ -184,6 +187,12 @@ function works(pm, { pageFileOf, dayArg, siteDirOf, productDirOf } = {}) {
     const last = paths.map(y => tryGit("log", "-1", "--format=%cI", K.ref, "--", y).trim()).filter(Boolean).sort().at(-1) || null;
     // Full timestamp: keeps ordering correct even when the page and a feature change on the same day.
     source = { type: "repo", path: paths, last_change: last, day_before: last ? Math.round((Date.now() - Date.parse(last)) / 864e5) : null };
+  }
+  // A live page (frontyard.url) the agent already fetched and saved to pm/state/frontyard-page.html: read it from there. It only said "have an agent fetch
+  // it" even when the file was sitting there from the run before (BlogFactory field test). The script still never touches the network.
+  if (!raw.trim() && !pageFileOf && !paths.length && V.url) {
+    const saved = path.join(pm, "state", "frontyard-page.html");
+    if (fs.existsSync(saved)) { rawMarkup = fs.readFileSync(saved, "utf8"); raw = pageTextOf(rawMarkup, saved); source = { type: "saved", path: saved, url: V.url, saved_at: fs.statSync(saved).mtime.toISOString() }; }
   }
   if (!raw.trim()) return { ...empty, page_missing: true, url: V.url || null };
   const Glossary = { ...DEFAULT_GLOSSARY, ...Object.fromEntries(Object.entries(K.glossary || {}).map(([a, b]) => [a, [...(DEFAULT_GLOSSARY[a] || []), ...[].concat(b)]])) };

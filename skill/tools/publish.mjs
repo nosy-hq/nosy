@@ -7,7 +7,7 @@
 // diff, psst's checked list when it is as new as the raw one (psst-final.json: the refuter's survivors, title/size/verdict/references only), run history (five fields a line), the first section of the summary, the rival watch list (state/watch.json: public rival page URLs,
 // so Cloud's cron can check them daily), the rivals' price lines (rival-facts.mjs), customer demand cut down to counts
 // (demand-facts.mjs), the page's first screen (glance.mjs), and, only if you made them, the lines of your roadmap (state/roadmap.json: a title, a #N and a
-// GitHub link per line, publish-safe.mjs safeRoadmap) and the public numbers about your rivals (state/rival-signals.json: stars, downloads, open roles,
+// GitHub link per line, publish-safe.mjs safeRoadmap) the candidate × axis matrix of `atlas` (state/frontier.json: names, scores, grades, dates, publish-safe.mjs safeFrontier) and the public numbers about your rivals (state/rival-signals.json: stars, downloads, open roles,
 // ratings, publish-safe.mjs safeRivalSignals). Nothing else in pm/ (decisions, signal/ and so your own notes on rivals, rivals) leaves.
 // docs/DATA.md lists every key.
 // Usage: node publish.mjs <pm> [--project <name>] [--url <cloud url>] [--token-file <path>] [--dry-run [--full]] [--yes] [--allow-sensitive]
@@ -36,11 +36,11 @@ import { rivalFacts } from "./rival-facts.mjs";
 import { demandForCloud } from "./demand-facts.mjs";
 import { forCloud as rivalDemandForCloud } from "./rival-demand.mjs";
 import { netError } from "./hints.mjs";
-import { readSources } from "./sources-file.mjs";
+import { readSources, matrixFile } from "./sources-file.mjs";
 import { preflightMatrix, describe as describeMatrix } from "./matrix-preflight.mjs";
 
 import readline from "node:readline";
-import { safeStatus, safeDiff, safeLowhanging, safePsstFinal, finalIsCurrent, safeGlance, safeSummary, safeRuns, safeRoadmap, safeRivalSignals, authorNames, branchNames, PayloadKeys } from "./publish-safe.mjs";
+import { safeStatus, safeDiff, safeLowhanging, safePsstFinal, finalIsCurrent, safeGlance, safeSummary, safeRuns, safeRoadmap, safeRivalSignals, safeFrontier, authorNames, branchNames, PayloadKeys } from "./publish-safe.mjs";
 
 export const Files = ["matrix.json", "state/status.json", "state/lowhanging.json", "state/diff.json", "history/runs.jsonl", "summary.md", "state/watch.json"];
 const Tool = path.dirname(fileURLToPath(import.meta.url));
@@ -76,12 +76,12 @@ const Cut = { "state/status.json": t => JSON.stringify(safeStatus(JSON.parse(t))
   "state/lowhanging.json": t => JSON.stringify(safeLowhanging(JSON.parse(t), readJsonQuiet(path.join(pm, "state", "receipts.json"))), null, 1), "summary.md": t => safeSummary(t), "history/runs.jsonl": t => safeRuns(t) };
 const send = []; // {key, text}
 for (const f of Files) {
-  const file = path.join(pm, f);
+  const file = f === "matrix.json" ? matrixFile(pm, sources) : path.join(pm, f); // the matrix where sources.json says it is
   if (!fs.existsSync(file)) continue;
   try { const raw = fs.readFileSync(file, "utf8"); send.push({ key: `pm/${f}`, text: Cut[f] ? Cut[f](raw) : raw }); }
   catch (e) { console.error(`(${f} left out: it can't be read or cut down safely: ${why(e)})`); }
 }
-if (!send.some(x => x.key === "pm/matrix.json")) fail(`${pm}/matrix.json is missing: the dashboard is built around it. Run neighbors (or nosy weekly) first.`);
+if (!send.some(x => x.key === "pm/matrix.json")) fail(`${matrixFile(pm, sources)} is missing: the dashboard is built around it. It is written by \`nosy setup .\` (an empty one, with your own column) and filled by the neighbors step (rival files, then \`node <skill>/tools/build-matrix.mjs ${pm}\`); \`nosy weekly\` does not write it. Or point sources.json \`matrix\` at the one you keep.`);
 // Will the dashboard draw it? (internal request 196.) Cloud reads two shapes and five codes; on the first run on a real product it said nothing
 // about a matrix it could not read and "Published" was printed anyway. The same reader as every other tool runs first, the owner's code
 // words are mapped (sources.json → matrixCodes), and a matrix it could not draw stops the send here.
@@ -111,7 +111,7 @@ try { if (fs.existsSync(rdFile)) { const RD = rivalDemandForCloud(readJson(rdFil
 catch (e) { console.error(`(rival demand skipped: ${why(e)})`); }
 // The roadmap (roadmap.mjs) and the public numbers about rivals (rival-signals.mjs) go up only if you ran them: titles, #numbers and GitHub links; numbers
 // and their public sources. Each is cut down to those fields first (publish-safe.mjs); pm/signal/ (your own rival notes included) is never read here.
-for (const [name, cutFor] of [["roadmap.json", safeRoadmap], ["rival-signals.json", safeRivalSignals]]) {
+for (const [name, cutFor] of [["roadmap.json", safeRoadmap], ["rival-signals.json", safeRivalSignals], ["frontier.json", safeFrontier]]) {
   const f = path.join(pm, "state", name);
   try { if (fs.existsSync(f)) send.push({ key: `pm/state/${name}`, text: JSON.stringify(cutFor(readJson(f)), null, 1) }); }
   catch (e) { console.error(`(${name} skipped: ${why(e)})`); }
@@ -133,11 +133,22 @@ process.on("exit", () => fs.rmSync(tmp, { recursive: true, force: true }));
 for (const x of send) { const f = path.join(tmp, x.key); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, x.text); }
 const scanPm = path.join(tmp, ".scan-pm"); fs.mkdirSync(scanPm);
 { const own = readJsonQuiet(path.join(pm, "private.json")), o = own && typeof own === "object" && !Array.isArray(own) ? own : {};
-  fs.writeFileSync(path.join(scanPm, "private.json"), JSON.stringify({ ...o, names: [...(Array.isArray(o.names) ? o.names : []), ...authorNames(pm), ...branchNames(pm)] })); }
+  // Public names that are allowed as a whole name even when a commit author shares a word with them: the rivals' names (matrix, sources.json), the owner's own product
+// name, and sources.json `privacy.publicNames`. A rival called "Claude Code" must not stop a publish because a bot author is called "Claude".
+const publicEntities = (() => {
+  const names = new Set(), add = x => { if (typeof x === "string" && x.trim().length >= 3) names.add(x.trim()); };
+  const M = readJsonQuiet(path.join(pm, "matrix.json")); for (const p of Array.isArray(M?.products) ? M.products : []) add(typeof p === "string" ? p : p?.name); add(M?.biz?.name);
+  const K = readJsonQuiet(path.join(pm, "sources.json")); for (const r of Object.values(K?.rivals && typeof K.rivals === "object" ? K.rivals : {})) add(r && r.name);
+  for (const n of Array.isArray(K?.privacy?.publicNames) ? K.privacy.publicNames : []) add(n);
+  return [...names];
+})();
+const authors = authorNames(pm), branches = branchNames(pm); // where a name came from is said in the finding ("name: Claude (a commit author)")
+  fs.writeFileSync(path.join(scanPm, "private.json"), JSON.stringify({ ...o, names: [...(Array.isArray(o.names) ? o.names : []), ...authors, ...branches], publicEntities: [...(Array.isArray(o.publicEntities) ? o.publicEntities : []), ...publicEntities],
+    nameSource: { ...Object.fromEntries(branches.map(n => [n, "one of your unmerged branches"])), ...Object.fromEntries(authors.map(n => [n, "a commit author"])) } })); }
 const scan = spawnSync(process.execPath, [path.join(Tool, "privacy-scan.mjs"), ...send.map(x => x.key), "--pm", scanPm], { encoding: "utf8", cwd: tmp, maxBuffer: 64 << 20 });
 // Fails closed: 2 = a finding, anything else non-zero = the scan couldn't run. Only a finding can be overridden.
 if (scan.status === 2 && allowSensitive) console.error(`${scan.stdout || ""}\n--allow-sensitive: sending although the scan found the above.`);
-else if (scan.status !== 0) { process.stderr.write(scan.stdout || scan.stderr || ""); await new Promise(r => process.stderr.write("", r)); fail(scan.status === 2 ? "the privacy scan found a secret or personal data in the files above; nothing was sent. Fix it at the source, or (only if you have read the list and it is fine to send) run again with --allow-sensitive." : "the privacy scan couldn't run; nothing was sent."); }
+else if (scan.status !== 0) { process.stderr.write(scan.stdout || scan.stderr || ""); await new Promise(r => process.stderr.write("", r)); fail(scan.status === 2 ? "the privacy scan found a secret or personal data in the files above; nothing was sent. A name that is really a public product or company: add it to `privacy.publicNames` in sources.json (it then passes only as that whole name). Anything else: fix it at the source. --allow-sensitive exists, but only for a list you have read and know is fine to send." : "the privacy scan couldn't run; nothing was sent."); }
 
 // The token: environment, then a file. Read only when a real send is about to happen (a dry run only says where it would come from);
 // never printed or logged. Returns { token, from } or { problem } (what to tell the owner; nothing was sent).
@@ -175,7 +186,8 @@ if (dry) { const T = findToken(); console.log(`  token: ${T.problem ? `not usabl
 // What is not a count: said, per file, in the line that promises "counts and structure only".
 const apart = [["pm/state/rival-demand.json", "titles and links of public issues on your rivals' trackers (their public data)"],
   ["pm/state/roadmap.json", "the titles, #numbers and GitHub links of your roadmap lines (the file you committed)"],
-  ["pm/state/rival-signals.json", "public numbers about your rivals (stars, downloads, open roles, ratings; not your notes on them)"]].filter(([k]) => send.some(x => x.key === k));
+  ["pm/state/rival-signals.json", "public numbers about your rivals (stars, downloads, open roles, ratings; not your notes on them)"],
+  ["pm/state/frontier.json", "the candidate names, scores, grades and dates of your `atlas` matrix (not the report text, and not what a score rests on)"]].filter(([k]) => send.some(x => x.key === k));
 console.log(apart.length
   ? `Counts and structure only, apart from ${apart.map(([k, d]) => `${k}: ${d}`).join("; ")}. No commit subjects, author names, PR titles, your own issue titles or customer quotes. Nothing else in pm/ leaves.`
   : "Counts and structure only: no commit subjects, author names, PR titles, issue titles or customer quotes. Nothing else in pm/ leaves.");

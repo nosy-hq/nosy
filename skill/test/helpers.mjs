@@ -17,7 +17,11 @@ export const Tool = path.join(path.dirname(fileURLToPath(import.meta.url)), ".."
 
 // Runs a tool; doesn't throw, returns {code, output, error} (code = exit code).
 export function run(file, args = [], opts = {}) {
-  const r = spawnSync(process.execPath, [file, ...args], { encoding: "utf8", maxBuffer: 64 << 20, ...opts });
+  // A child started with its own `env` would otherwise lose the zone this test process runs in (TZ, NOSY_TZ), and the tools' calendar day (the owner's, today.mjs) would be
+  // computed in another zone than the test's own `localDay()`. Tests are run under several zones on purpose, so the zone travels with the child.
+  const zone = {}; for (const k of ["TZ", "NOSY_TZ"]) if (process.env[k] !== undefined && !(opts.env && k in opts.env)) zone[k] = process.env[k];
+  const env = opts.env ? { ...opts.env, ...zone } : opts.env;
+  const r = spawnSync(process.execPath, [file, ...args], { encoding: "utf8", maxBuffer: 64 << 20, ...opts, ...(env ? { env } : {}) });
   if (r.error) return { code: null, output: "", error: String(r.error) };
   return { code: r.status, output: r.stdout || "", error: r.stderr || "" };
 }

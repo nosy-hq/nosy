@@ -49,6 +49,15 @@ export function record(pm) {
   return true;
 }
 
+// A rival file the first watch (or a bare `neighbors` run) created has the template's shape and nothing in it: no coded matrix row, no source. Its
+// modification time is minutes old, so by age alone it looked fresh and "needs no deep pass" (BlogFactory field test). What is in the file decides, not when
+// it was touched: a coded row (y p n u d, or a blank one is not) and at least one source address, else it is a stub.
+export function stubOf(md) {
+  const coded = (md.match(/^\|\s*\d{1,2}\s*\|[^|\n]*\|\s*[ypnud]\b/gim) || []).length;
+  const sources = /https?:\/\/[^\s)>\]]+/i.test(md.replace(/<[^>\n]*>/g, ""));
+  return { stub: coded === 0 || !sources, coded, sources };
+}
+
 // The plan: everything the text prints, as data. `now` is a number (ms) so a test can pin it.
 export function plan(pm, { now = Date.now() } = {}) {
   const K = readSourcesSafe(pm) || {}, registry = K.rivals && typeof K.rivals === "object" && !Array.isArray(K.rivals) ? K.rivals : {};
@@ -66,15 +75,20 @@ export function plan(pm, { now = Date.now() } = {}) {
     const state = watch.get(slug) ?? null, why = [];
     const t = tier || "A";
     let needsWork = false;
+    const empty = file && md ? stubOf(md).stub : false;
     if (t === "A") {
       if (state === "changed") { needsWork = true; why.push("its pages changed since the last watch"); }
       if (age === null) { needsWork = true; why.push("no rival file yet"); } else if (age > A_STALE_DAYS) { needsWork = true; why.push(`file ${plural(age, "day")} old`); }
+      if (empty) { needsWork = true; why.push("the file is a new stub: no coded matrix row or no source in it yet"); }
     } else if (t === "C") {
       if (age === null) { needsWork = true; why.push("no rival file yet"); } else if (age > C_STALE_DAYS) { needsWork = true; why.push(`file ${plural(age, "day")} old`); }
+      if (empty) { needsWork = true; why.push("the file is a new stub: no coded matrix row or no source in it yet"); }
     }
+    // One reason, named: a stub is not "fresh" however recently it was written.
+    const status = !file ? "no file" : empty ? "new stub" : state === "changed" && t !== "B" ? "changed upstream" : needsWork ? "stale" : "complete and current";
     const changedIn = log.filter(x => x.states[slug] === "changed").length;
     return { slug, name: (typeof R.name === "string" && R.name) || (md.match(/^# (.+)$/m) || [])[1]?.trim() || slug, tier: t, tierSet: !!tier, ...(R.tier !== undefined && !tier ? { tierInvalid: String(R.tier) } : {}),
-      watch: state, ageDays: age, needsWork, why, changedIn, snapshots: log.length };
+      watch: state, ageDays: age, status, needsWork, why, changedIn, snapshots: log.length };
   });
   const tiers = {};
   for (const t of ["A", "B", "C"]) {

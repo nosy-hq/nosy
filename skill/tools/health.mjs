@@ -11,6 +11,7 @@
 // unread, with no error. Everything else predates 18 (`Array.at` 16.6, global `fetch` 18.0, top-level await 14.8,
 // `fs.rmSync` 14.14). Node 19 never had it. Verified by running on 22 and 24 only.
 import fs from "node:fs"; import os from "node:os"; import path from "node:path"; import { spawnSync } from "node:child_process"; import { fileURLToPath } from "node:url";
+import { pagePath } from "./page-path.mjs";
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const MIN_NODE = "18.17";
@@ -83,7 +84,7 @@ export async function check({ cwd = process.cwd(), pm: pmArg, env = process.env,
   // 5. Copies `nosy install` made, in this project and the user folders (where each agent expects them).
   const I = await soft("install.mjs");
   if (I?.PROVIDERS) {
-    const seen = []; let trouble = false;
+    const seen = [], copies = []; let trouble = false;
     for (const [where, base, key] of [["here", cwd, "dir"], ["your user folder", home, "global"]])
       for (const [k, p] of Object.entries(I.PROVIDERS)) {
         if (!p[key]) continue;
@@ -102,8 +103,12 @@ export async function check({ cwd = process.cwd(), pm: pmArg, env = process.env,
           trouble = true; add("warn", `${label} is damaged: ${have.length} of its ${m.files} files are there${gone.length ? ` (missing ${gone.slice(0, 3).join(", ")}${gone.length > 3 ? ", …" : ""})` : ""}`, `\`${command("update")}\` puts them back`);
         }
         else seen.push(label);
+        copies.push(`${label} ${m?.version || "version unknown"}`);
       }
     if (seen.length) add("ok", `skill copies found: ${seen.join(", ")}`);
+    // More than one Nosy on the machine: which one a task loads is the agent's choice and a doctor script can't see it, but it can list them (BlogFactory
+    // field test: a project copy for two agents plus a global plugin cache, all 0.21.0, and nothing said which was in use or that a new chat is needed).
+    if (copies.length > 1 || (plugin && copies.length)) add("note", `more than one Nosy is installed: ${plugin ? `this one (${version}), ` : ""}${copies.join("; ")}`, "which one an agent loads depends on the agent, so keep them on one version (`" + command("update") + "` refreshes every copy `nosy install` made), and open a new chat after changing one: a running session keeps what it loaded");
     else if (!plugin && !trouble) add("note", "no skill folder in this project or your user folder (.claude/skills/nosy, .agents/skills/nosy, …), so an agent that reads skills from there won't see Nosy", "`npx github:nosy-hq/nosy install`");
   }
 
@@ -177,14 +182,15 @@ async function pmContents({ K, pm, rel, add, soft, command }) {
       const name = path.relative(process.cwd(), matrixFile) || matrixFile;
       let P; try { P = M.preflightMatrix(fs.readFileSync(matrixFile, "utf8"), { codes: K.matrixCodes && typeof K.matrixCodes === "object" ? K.matrixCodes : {} }); } catch (e) { P = { ok: false, problem: `can't be read (${String(e.message).split("\n")[0].slice(0, 80)})` }; }
       const problem = String(P.problem ?? "");
-      if (!P.ok && !P.report) add("warn", `${name} can't be read as a matrix: ${problem.replace(/^pm\/matrix\.json /, "")}`, `\`${command("neighbors")}\` rebuilds it, or fix the shape by hand`);
+      if (!P.ok && P.reason === "own-column") add("warn", `${name} has ${P.rows} rows but no column for your own product (${P.why}), so the page shows it with 0 done`, P.fix);
+      else if (!P.ok && !P.report) add("warn", `${name} can't be read as a matrix: ${problem.replace(/^pm\/matrix\.json /, "")}`, `\`${command("neighbors")}\` rebuilds it, or fix the shape by hand`);
       else if (!P.ok) add("warn", `${name}: ${problem.replace(/^\d+ of \d+ cells in pm\/matrix\.json/, "most cells")}`, "map them under `matrixCodes` in sources.json");
       else if (P.report.keysTranslated) add("warn", `${name} is keyed in another language (${P.report.areas} areas): Nosy reads it, and \`publish\` sends it as English, but the Cloud dashboard can't read the file itself`, `\`${command("neighbors")}\` rewrites it in English keys`);
       else if (P.report.unknown.length || P.report.mapped.length) add("note", `${name}: ${M.describe(P.report)}`, P.report.unknown.length ? "map the unknown codes under `matrixCodes` in sources.json (y done, p partial, n missing, u unknown, d announced)" : null);
       else add("ok", `${name} reads: ${M.describe(P.report)}`);
     }
   }
-  const page = typeof K.page === "string" && K.page ? at(path.isAbsolute(K.page) ? K.page : path.join(pm, K.page)) : null;
+  const pageFound = pagePath(pm, K), page = pageFound.configured ? pageFound.path : null;
   if (page && fs.existsSync(page)) {
     const html = fs.readFileSync(page, "utf8");
     if (/<!--\s*\/?pm:otomatik\s*-->/.test(html)) add("warn", `${path.relative(process.cwd(), page) || page} has the old marker pm:otomatik, so the page update would add a second block instead of replacing it`, "rename it to `<!-- pm:auto -->` … `<!-- /pm:auto -->` (it is your page: Nosy doesn't edit it for you)");

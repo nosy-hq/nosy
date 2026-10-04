@@ -9,6 +9,7 @@
 //   says so (it never edits or deletes an update). A second look at the same week is a preview.
 // Reads: what `nosy roadmap` reads (the board's cards, merged PRs, release tags) plus the GitHub releases of the window (a project that ships by release) and, with --yes, the board's id and its latest status updates.
 // Writes (only with --yes): one `createProjectV2StatusUpdate` mutation (needs the `project` scope). Nothing else, and nothing in your repo.
+import { localDayOf } from "./today.mjs";
 import fs from "node:fs"; import path from "node:path"; import os from "node:os";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -44,7 +45,7 @@ const line = it => `- ${String(it.title).replace(/\s+/g, " ").trim()}${it.ref &&
 // The whole body, from the roadmap model (`m`: now / next / later / shipped[{ title, ref, url, date }]). Pure.
 // `releases` are GitHub releases published in the window ({ title, url, date }): a project that ships by release rather than by pull request has shipped too.
 export function bodyOf(m, { now = Date.now(), days = 7, lang, releases = [] } = {}) {
-  const P = phrases(lang), from = new Date(now - days * 864e5), day = d => d.toISOString().slice(0, 10), week = isoWeek(new Date(now));
+  const P = phrases(lang), from = new Date(now - days * 864e5), day = d => localDayOf(d), week = isoWeek(new Date(`${localDayOf(now)}T12:00:00Z`)); // the owner's days and the ISO week of the owner's day
   const shipped = [...(m.shipped || []), ...releases.map(r => ({ title: r.title, ref: null, url: r.url, date: r.date }))].filter(s => String(s.date) >= day(from)).sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 5);
   const up = [...(m.now || []), ...(m.next || [])].slice(0, 3);
   const L = [`**${fill(P.week, { week, from: day(from), to: day(new Date(now)) })}**`, "", `**${P.shipped}**`, ...(shipped.length ? shipped.map(line) : [P.nothing]), "",

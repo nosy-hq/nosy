@@ -50,8 +50,11 @@ for (const s of lines) for (const m of s.t.matchAll(/#(\d{2,5})('(?:de|da|te|ta|
   if (!open) continue;
   if (!prs.has(m[1])) prs.set(m[1], []); prs.get(m[1]).push(s.no);
 }
+// A PR check that could not run (gh missing, signed out, offline, no issue.repo) is not "nothing stale": it is counted and said. Only "this number is not a PR" (an issue) is
+// skipped quietly. Before, the scan said "No lines look stale" over checks it never made (field-test hunt).
+const unchecked = [];
 for (const [n, numbers] of prs) {
-  let p; try { p = JSON.parse(execFileSync("gh", ["pr", "view", n, "-R", K.issue.repo, "--json", "state,mergedAt,closedAt,title"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })); } catch { continue; } // an issue, or missing
+  let p; try { p = JSON.parse(execFileSync("gh", ["pr", "view", n, "-R", K.issue.repo, "--json", "state,mergedAt,closedAt,title"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })); } catch (e) { if (!/Could not resolve to a PullRequest|no pull requests? found|is not a pull request/i.test(String(e.stderr || ""))) unchecked.push(n); continue; } // an issue, or missing
   if (p.state === "OPEN") continue;
   const ne = p.state === "MERGED" ? `merged (${new Date(p.mergedAt).toLocaleString("en-US", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })})` : "closed, not merged";
   finding.push({ type: "PR status", ref: `#${n}`, lines: [...new Set(numbers)], not: `#${n} ${ne}; the page says open. ${p.title.slice(0, 70)}` });
@@ -82,5 +85,6 @@ const one = new Map(); for (const b of finding) { const k = b.type + b.ref; if (
 const list = [...one.values()].map(b => ({ ...b, lines: [...new Set(b.lines)].sort((a, c) => a - c) }));
 let o = `# Stale-line scan · ${path.basename(page)} · ${K.ref}\n\nThe page was not modified. Line numbers are the HTML file's lines; the auto section, scripts, styles and code (blocks, spans, <code>/<pre>) weren't scanned.\n\n`;
 o += list.length ? `| Type | Ref | Line | Evidence |\n|---|---|---|---|\n${list.map(b => `| ${b.type} | ${b.ref} | ${b.lines.slice(0, 12).join(", ")}${b.lines.length > 12 ? " …" : ""} | ${b.not.replace(/\|/g, "/")} |`).join("\n")}\n` : "No lines look stale.\n";
+if (unchecked.length) o += `\n**${unchecked.length} PR status check${unchecked.length === 1 ? "" : "s"} not run** (${K.issue?.repo ? "gh is missing, signed out or offline" : "no issue.repo in sources.json"}): ${unchecked.map(n => `#${n}`).join(", ")}. "No lines look stale" is not said for those.\n`;
 process.stdout.write(o);
-if (jsonOut) fs.writeFileSync((fs.mkdirSync(path.dirname(jsonOut), { recursive: true }), jsonOut), JSON.stringify({ type: "stale", generated: new Date().toISOString(), page: path.basename(page), findings: list }, null, 1));
+if (jsonOut) fs.writeFileSync((fs.mkdirSync(path.dirname(jsonOut), { recursive: true }), jsonOut), JSON.stringify({ type: "stale", generated: new Date().toISOString(), page: path.basename(page), findings: list, unchecked }, null, 1));

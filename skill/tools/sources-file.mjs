@@ -98,6 +98,23 @@ export function rivalDoc(text) {
   }
   return false;
 }
+// Why a markdown file is not rival-shaped, in words the owner can act on (null when it is). rivals-import used to say only "nothing to import" for a plausible
+// file whose matrix used "Yes / No" or ✓ / ✗ instead of the codes y p n u d (BlogFactory field test).
+export function rivalDocWhy(text) {
+  if (rivalDoc(text)) return null;
+  const t = stripBom(text), rows = t.split("\n").filter(l => /^\s*\|.*\|\s*$/.test(l)).map(l => l.trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim()));
+  if (!rows.length) return "no table, and none of the template's headings (Latest major announcement, Position relative to)";
+  const width = Math.max(0, ...rows.map(r => r.length)); let best = null;
+  for (let col = 1; col < width; col++) {
+    const cells = rows.map(r => r[col]).filter(c => c != null && c !== "" && !/^:?-{2,}:?$/.test(c));
+    const words = cells.filter(c => /^(yes|no|true|false|✓|✔|✗|✘|x|-|—|partial|n\/a)$/i.test(c));
+    if (words.length >= 3 && (!best || words.length > best.n)) best = { n: words.length, sample: [...new Set(words.slice(0, 3))].join(" / ") };
+  }
+  if (best) return `a table with ${best.n} Yes/No-style cells (${best.sample}) but not the codes y p n u d, which is how Nosy reads a cell (y yes, p partial, n no, u not found, d announced); recode the column, or copy the file's tables into the template`;
+  const codes = rows.flatMap(r => r.slice(1)).filter(c => /^[ypnud]$/i.test(c)).length;
+  return codes ? `a table, but only ${codes} cell${codes === 1 ? "" : "s"} with a code y p n u d (at least 3 in one column, in every filled row of that column)` : "a table, but no column of the codes y p n u d, and none of the template's headings (Latest major announcement, Position relative to)";
+}
+export const markdownFiles = dir => walkMarkdown(dir);
 const SKIP_DIRS = new Set(["node_modules", ".git", "vendor"]);
 // Every .md under `dir` as "/"-joined paths relative to it, depth-first, never entering SKIP_DIRS (a rivalsPath of "." must not list a
 // node_modules tree first and filter it afterwards: fs.readdirSync's `recursive` option does that, and exists only from Node 18.17).
@@ -129,3 +146,16 @@ export function rivalFiles(dir, { nested = false } = {}) {
 const loginKey = x => String(x ?? "").trim().replace(/^@/, "").toLowerCase();
 export const teamLogins = K => new Set([].concat(K && K.team !== undefined && K.team !== null ? K.team : []).filter(x => typeof x === "string").map(loginKey).filter(Boolean));
 export const isTeamLogin = (logins, login) => { const k = loginKey(login); return !!k && logins.has(k); };
+
+// The matrix file the owner configured (`sources.json` `matrix`, relative to pm/ or to the folder above it), else pm/matrix.json. `check`, `diff`, `freshness`, `handoff` and `build-waves`
+// honoured it; `publish`, `nosy page` and the first screen read pm/matrix.json whatever it said, so a valid matrix kept at docs/matrix.json was "missing" to publish and a page was
+// built without it, with no warning (field-test hunt).
+export function matrixFile(pm, K) {
+  const def = path.join(pm, "matrix.json");
+  const cfg = K && typeof K.matrix === "string" && K.matrix.trim() ? K.matrix.trim() : null;
+  if (!cfg) return def;
+  if (path.isAbsolute(cfg)) return cfg;
+  const root = path.resolve(pm);
+  for (const c of [path.join(root, cfg), path.resolve(path.dirname(root), cfg)]) if (fs.existsSync(c)) return c;
+  return def;
+}

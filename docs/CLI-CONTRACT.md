@@ -18,7 +18,7 @@ Most of the 19 agent commands have a terminal twin that runs with no model: `npx
 |---|---|
 | `doctor` | `nosy doctor` (`--check` for the install) |
 | `peek` | `nosy peek` |
-| `shipped` | `nosy shipped` Also `nosy ship-notes` (previews one comment per issue a merged PR closed; `--yes` posts). |
+| `shipped` | `nosy shipped` (it also lists what you handed off with `nosy handoff` that a merged PR has closed, with the same proposals as `nosy handoff --review --brief`; nothing when there is none). Also `nosy ship-notes` (previews one comment per issue a merged PR closed; `--yes` posts). |
 | `psst` | `nosy psst` |
 | `canwe` | `nosy canwe "<question>"` |
 | `frontyard` | `nosy frontyard` |
@@ -27,7 +27,7 @@ Most of the 19 agent commands have a terminal twin that runs with no model: `npx
 | `score` | `nosy score` |
 | `move-in` | `nosy setup` (proposes `pm/sources.json`; the rest of move-in is the agent) |
 | `tour` | `nosy tour` (the plan: what Nosy reads, writes and sends, the steps with their state, one list of questions. It runs no step itself; the agent does. `nosy tour approve <id>…`, `nosy tour skip <id>…` and `nosy tour done <id>` record progress in `pm/state/tour.json`) |
-| `handoff` | `nosy handoff` (the list), `nosy handoff <#> [--agent [copilot]] [--to <login>] [--project <n>] [--horizon Now|Next|Later] [--area <no|name>] [--body-file <file>]` (the preview), `--yes` (writes), `nosy handoff --setup-board [--project <n>]` (what the board lacks; `--yes` creates it), `nosy handoff --review` (read-only: what became of what was handed off, with proposals) |
+| `handoff` | `nosy handoff` (the list), `nosy handoff <#> [--agent [copilot]] [--to <login>] [--project <n>] [--horizon Now|Next|Later] [--area <no|name>] [--body-file <file>]` (the preview), `--yes` (writes), `nosy handoff --setup-board [--project <n>]` (what the board lacks; `--yes` creates it), `nosy handoff --review [--brief]` (read-only: what became of what was handed off, with proposals; `--brief` is only what a merged PR closed, which `nosy shipped` shows) |
 | `board-status` | `nosy board-status [--days N] [--status on-track|at-risk|off-track|inactive|complete]` (the preview), `--yes` (posts) |
 | `roadmap` | `nosy roadmap` (`--check`, `--pr --yes`, `--write <file>` for a repo with no `origin`, `--lang <code>`; the optional Action input `roadmap` runs it weekly) |
 | `neighbors` | `nosy watch` (which rivals' public pages changed; the research is the agent). Also `nosy tiers` (which rivals get a deep pass, which are only watched, and the token estimate), `nosy matrix-proposals` (sorts the cells the neighbor agents propose by evidence, `apply` writes the ones that earned it) and `nosy rivals-import` (copies rival research kept outside `pm/rivals` in) Also `nosy rival-signals` (public growth counters: GitHub, npm, App Store, open roles; `init` proposes, `note` keeps your own sourced observations). |
@@ -108,3 +108,15 @@ node skill/tools/never-check.mjs pm --base origin/main; test $? -ne 2
 | `nosy decision` / `next-decision.mjs` | a decision, or "no next product decision yet" | — | — |
 | `nosy nudge` / `nudge.mjs` | printed (silent when nothing is new) | no `sources.json` | — |
 
+## Added after the BlogFactory field test (Oct 2026)
+
+| Command | 0 | 1 | 2 |
+|---|---|---|---|
+| `nosy page validate` / `page-validate.mjs` | every check passed (page there, scripts parse, own column in the data, no stale lines, privacy scan) | no page or no `pm/` | at least one check failed (listed with its line or count) |
+| `nosy rivals-week` / `rivals-week.mjs` | the box's lines are all sourced and dated | no `pm/state/rivals-this-week.json`, or it isn't valid JSON | some lines were left out (no source address, no day, no rival) |
+| `nosy sweep-check` / `sweep-reconcile.mjs` | every rival the sweep could read agrees with its file | no `pm/state/rival-sweep.json`: run `nosy sweep` first | at least one rival is behind: its newest swept entry is later than its file's "Latest major announcement" |
+| `nosy universe` / `rival-universe.mjs` | the search may stop (two searches in a row added nothing, or the owner said stop) | no `pm/state/rival-universe.json` | not finished, or the file has problems (each is listed) |
+| `nosy history [30d\|90d]` / `history-import.mjs` | `pm/state/history.json` and `history.md` written (a missing `gh` is a note in the file, not a failure) | no `sources.json`, not a git repository, or a bad `--days` | — |
+| `rivals-import.mjs` | rival files copied, or the folder holds no markdown | no folder to read from | markdown files were there but none was rival-shaped (each is listed with why) |
+
+`nosy peek` and `nosy notes` also take `--days N`. `publish` and `doctor --check` now stop or warn when a step-shaped matrix has rows but no usable column for the owner's own product.

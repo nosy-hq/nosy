@@ -36,15 +36,16 @@
 //        node matrix-proposals.mjs apply <pm> [--matrix <file>] [--dry-run]
 //        node matrix-proposals.mjs undo <pm> [--force]
 // Exit: 0 done · 1 no proposals file / no matrix / bad JSON / nothing to undo.
+import { localDayOf } from "./today.mjs";
 import fs from "node:fs"; import path from "node:path"; import crypto from "node:crypto"; import { fileURLToPath } from "node:url";
-import { parseJson, readSourcesSafe } from "./sources-file.mjs";
+import { parseJson, readSourcesSafe, rivalsDir, rivalFiles } from "./sources-file.mjs";
 import { nosyCommand } from "./hints.mjs";
 
 const CODES = ["y", "p", "n", "u", "d"], GRADES = ["primary", "secondary", "marketing", "gated"];
 const TR = JSON.parse(fs.readFileSync(new URL("../data/lang/tr/read-matrix.json", import.meta.url), "utf8")); // a hand-written line-shape matrix may be keyed in Turkish (read-matrix.mjs)
 const LK = TR.lineShapeKeys || {};
 const fold = s => String(s ?? "").replace(/[İI]/g, "i").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/ı/g, "i").replace(/\s+/g, " ").trim();
-const iso = (d = new Date()) => d.toISOString().slice(0, 10);
+const iso = (d = new Date()) => localDayOf(d);
 
 // An address typed without its scheme ("rival.com/changelog") is still that site: "https://" is assumed, or two pages of one site would pass as two sources.
 const parseUrl = url => { const t = String(url ?? "").trim(); if (!t) return null; try { return new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? t : `https://${t}`); } catch { return null; } };
@@ -118,13 +119,14 @@ export function classify(p, cell = {}) {
 }
 
 // All proposals against a matrix: classes, plus the warnings that need a look across proposals.
-export function check(file, M, { codes } = {}) {
+export function check(file, M, { codes, rivals = [] } = {}) {
+  const fileOf = name => rivals.find(r => fold(r.name) === fold(name) || fold(r.slug) === fold(name));
   const list = (Array.isArray(file) ? file : Array.isArray(file && file.proposals) ? file.proposals : []).filter(p => p && typeof p === "object" && !Array.isArray(p)); // a null or a string in the list isn't a proposal
   const warnings = [], cells = new Map();
   const out = list.map((p, i) => {
     const cell = locate(M, p.rival, p.step, { codes }), C = { ...classify(p, cell), index: i, warnings: [] };
     C.cell = { shape: cell.shape, found: cell.rivalFound && cell.stepFound, current: cell.current };
-    if (!cell.rivalFound) C.warnings.push(cell.ours ? `"${p.rival}" is our own product, not a rival: its column isn't changed from rival research` : `rival "${p.rival}" is not in the matrix`);
+    if (!cell.rivalFound) C.warnings.push(cell.ours ? `"${p.rival}" is our own product, not a rival: its column isn't changed from rival research` : cell.stepFound && fileOf(p.rival) ? `rival "${p.rival}" has a rival file (${fileOf(p.rival).file}) but no column yet: applying adds it, with only the cells that earn it` : `rival "${p.rival}" is not in the matrix`);
     else if (!cell.stepFound) C.warnings.push(`step "${p.step}" is not in the matrix`);
     else if (cell.current && CODES.includes(C.from) && cell.current !== C.from) {
       C.warnings.push(`the matrix says ${cell.current} for this cell, the proposal says it started at ${C.from}`);
@@ -169,8 +171,9 @@ const firstUrl = c => (c.evidence.find(e => e.opened && e.grade === "primary") |
 // A matrix with the "apply" class written in and every opened cell re-dated. Returns { matrix, changes } and never touches the input.
 // `codes` (sources.json matrixCodes) maps the owner's own letters to Nosy's. A cell that holds one of the owner's letters keeps speaking that
 // language: the new code is written back as the owner's letter when exactly one letter means it, so a hand-kept matrix isn't left with two vocabularies.
-export function applyTo(M, R, { today = iso(), codes } = {}) {
+export function applyTo(M, R, { today = iso(), codes, rivals = [] } = {}) {
   const next = JSON.parse(JSON.stringify(M)), changes = [], skipped = [];
+  const fileOf = name => rivals.find(r => fold(r.name) === fold(name) || fold(r.slug) === fold(name));
   const ownLetter = (raw, to) => {
     const was = codeOf(raw);
     if (!codes || typeof was !== "string" || CODES.includes(was) || !Object.prototype.hasOwnProperty.call(codes, was)) return to;
@@ -178,7 +181,16 @@ export function applyTo(M, R, { today = iso(), codes } = {}) {
     return letters.length === 1 ? letters[0] : to;
   };
   for (const c of R.proposals) {
-    const cell = locate(next, c.rival, c.step, { codes });
+    let cell = locate(next, c.rival, c.step, { codes });
+    // A rival that has a file (a new stub the research is filling in) but no column yet: the first cell that earns its place creates the column, empty
+    // otherwise. build-matrix leaves a rival with a blank table out, and this refused any rival it didn't have, so the first research pass on a new rival
+    // could never be applied without seeding every cell by hand (BlogFactory field test). Only step-shape matrices, only a "apply" proposal, only a rival
+    // with a file: a typo in a rival's name still adds nothing.
+    if (c.class === "apply" && !cell.rivalFound && !cell.ours && cell.stepFound && cell.shape === "step" && fileOf(c.rival)) {
+      const f = fileOf(c.rival); (next.products ||= []).push({ name: f.name, file: f.file, category: f.category || "", codes: {} });
+      changes.push({ kind: "rival-added", rival: f.name, step: c.step, from: null, to: null, evidence: "" });
+      cell = locate(next, f.name, c.step, { codes });
+    }
     if (!cell.rivalFound || !cell.stepFound) { if (c.class === "apply") skipped.push({ rival: c.rival, step: c.step, why: !cell.rivalFound ? "rival not in the matrix" : "step not in the matrix" }); continue; }
     const name = cell.rival;
     if (c.class === "apply") {
@@ -203,22 +215,46 @@ export function applyTo(M, R, { today = iso(), codes } = {}) {
 // verified_at). Only step-shape cells of a rival that has a file; the row's own name cell and any other row are left as written.
 // Returns the rows it changed: [{ file, step }].
 export function syncRivals(pm, matrix, changes, { dir = path.join(pm, "rivals") } = {}) {
-  const done = [], byName = new Map((matrix.products || []).map(p => [p.name, p]));
+  const done = [], skipped = [], byName = new Map((matrix.products || []).map(p => [p.name, p]));
   for (const ch of changes) {
     const prod = byName.get(ch.rival), file = prod && prod.file && path.join(dir, prod.file);
     if (!file || !fs.existsSync(file)) continue;
     // A proposal may name the row by its feature ("Change alerts") instead of its number: the change carries the number it was found under (`no`).
     const no = String(ch.no ?? ch.step), cell = prod.codes && prod.codes[no]; if (!cell || typeof cell !== "object") continue;
     const re = /^\|\s*(\d{1,2})\s*\|\s*([^|]+?)\s*\|\s*([ypnud])\b[^|]*\|\s*(.*?)\s*\|?\s*$/i;
+    // A row whose Code cell is still empty (a new stub, before its research) is written too: the cell must live in the rival's table, which is what the matrix is rebuilt from.
+    const blank = /^\|\s*(\d{1,2})\s*\|\s*([^|]+?)\s*\|\s*\|\s*(.*?)\s*\|?\s*$/;
     const lines = fs.readFileSync(file, "utf8").split("\n"); let hit = false;
     for (let i = 0; i < lines.length; i++) {
-      const m = lines[i].match(re); if (!m || m[1] !== no) continue;
+      let m = lines[i].match(re);
+      if (!m) { const b = lines[i].match(blank); if (b && !b[2].startsWith("<")) m = [b[0], b[1], b[2], "", b[3]]; }
+      if (!m || m[1] !== no) continue;
       const base = String(cell.evidence ?? m[4]).replace(/\s*\[verified:[^\]]*\]\s*$/, "");
       lines[i] = `| ${m[1]} | ${m[2]} | ${cell.k} | ${base}${cell.verified_at ? ` [verified: ${cell.verified_at}]` : ""} |`; hit = true; break;
     }
+    // A row that isn't in the rival's table yet (the table lists fewer steps than the matrix): added after the last row, so the cell lives in the file the matrix is rebuilt from.
+    // Silently skipping it let `apply` say "Changed 1 cell" and the next rebuild erase that cell (field-test hunt).
+    if (!hit) {
+      const at = lines.map((l, i) => (/^\|\s*\d{1,2}\s*\|/.test(l) ? i : -1)).filter(i => i >= 0).pop(), name = (matrix.steps || []).find(x => String(x.no) === no)?.name;
+      if (at === undefined || !name) { skipped.push({ file: prod.file, step: no, why: at === undefined ? "the rival's file has no feature table" : "the step has no name in the matrix" }); continue; }
+      lines.splice(at + 1, 0, `| ${no} | ${name} | ${cell.k} | ${String(cell.evidence ?? "")}${cell.verified_at ? ` [verified: ${cell.verified_at}]` : ""} |`); hit = true;
+    }
     if (hit) { fs.writeFileSync(file, lines.join("\n")); done.push({ file: prod.file, step: no }); }
   }
+  done.skipped = skipped;
   return done;
+}
+
+// The rival files in pm/rivals (or sources.json rivalsPath): { slug, file, name } with the name from the file's own first heading. A rival the matrix doesn't have
+// yet can be added from a proposal only when it has one of these.
+export function knownRivals(pm) {
+  const K = readSourcesSafe(pm) || {}, dir = rivalsDir(pm, K), out = [];
+  for (const f of rivalFiles(dir, { nested: dir !== path.join(pm, "rivals") })) {
+    let text = ""; try { text = fs.readFileSync(path.join(dir, f), "utf8"); } catch { continue; }
+    const slug = path.basename(f).replace(/\.md$/i, ""), reg = K.rivals && K.rivals[slug] && K.rivals[slug].name;
+    out.push({ slug, file: f, name: (typeof reg === "string" && reg) || (text.match(/^#\s+(.+)$/m) || [])[1]?.trim() || slug, category: (text.match(/^-?\s*\*\*Category:\*\*\s*(.+)$/mi) || [])[1]?.trim() || "" });
+  }
+  return out;
 }
 
 const sha = s => crypto.createHash("sha1").update(s).digest("hex");
@@ -261,7 +297,7 @@ export function run(pm, { matrixFile = path.join(pm, "matrix.json"), proposalsFi
   if (!fs.existsSync(matrixFile)) throw new Error(`No ${matrixFile}: nothing to check the proposals against.`);
   const P = readJsonFile(proposalsFile), M = readJsonFile(matrixFile), K = readSourcesSafe(pm);
   const codes = K && K.matrixCodes && typeof K.matrixCodes === "object" ? K.matrixCodes : undefined;
-  const R = check(P, M, { codes });
+  const R = check(P, M, { codes, rivals: knownRivals(pm) });
   // The proposals file is older than the matrix: the agents looked at an earlier matrix (see the header: said once, cells are checked one by one).
   try { if (fs.statSync(proposalsFile).mtimeMs < fs.statSync(matrixFile).mtimeMs) R.olderThanMatrix = true; } catch {}
   return { P, M, codes, R, matrixFile, proposalsFile };
@@ -279,7 +315,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     const write = () => { fs.mkdirSync(path.dirname(outFile), { recursive: true }); fs.writeFileSync(outFile, JSON.stringify({ ...R, generated: new Date().toISOString(), source: path.basename(X.proposalsFile) }, null, 1)); };
     if (cmd === "check") { write(); console.log(summary(R)); console.log(`\nWrote ${outFile}. \`${nosyCommand("matrix-proposals apply")}\` applies the "apply" ones.`); }
     else {
-      const A = applyTo(M, R, { codes }), code = A.changes.filter(c => c.kind === "code"), redated = A.changes.length - code.length;
+      const A = applyTo(M, R, { codes, rivals: knownRivals(pm) }), code = A.changes.filter(c => c.kind === "code"), redated = A.changes.length - code.length;
       console.log(summary(R)); console.log("");
       console.log(`${dry ? "Would change" : "Changed"} ${code.length} cell(s)${redated ? `, re-dated ${redated}` : ""} in ${matrixFile}:`);
       for (const c of A.changes) console.log(`- ${c.rival} / step ${c.step}: ${c.kind === "code" ? `${c.from ?? "—"} → ${c.to}` : c.kind}${c.evidence ? ` · ${c.evidence}` : ""}`);
@@ -293,6 +329,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
         for (const ch of A.changes) { const f = (A.matrix.products || []).find(p => p.name === ch.rival)?.file, src = f && path.join(pm, "rivals", f); if (src && fs.existsSync(src) && !fs.existsSync(path.join(rdir, f))) { fs.mkdirSync(rdir, { recursive: true }); fs.copyFileSync(src, path.join(rdir, f)); } }
         const rows = syncRivals(pm, A.matrix, A.changes);
         if (rows.length) console.log(`Also written into ${rows.length} row(s) of the rival tables (pm/rivals/), which pm/matrix.json is rebuilt from.`);
+        for (const sk of rows.skipped || []) console.log(`! step ${sk.step} of ${sk.file} was not written into its rival table (${sk.why}): the next rebuild from the rival files would drop that cell.`);
         console.log(`\nBacked up first: ${bak}. To put it back: \`${nosyCommand("matrix-proposals undo")}\`.`);
       } else if (dry) console.log("\n(dry run: nothing written)");
       else console.log("\nNothing to change.");

@@ -1,5 +1,6 @@
 // A count taken from GitHub issues is a topic cluster ("N related issues, M people"), never "asked N times", it is printed with the
 // window it was counted over, and it is the same for the same input whatever order gh lists the issues in.
+import { localDay } from "../tools/today.mjs";
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
@@ -41,7 +42,7 @@ test("collect-signals records the window the GitHub count was taken over", () =>
   assert.equal(src.window.count, 6);
   assert.equal(src.window.limit, 200);
   assert.equal(src.window.complete, true, "fewer issues than the limit means all of them");
-  assert.equal(src.window.as_of, new Date().toISOString().slice(0, 10));
+  assert.equal(src.window.as_of, localDay());
   assert.match(md, /GitHub window: all 6 issues \(open and closed, opened \d{4}-\d\d-\d\d to \d{4}-\d\d-\d\d\), as of \d{4}-\d\d-\d\d\. A count from these issues is a topic cluster/);
 });
 

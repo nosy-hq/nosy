@@ -10,6 +10,8 @@
 //   node todo.mjs <pm> drop <id> --reason "<why it's no longer needed>"
 // Files: pm/todo/<id>.md, one per item (human-editable, and a teammate's new item never conflicts with yours).
 // An <id> can be the full id or any part of it that names one item. Nothing here is sent anywhere: `publish` sends counts only.
+import { withExtras } from "./owner-json.mjs";
+import { localDay, localDayOf } from "./today.mjs";
 import fs from "node:fs"; import path from "node:path"; import { fileURLToPath } from "node:url";
 import { smallAscii } from "./text.mjs";
 
@@ -57,14 +59,15 @@ export function todoLoad(pm) {
 }
 export function todoSave(pm, t) {
   const dir = path.join(pm, "todo"); fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, `${t.id}.md`), todoRender(t));
+  const file = path.join(dir, `${t.id}.md`); let was = ""; try { was = fs.readFileSync(file, "utf8"); } catch {}
+  fs.writeFileSync(file, withExtras(todoRender(t), was)); // what the owner added to the file stays
 }
 
 // The open items, oldest first, with their age in whole days. `onlyWho` narrows to one person.
 export function todoSummary(pm, { now = Date.now(), onlyWho = null } = {}) {
   const items = todoLoad(pm).filter(t => t.status === "open" && (!onlyWho || same(t.who, onlyWho))).map(t => {
     const at = Date.parse(`${t.added}T00:00:00Z`);
-    return { id: t.id, title: t.todo, who: t.who, why: t.why, blocks: t.blocks, link: t.link, added: t.added, days: Number.isFinite(at) ? Math.max(0, Math.floor((now - at) / 864e5)) : 0 };
+    return { id: t.id, title: t.todo, who: t.who, why: t.why, blocks: t.blocks, link: t.link, added: t.added, days: Number.isFinite(at) ? Math.max(0, Math.round((Date.parse(`${localDayOf(now)}T00:00:00Z`) - at) / 864e5)) : 0 }; // whole calendar days between the owner's days, not hours since a UTC midnight
   }).sort((a, b) => b.days - a.days || a.id.localeCompare(b.id));
   // "Ada" and "ada" are one person: the first spelling seen names them, and every item carries it.
   const seen = new Map(); for (const i of items) { const k = smallAscii(i.who); if (!seen.has(k)) seen.set(k, i.who); i.who = seen.get(k); }
@@ -93,7 +96,7 @@ function main() {
   const opt = k => { const i = argv.indexOf(k); return i >= 0 ? argv.splice(i, 2)[1] : null; };
   const flag = k => { const i = argv.indexOf(k); if (i < 0) return false; argv.splice(i, 1); return true; };
   const why = opt("--why"), blocks = opt("--blocks"), link = opt("--link"), byWho = opt("--who"), note = opt("--note"), reason = opt("--reason"), dateArg = opt("--date"), json = opt("--json"), all = flag("--all");
-  const [sub = "list", ...rest] = argv, today = dateArg || new Date().toISOString().slice(0, 10);
+  const [sub = "list", ...rest] = argv, today = dateArg || localDay();
   const fail = msg => { console.error(`Psst… ${msg}`); process.exit(1); };
   if (dateArg && !/^\d{4}-\d{2}-\d{2}$/.test(dateArg)) fail(`--date is YYYY-MM-DD, not "${dateArg}".`);
 

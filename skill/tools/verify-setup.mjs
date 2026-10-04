@@ -4,7 +4,7 @@
 //   --fix: if a document can't be found and the repo has exactly one candidate, writes it into sources.json. If
 //   there's more than one candidate, it only lists them.
 // Exit code: 0 if everything checks out, 1 if something's missing.
-import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { matrixRead } from "./read-matrix.mjs";
+import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { matrixRead } from "./read-matrix.mjs"; import { ownColumnProblem } from "./matrix-preflight.mjs";
 import { patternsOfLoad } from "./refs.mjs";
 import { Default as THRESHOLD_DEFAULT } from "./thresholds.mjs";
 import { decisionsOfRead } from "./read-decisions.mjs";
@@ -97,7 +97,11 @@ if (K.preread) {
     if (decisionMaking && decisionMaking.length) {
       const formatSay = new Map();
       for (const k of decisionMaking) { const b = /^ADR-/i.test(k.no) ? "ADR" : /^K\d+/.test(k.no) ? "K-item" : "other"; formatSay.set(b, (formatSay.get(b) || 0) + 1); }
-      ok("decision headings", "✓", `${decisionMaking.length} decisions (${[...formatSay].map(([b, n]) => `${n} ${b}`).join(", ")}) — gather-evidence/prd-review/build-waves split by these`);
+      // A log whose headings don't look like "## K12" or "ADR-7" parses as ONE big decision, and then nothing in it can be "not doing": the check said ✓. Count the headings the
+      // file has at one level; many headings but one or two decisions is a mismatch, said with the way to fix it (field-test hunt).
+      const headingsIn = (() => { try { const f = String(kyol).split(",")[0].trim(); const raw = exists_(f) ? git("show", `${K.ref}:${f}`) : ""; const by = {}; for (const m of raw.matchAll(/^(#{2,4})\s+\S/gm)) by[m[1].length] = (by[m[1].length] || 0) + 1; return Math.max(0, ...Object.values(by)); } catch { return 0; } })();
+      const mismatch = !withGlob && headingsIn >= 4 && decisionMaking.length <= Math.max(1, Math.floor(headingsIn / 4));
+      ok("decision headings", mismatch ? "~" : "✓", mismatch ? `${decisionMaking.length} decision${decisionMaking.length === 1 ? "" : "s"} parsed, but the file has ${headingsIn} headings at one level: they are probably the decisions, in a shape this doesn't recognise (it expects "## K12 …" or "ADR-7"). Set \`preread.decision_title\` in sources.json to a regex for your heading, or "not doing" can't be found` : `${decisionMaking.length} decisions (${[...formatSay].map(([b, n]) => `${n} ${b}`).join(", ")}) — gather-evidence/prd-review/build-waves split by these`);
       // Language coverage: does read-decisions.mjs's negation family (EN+TR core
       // plus sources.json's own glossary.notDoing, if any) actually recognize this doc's language? "~" (not
       // "✗" — an unset `language`/glossary isn't a broken setup, just an opportunity) when some decisions'
@@ -174,7 +178,8 @@ if (K.inventory) {
     missing.length ? `${missing.length} frontend-shaped app(s) not listed in inventory.frontend: ${missing.slice(0, 8).join(", ")}${missing.length > 8 ? "…" : ""}` : `${detected.length} frontend-shaped app(s) detected, all listed`);
 }
 // Matrix
-if (K.matrix) { try { JSON.parse(fs.readFileSync(K.matrix, "utf8")); const MO = matrixRead(K.matrix, { codes: K.matrixCodes }); ok("matrix", MO ? "✓" : "✗", MO ? `${MO.lines.length} rows × ${MO.products.length} products (${MO.format} shape${MO.oh.size ? `, ${MO.oh.size} dead rival(s) excluded from the count` : ""})` : "unrecognized shape: has neither lines nor steps (lowhanging's 4th signal won't work)"); } catch (e) { ok("matrix", "✗", `${K.matrix}: ${e.message.slice(0, 60)}`); } }
+if (K.matrix) { try { JSON.parse(fs.readFileSync(K.matrix, "utf8")); const MO = matrixRead(K.matrix, { codes: K.matrixCodes }); ok("matrix", MO ? "✓" : "✗", MO ? `${MO.lines.length} rows × ${MO.products.length} products (${MO.format} shape${MO.oh.size ? `, ${MO.oh.size} dead rival(s) excluded from the count` : ""})` : "unrecognized shape: has neither lines nor steps (lowhanging's 4th signal won't work)"); const own = (() => { try { return ownColumnProblem(JSON.parse(fs.readFileSync(K.matrix, "utf8"))); } catch { return null; } })(); if (own) ok("matrix: own column", "✗", `${own.rows} rows but ${own.why}: ${own.fix}`);
+} catch (e) { ok("matrix", "✗", `${K.matrix}: ${e.message.slice(0, 60)}`); } }
 // Issue repo
 if (K.issue) { try { execFileSync("gh", ["repo", "view", K.issue.repo, "--json", "name"], { stdio: "ignore" }); ok("issue.repo", "✓", K.issue.repo); } catch { ok("issue.repo", "✗", `${K.issue.repo} couldn't be read with gh`); } if (K.issue.our) rx("issue.our", K.issue.our); else ok("issue.our", "–", "not set (optional: a title prefix for your own team's issues; find-sources leaves it blank when it isn't sure)"); }
 // Keys added for the first runs on real products (207). One row each; a ✗ row says what to write instead.

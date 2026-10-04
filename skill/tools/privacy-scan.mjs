@@ -32,8 +32,8 @@ const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const Priority = (b) => (b.category === "secret" ? 0 : b.category === "personal" ? 1 : 2) * 10 + (b.severity === "high" ? 0 : b.severity === "medium" ? 1 : 2); // smaller = more precise/important; picks the label for overlapping spans
 
 // ---- private.json (deny-list): { names:[...], patterns:[...], permission:[...] } ----
-let hiddenNames = [], hiddenPatterns = [], hiddenPermission = [];
-if (pmPath) { try { const g = JSON.parse(fs.readFileSync(path.join(pmPath, "private.json"), "utf8")); hiddenNames = g.names || []; hiddenPatterns = g.patterns || []; hiddenPermission = g.permission || []; } catch {} }
+let hiddenNames = [], hiddenPatterns = [], hiddenPermission = [], hiddenNameSource = {}, publicEntities = [];
+if (pmPath) { try { const g = JSON.parse(fs.readFileSync(path.join(pmPath, "private.json"), "utf8")); hiddenNames = g.names || []; hiddenNameSource = g.nameSource && typeof g.nameSource === "object" ? g.nameSource : {}; publicEntities = (Array.isArray(g.publicEntities) ? g.publicEntities : []).filter(x => typeof x === "string" && x.trim().length >= 3); hiddenPatterns = g.patterns || []; hiddenPermission = g.permission || []; } catch {} }
 
 // ---- allow-list: example domains, test keys, documented sample keys, a nosy:permit line, private.json.permission ----
 function isPermitted(rawLine, value) {
@@ -66,8 +66,18 @@ const Rules = [
 ];
 
 // Names are personal data: the ones in private.json and the ones given with --names (commit authors, for example).
+// A name that is also the start of a product's name is not that person when the next word makes it the product: a commit author called "Claude" (the
+// bot that co-authors commits) matched every "Claude Code" in a rival's notes and stopped a publish five times (BlogFactory field test). The words that
+// turn such a name into a product are listed here; "Claude said", "by Claude" and a bare "Claude" are still the person. A name that isn't in this table
+// is matched everywhere, as before.
+const PRODUCT_WORDS = { claude: "code|desktop|sonnet|opus|haiku|ai|api|app|cowork|cli|\\d", codex: "cli|app|ide|\\d", cursor: "ide|agent|rules|\\d", gemini: "cli|pro|flash|ultra|\\d", copilot: "chat|cli|agent|workspace", windsurf: "ide|editor", devin: "ai", cody: "ai" };
 const nameList = [...new Set([...hiddenNames, ...extraNames])];
-for (const name of nameList) { const n = trNorm(name).trim(); if (n.length < 3) continue; Rules.push({ type: `name: ${name}`, slug: "hidden-name", severity: "medium", category: "personal", norm: true, re: new RegExp(`(?<![a-z0-9])${escRe(n)}(?![a-z0-9])`, "gi") }); }
+for (const name of nameList) {
+  const n = trNorm(name).trim(); if (n.length < 3) continue;
+  const product = PRODUCT_WORDS[n] ? `(?!\\s+(?:${PRODUCT_WORDS[n]})(?![a-z0-9]))` : "";
+  const from = hiddenNameSource[name];
+  Rules.push({ type: `name: ${name}${from ? ` (${from})` : ""}`, slug: "hidden-name", severity: "medium", category: "personal", norm: true, re: new RegExp(`(?<![a-z0-9])${escRe(n)}(?![a-z0-9])${product}`, "gi") });
+}
 if (pmPath) {
   hiddenPatterns.forEach((d, i) => { try { Rules.push({ type: `private.json pattern #${i + 1}`, slug: "hidden-pattern", severity: "medium", category: "nosy", re: new RegExp(d, "g") }); } catch (e) { console.error(`private.json pattern #${i + 1} is broken: ${e.message}`); } });
 }
@@ -106,7 +116,12 @@ for (const file of files) {
           hits.push({ index: gHead, length: gBit - gHead, m });
         }
       }
+      // A name that sits inside a public entity ("Claude" inside "Claude Code" in a structured rival name) is that entity, not a person: only that whole span is let through,
+      // the same word anywhere else on the line still stops a send. The entities come from the owner (sources.json privacy.publicNames, private.json publicEntities) and from
+      // the rivals' own names in what is about to leave (publish.mjs); a name that came from the commit authors was what made a rival's "Claude Code" stop a publish.
+      const entitySpans = k.slug === "hidden-name" && publicEntities.length ? publicEntities.flatMap(e => { const n = trNorm(e).trim(), out = []; let at = 0, t = trNorm(rawLine); while (n && (at = t.indexOf(n, at)) >= 0) { out.push([at, at + n.length]); at += n.length; } return out; }) : [];
       for (const { index, length, m } of hits) {
+        if (entitySpans.some(([a, b]) => index >= a && index + length <= b)) continue;
         const raw = rawLine.slice(index, index + length);
         const value = k.value && m ? k.value(m) : raw;
         if (k.valid && !k.valid(value, m)) continue;
@@ -188,6 +203,8 @@ const toBeShown = findings.filter(b => all || b.severity !== "low").sort((a, b) 
 let o = `# Privacy scan · ${new Date().toISOString().slice(0, 16).replace("T", " ")}\n\n`;
 o += `${files.length} files · ${duration}ms · high ${numbers["high"]} · medium ${numbers["medium"]} · low ${numbers["low"]}${all ? "" : " (low hidden from table, show with --all)"}\n\n`;
 o += blocking.length ? `**${blocking.length} finding${blocking.length === 1 ? "" : "s"} stop a send** (secrets or personal data).\n\n` : "";
+if (blocking.some(b => b.slug === "hidden-name")) o += `A *name* finding that is really a public product or company, not a person: list it in \`privacy.publicNames\` in sources.json (or \`publicEntities\` in pm/private.json). It is then let through only as that whole name; the bare word, or a real person's name, still stops a send. No override flag is needed.\n\n`;
+
 o += `| File:line | Type | Severity | Part |\n|---|---|---|---|\n`;
 toBeShown.forEach(b => { o += `| ${b.file}:${b.line} | ${b.type} | ${b.severity}${b.density ? " (dense)" : ""} | \`${String(b.part).replace(/\|/g, "/")}\` |\n`; });
 if (!toBeShown.length) o += `| – | – | – | no findings |\n`;

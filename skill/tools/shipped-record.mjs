@@ -46,6 +46,7 @@
 //   <path> is K.preread.decisions (a single file, a directory, or a glob — see read-decisions.mjs);
 //   --pm, if given, loads that product's sources.json for refs.mjs's reference patterns and
 //   thresholds.mjs's `shippedIgnoreDocs` (falls back to the defaults otherwise).
+import { localDay, localDayOf } from "./today.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -81,7 +82,7 @@ if (!repoDir || (!ownerRepo && !decisionsPath)) {
   process.exit(1);
 }
 
-const sinceDate = new Date(Date.now() - dayN * 86400000).toISOString().slice(0, 10);
+const sinceDate = localDayOf(Date.now() - dayN * 86400000);
 // A partial/shallow clone makes the comment-only diff reads fetch blobs: say so up front.
 { const p = partialCloneNoticeOf(repoDir); if (p) process.stderr.write(`shipped-record: ${p}\n`); }
 
@@ -157,7 +158,7 @@ if (searchRepo.toLowerCase() !== ownerRepo.toLowerCase())
 const sameRepo = (nwo) => (nwo || "").toLowerCase() === searchRepo.toLowerCase();
 
 // --- Fetch PRs: merged, within dayN+30 days (an issue may close late; buffer) ---
-const prSince = new Date(Date.now() - (dayN + 60) * 86400000).toISOString().slice(0, 10);
+const prSince = localDayOf(Date.now() - (dayN + 60) * 86400000);
 const PR_Q = `
 query($q: String!, $cursor: String) {
   search(query: $q, type: ISSUE, first: 100, after: $cursor) {
@@ -556,7 +557,7 @@ if (shippedJsonOut) {
   }));
   const counts = { requests: rows.length, open: rows.filter(r => r.status === "OPEN").length, closedNoLink: rows.filter(r => r.status === "CLOSED" && !r.main_entry).length };
   if (byTeam) counts.byTeam = byTeam;
-  const file = toShippedFile({ repo: ownerRepo, branch: mainShort, from: sinceDate, to: new Date().toISOString().slice(0, 10), checked, rows: shippedRows, counts });
+  const file = toShippedFile({ repo: ownerRepo, branch: mainShort, from: sinceDate, to: localDay(), checked, rows: shippedRows, counts });
   // Read-modify-write: another session's tool may already have written "recent"/"undecided" keys into the
   // same file — keep any key this script doesn't own.
   let existing = {};
@@ -635,7 +636,10 @@ function runDecisionsMode() {
   const dated = decisions.map(d => ({ ...d, date: dateOf.get(`${d.file}:${d.line}`) || null }));
   const undated = dated.filter(d => !d.date).length;
   if (undated) console.error(`decisions mode: ${undated} decision(s) had no blame date (git blame gap) and are excluded from the window`);
-  const inWindow = dated.filter(d => d.date && d.date.slice(0, 10) >= sinceDate);
+  // A decision that says "not doing", or is rejected or superseded, did not ship: an unrelated commit that cites its id ("fix: crash in theme loader (K12 follow-up, no dark mode)")
+  // used to make it "shipped" with a landed date (field-test hunt). They are left out of the record; the owner's own "not doing" list is where they live.
+  const notShipped = d => d.notDoing || /^(rejected|superseded|dropped|declined|withdrawn)$/i.test(String(d.status || ""));
+  const inWindow = dated.filter(d => d.date && d.date.slice(0, 10) >= sinceDate && !notShipped(d));
 
   // One pass over every commit on MAIN, with the files it touched (a single `git log --name-only` call
   // instead of one `git log --grep`/`git show` per decision — the task's own "prefer one pass for speed").
@@ -809,7 +813,7 @@ function runDecisionsMode() {
   if (shippedJsonOut) {
     const file = {
       repo: label, branch: mainShort, source: "decisions",
-      window: { from: sinceDate, to: new Date().toISOString().slice(0, 10) },
+      window: { from: sinceDate, to: localDay() },
       generated: new Date().toISOString(),
       linkTypes: prChecked ? ["commit", "pr"] : ["commit"],
       shipped: shippedRows,

@@ -7,6 +7,7 @@
 //   folder mode (--folder or design.folder): reads a plain folder — e.g. a `project/` folder downloaded
 //   from a design system Artifact (direction.md, tokens.json, components/*/README.md).
 // dresscode.mjs, canwe.mjs and evidence collectors import `read()`. Counting lives in the script, judgment in the agent.
+import { localDay } from "./today.mjs";
 import fs from "node:fs"; import path from "node:path"; import { execFileSync } from "node:child_process"; import { fileURLToPath } from "node:url";
 import { readSources } from "./sources-file.mjs";
 
@@ -175,7 +176,7 @@ export function read(pm, options = {}) {
   const T = K.design || {};
   const folder = options.folder || T.folder;
   const source = folder ? folderSource(path.resolve(folder)) : K.repo ? gitSource(K.repo, K.ref || "HEAD") : null;
-  const empty = { date: new Date().toISOString().slice(0, 10), notFound: true, source: source ? { type: source.type } : null, roles: {} };
+  const empty = { date: localDay(), notFound: true, source: source ? { type: source.type } : null, roles: {} };
   if (!source) return { ...empty, reason: "no repo in sources.json and no folder given" };
   const all = source.list().filter(f => !Noise.test(f));
   const rootGiven = T.root != null && !folder;
@@ -278,7 +279,7 @@ export function read(pm, options = {}) {
   });
 
   const model = {
-    date: new Date().toISOString().slice(0, 10),
+    date: localDay(),
     source: { type: source.type, ...(source.repo ? { repo: source.repo, ref: source.ref } : { folder: source.folder }), root, root_estimate: !rootGiven && !folder },
     roles,
     titles: Object.fromEntries(docs.map(([f, md]) => [f, md.split("\n").map((s, i) => [s, i + 1]).filter(([s]) => /^#{1,3}\s/.test(s)).map(([s, i]) => `${i} ${s.replace(/^#+\s*/, "")}`).slice(0, 60)])),

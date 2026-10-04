@@ -296,3 +296,17 @@ test("inside docs: a missing path and a missing command are listed; an existing 
   assert.ok(d.shipped_since >= 1 && d.since_examples.some(e => e.area === "later"));
   assert.match(r.output, /Inside docs \(the backyard\)/);
 });
+
+// BlogFactory field test: the live page had been fetched and saved to pm/state/frontyard-page.html on the run before, and frontyard still said "have an agent fetch it".
+test("frontyard.url with a page saved at pm/state/frontyard-page.html: the saved copy is read, without --page and without the network", () => {
+  const saved = path.join(pm, "state", "frontyard-page.html");
+  fs.writeFileSync(path.join(pm, "sources.json"), JSON.stringify({ repo, ref: "main", frontyard: { url: "https://acme.example", day: 30 } }));
+  fs.rmSync(saved, { force: true });
+  const missing = tara().R;
+  assert.equal(missing.page_missing, true, "no saved copy: still asks for the fetch");
+  fs.writeFileSync(saved, "<html><body><h1>Acme</h1><p>CSV export of your data. Team invites: coming soon.</p></body></html>");
+  const used = tara().R;
+  assert.equal(used.page_missing, false, "the saved copy is used");
+  assert.equal(used.source.type, "saved"); assert.equal(used.source.url, "https://acme.example"); assert.match(used.source.saved_at, /^\d{4}-\d{2}-\d{2}T/);
+  fs.writeFileSync(path.join(pm, "sources.json"), JSON.stringify({ repo, ref: "main", frontyard: { path: "README.md", day: 30, price: "web/pricing.html", surface: [{ glob: "commands/*.md" }] } }));
+});

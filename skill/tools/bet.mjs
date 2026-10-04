@@ -11,6 +11,8 @@
 //   node bet.mjs <pm> index                      rebuild pm/bets/bets.json from the .md files
 // Files: pm/bets/<id>.md (the source of truth, human-editable) and pm/bets/bets.json (index, rebuilt from the .md files).
 // The estimate is the human's: `bet` never prefills it (measure-size history is only a hint the agent may mention).
+import { withExtras } from "./owner-json.mjs";
+import { localDay } from "./today.mjs";
 import fs from "node:fs"; import path from "node:path"; import { fileURLToPath } from "node:url";
 import { patternsOfLoad, refRegex } from "./refs.mjs";
 import { smallAscii } from "./text.mjs";
@@ -67,7 +69,8 @@ export function betsLoad(pm) {
 }
 export function betSave(pm, b) {
   const dir = path.join(pm, "bets"); fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, `${b.id}.md`), betRender(b));
+  const file = path.join(dir, `${b.id}.md`); let was = ""; try { was = fs.readFileSync(file, "utf8"); } catch {}
+  fs.writeFileSync(file, withExtras(betRender(b), was, ["Score"])); // what the owner added to the file stays
 }
 export function indexWrite(pm) {
   const bets = betsLoad(pm), dir = path.join(pm, "bets"); fs.mkdirSync(dir, { recursive: true });
@@ -88,7 +91,7 @@ function main() {
     if (!est || !/^[SML]$/i.test(est)) fail("Estimate missing: ask the owner for S, M or L (S = 1–2 days, M = about a week, L = bigger). measure-size's history can be mentioned as a hint, never filled in for them.");
     if (!why) fail('Why missing: one line, e.g. --why "customers asked 14 times; backend is ready".');
     const b0 = betsLoad(pm), taken = new Set(b0.map(b => b.id));
-    const placed = date || new Date().toISOString().slice(0, 10);
+    const placed = date || localDay();
     let ref = null;
     if (restsOn) { const m = String(restsOn).match(refRegex(patternsOfLoad(K))); ref = m ? restsOn.trim() : null;
       if (!m) console.error(`Note: "${restsOn}" doesn't look like a decision/request reference in this product (sources.json refs); recorded as none.`); }

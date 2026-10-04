@@ -6,6 +6,7 @@
 // Ponytail's "one-command setup" pattern (pm/product.md, owner's rule); ccpm's deterministic/LLM-free script +
 // evidence-trail pattern (pm/rivals/automazeio-ccpm.md); Productboard Spark's "one card, one approval" (show the
 // diff before writing) from pm/rivals/productboard-spark.md. `inventory` paths come from inventory.mjs's own pathEstimated.
+import { localDay } from "./today.mjs";
 import fs from "node:fs"; import path from "node:path"; import { execFileSync, spawnSync } from "node:child_process"; import { fileURLToPath } from "node:url"; import { pathEstimated } from "./inventory.mjs"; import { findNextDocs } from "./team-next.mjs"; import { advice, nosyCommand, oldLayoutNote } from "./hints.mjs"; import { readSources, rivalDoc, rivalFiles } from "./sources-file.mjs";
 
 // Turkish package-detection keywords (a repo written in Turkish still needs a legaltech/fintech match): kept as
@@ -390,7 +391,7 @@ const suggestion = {
   ...(frontyard ? { frontyard: { ...frontyard, every: 7 } } : {}),
   ...(next ? { next } : {}),
   ...(rivalsPath ? { rivalsPath } : {}),
-  _source_find: { date: new Date().toISOString().slice(0, 10), confidence: confidences },
+  _source_find: { date: localDay(), confidence: confidences },
 };
 
 // ============================================================
@@ -422,9 +423,15 @@ if (fs.existsSync(goal)) {
     md += `| ${a} | ${status} |\n`;
   }
   if (write && onTop) {
-    fs.copyFileSync(goal, goal + ".backup");
-    fs.writeFileSync(goal, JSON.stringify(suggestion, null, 1) + "\n");
-    md += `\n--onTop: took a \`${goal}.backup\`, replaced \`${goal}\` with the new suggestion.\n`;
+    // The suggestion only proposes what it can find. Keys the owner wrote that it doesn't produce (team, rivals with their tiers, preread.never, owner notes) stay: the owner's
+    // value wins wherever both have one, and the suggestion fills what is missing. A backup is never overwritten by the next run (field-test hunt: a second --onTop replaced
+    // the .backup with the already-replaced file, and the original was gone).
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-"), bak = fs.existsSync(`${goal}.backup`) ? `${goal}.backup-${stamp}` : `${goal}.backup`; // the first keeps its usual name, a later one never replaces it
+    fs.copyFileSync(goal, bak);
+    const merged = { ...suggestion, ...old };
+    for (const k of Object.keys(suggestion)) if (suggestion[k] && old[k] && typeof suggestion[k] === "object" && typeof old[k] === "object" && !Array.isArray(suggestion[k]) && !Array.isArray(old[k])) merged[k] = { ...suggestion[k], ...old[k] };
+    fs.writeFileSync(goal, JSON.stringify(merged, null, 1) + "\n");
+    md += `\n--onTop: took a \`${bak}\` and filled in what \`${goal}\` was missing from the new suggestion. Your own values and any key it doesn't suggest were kept; nothing of yours was replaced.\n`;
   } else if (write) md += `\n--write given, but the file already exists; without --onTop it won't be overwritten. To overwrite: \`--write --onTop\`.\n`;
   else md += `\nTo write: \`--write --onTop\` (takes a .backup first).\n`;
 } else if (write) {

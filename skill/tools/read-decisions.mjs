@@ -43,6 +43,18 @@ const NEGATION_CORE = ["\\bnot doing\\b", "\\bwon'?t\\s+(?:do|use|add|send|suppo
   "\\bnot\\s+(?:supported|allowed|used)\\b", "\\bdon'?t\\s+(?:use|support|add|send)\\b", "\\bwe'?re\\s+not\\s+doing\\b", "\\bout of scope\\b",
   ...TR_NEGATION];
 export const NEGATION_RE = new RegExp(NEGATION_CORE.join("|"), "i");
+// What a decision STATES: its heading and its first paragraph (and a "Decision:" / "Verdict:" line wherever it is). A negation phrase in a later sentence ("Excel format is
+// out of scope", "we won't use streaming") is about something else the decision mentions, and read over the whole block it made "CSV export ships first" a decision not to do
+// CSV export (field-test hunt: canwe said "there's a decision: not doing this" and the roadmap moved a work item to "Outside / not doing").
+export function statementOf(text) {
+  const lines = String(text).split("\n"), out = [];
+  let i = 0; while (i < lines.length && !lines[i].trim()) i++;
+  if (i < lines.length && /^#{1,6}\s|^\*\*|^[-*]\s/.test(lines[i])) out.push(lines[i++]);
+  while (i < lines.length && !lines[i].trim()) i++;
+  while (i < lines.length && lines[i].trim() && !/^#{1,6}\s/.test(lines[i])) out.push(lines[i++]);
+  for (const l of lines) if (/^\s*(?:[-*]\s*)?\**\s*(?:decision|verdict|karar)\s*:?\**\s*:/i.test(l) && !out.includes(l)) out.push(l);
+  return out.join("\n");
+}
 const escRe = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // Product-sourced negation family: sources.json's `glossary.notDoing` - the
 // product's OWN words/phrases for "we're not doing this", in whatever language the product's decisions doc
@@ -265,7 +277,7 @@ export function decisionsOfRead(K) {
       text: b.text,
       file: b.file, line: b.line,
       status: statusReadable ? (struck && !status ? "rejected" : status) : (status || "unknown"),
-      notDoing: statusReadable ? (negRe.test(b.text) || struck || status === "rejected") : false,
+      notDoing: statusReadable ? (negRe.test(statementOf(b.text)) || struck || status === "rejected") : false,
       statusReadable,
       measure: measurementOf(b.text, K),
     });
